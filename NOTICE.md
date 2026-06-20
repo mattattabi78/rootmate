@@ -20,26 +20,26 @@
 ```
 WeROK/
 └── my-app/                         # Expo 앱 루트
-    ├── src/
-    │   ├── app/                    # 화면 (Expo Router file-based routing)
-    │   │   ├── _layout.tsx         # 루트 레이아웃, 하단 탭바
-    │   │   ├── index.tsx           # 홈 탭
-    │   │   ├── chat.tsx            # 채팅 화면 (핵심)
-    │   │   ├── calendar.tsx        # 캘린더 / 앨범 탭
-    │   │   ├── collection.tsx      # 도감 탭 (미구현, placeholder)
-    │   │   └── onboarding/         # 온보딩 5단계
-    │   ├── components/
-    │   │   ├── common/             # 공용 컴포넌트
-    │   │   └── ...
-    │   ├── constants/              # 컬러, 식물, 질문, 성장 단계, 표정 등 정적 데이터
-    │   ├── hooks/                  # 커스텀 React 훅
-    │   ├── services/
-    │   │   └── ai.ts               # ★ AI 연동 진입점 (현재 stub)
-    │   ├── store/
-    │   │   └── storage.ts          # AsyncStorage 래퍼 (로컬 퍼시스턴스)
-    │   └── utils/                  # 날짜, 채팅 재현 유틸
-    └── assets/
-        └── images/                 # 식물 캐릭터 PNG, SVG 아이콘
+
+    ├── app/                    # 화면 (Expo Router file-based routing)
+    │   ├── _layout.tsx         # 루트 레이아웃, 하단 탭바
+    │   ├── index.tsx           # 홈 탭
+    │   ├── chat.tsx            # 채팅 화면 (핵심)
+    │   ├── calendar.tsx        # 캘린더 / 앨범 탭
+    │   ├── collection.tsx      # 도감 탭 (미구현, placeholder)
+    │   └── onboarding/         # 온보딩 5단계
+    ├── components/
+    │   ├── common/             # 공용 컴포넌트
+    │   └── ...
+    ├── constants/              # 컬러, 식물, 질문, 성장 단계, 표정 등 정적 데이터
+    ├── hooks/                  # 커스텀 React 훅
+    ├── services/
+    │   └── ai.ts               # ★ AI 연동 진입점 (현재 stub)
+    ├── store/
+    │   └── storage.ts          # AsyncStorage 래퍼 (로컬 퍼시스턴스)
+    ├── utils/                  # 날짜, 채팅 재현 유틸
+    ├── assets/
+    │   └── images/                 # 식물 캐릭터 PNG, SVG 아이콘
 ```
 
 ---
