@@ -40,93 +40,144 @@
 
 ```
 my-app/
-├── app/                    # 화면 (Expo Router)
-│   ├── _layout.tsx         # 루트 레이아웃, 탭바 설정
-│   ├── index.tsx           # 홈 화면
-│   ├── chat.tsx            # 식물 채팅 화면 (핵심)
-│   ├── streak.tsx          # 연속 관리 완료 화면
-│   ├── calendar.tsx        # 캘린더 / 앨범
-│   ├── collection.tsx      # 도감
-│   ├── plant-detail.tsx    # 식물 상세 정보
-│   └── welcome.tsx         # 온보딩 시작
+├── app/                                  # Expo Router 화면
+│   ├── _layout.tsx                       # 전역 폰트 로딩, 알림 설정, Stack 레이아웃
+│   ├── welcome.tsx                       # 환영 화면
+│   ├── index.tsx                         # 홈 화면
+│   ├── chat.tsx                          # 하루 관리 / 질문 대화 흐름
+│   ├── streak.tsx                        # 연속 관리 달성 화면
+│   ├── calendar.tsx                      # 캘린더 + 앨범 기록
+│   ├── collection.tsx                    # 식물 도감 메인
+│   ├── plant-detail.tsx                  # 식물 상세 정보 / 성장 단계 설명
+│   └── onboarding/
+│       ├── _layout.tsx                   # 온보딩 공통 레이아웃
+│       ├── step1.tsx                     # 닉네임 입력
+│       ├── step2.tsx                     # 식물 선택
+│       ├── step3.tsx                     # 식물 닉네임 설정
+│       ├── step4.tsx                     # 성장 단계/주기 안내
+│       ├── step5.tsx                     # 최종 확인
+│       └── complete.tsx                  # 온보딩 완료 화면
 ├── components/
 │   └── common/
-│       ├── PlantCharacter  # 식물 캐릭터 렌더링
-│       ├── TopAppBar       # 공통 헤더
-│       ├── BottomNavBar    # 하단 탭바
-│       └── EmojiText       # 이모지 처리 텍스트
+│       ├── BottomNavBar.tsx              # 하단 네비게이션
+│       ├── Button.tsx                    # 공통 버튼
+│       ├── EmojiText.tsx                 # 이모지 포함 텍스트
+│       ├── Icons.tsx                     # 아이콘 컴포넌트
+│       ├── PlantCharacter.tsx            # 식물 캐릭터 렌더링
+│       ├── ProgressDots.tsx              # 온보딩 진행 표시
+│       └── TopAppBar.tsx                 # 상단 앱바
 ├── constants/
-│   ├── plants.ts           # 식물 종류, Task 정의
-│   ├── growthStages.ts     # 성장 단계 흐름
-│   ├── chatMessages.ts     # 식물별 채팅 메시지
-│   ├── questions.ts        # 마음 건강 질문 목록
-│   ├── character.ts        # 식물 캐릭터 / 표정 에셋
-│   └── colors.ts           # 컬러 팔레트
-├── store/
-│   └── storage.ts          # AsyncStorage 래퍼
-├── services/
-│   └── ai.ts               # Claude AI 연동 함수
+│   ├── character.ts                     # 식물 종류, 표정, 성장 단계 정보
+│   ├── chatMessages.ts                  # 식물별 말풍선 메시지
+│   ├── colors.ts                        # 화면 컬러 팔레트
+│   ├── expressions.ts                   # 상황별 표정 매핑
+│   ├── growthStages.ts                  # 단계별 Task/진행 로직
+│   ├── imageGuide.ts                    # 사진 촬영 안내 문구
+│   ├── index.ts                         # constants export
+│   ├── notifications.ts                 # 알림 문구 / 세부 문구 선택
+│   ├── plants.ts                        # 식물 정보 + Task 정의
+│   └── questions.ts                     # 질문 저장소
 ├── hooks/
-│   ├── usePlantExpression  # 상황별 표정 자동 계산
-│   ├── useGrowthManager    # 성장 단계 관리
-│   └── useNotification     # 알림 설정
-└── utils/
-    ├── date.ts             # 날짜 유틸
-    ├── chatHistory.ts      # 채팅 기록 복원
-    └── devOverrides.ts     # 개발용 날짜 시뮬레이션
+│   ├── useGrowthManager.ts              # 성장 단계/Task 동기화
+│   ├── useNotification.ts               # 알림 이벤트 처리
+│   └── usePlantExpression.ts            # 상황에 따른 표정 계산
+├── services/
+│   ├── ai.ts                            # AI 질문 생성 / 응답 / 캐릭터 생성
+│   ├── api/
+│   │   ├── chat.ts                      # 채팅 API 응답 관리
+│   │   ├── questionPool.ts              # 오늘 질문 풀
+│   │   └── styleTransfer.ts             # 이미지 스타일 변환 관련
+│   ├── config/
+│   │   └── env.ts                       # 환경 변수 관리
+│   └── types/
+│       └── chat.ts                      # 채팅 타입 정의
+├── store/
+│   ├── growthStore.ts                   # 성장 상태 / 완료 Task 관리
+│   └── storage.ts                       # AsyncStorage 기반 로컬 저장
+├── utils/
+│   ├── chatHistory.ts                   # 채팅 기록 복원
+│   ├── date.ts                          # 날짜 계산 유틸
+│   ├── devOverrides.ts                  # 개발 모드 날짜/Task 시뮬레이션
+│   ├── notifications.ts                # 알림 등록/취소 처리
+│   └── persistImage.ts                  # 이미지 URI 저장
+├── assets/                              # 아이콘, 폰트, 캐릭터 이미지, SVG
+├── app.json                             # Expo 앱 설정
+├── eas.json                             # EAS 빌드 설정
+├── babel.config.js
+├── metro.config.js
+├── package.json
+├── tsconfig.json
+├── expo-env.d.ts
+└── notification.json                    # 알림 테스트 / 설정 설정 파일
 ```
 
 ---
 
 ## 화면별 기능
 
+### 환영 화면 (`welcome.tsx`)
+- 앱 첫 진입 시 표시되는 시작 화면
+- 식물 캐릭터를 중심으로 앱의 분위기를 소개
+- 터치하면 온보딩으로 진입
+
 ### 홈 화면 (`index.tsx`)
+- 오늘 날짜, 연속 관리 일수, 현재 성장 단계 정보를 한 번에 표시
+- 식물 캐릭터가 상황에 따라 자동 표정 변화를 보이며 중심에 배치됨
+- 오늘의 관리 Task를 카드 형식으로 보여주고 완료 여부를 기록
+- 채팅 시작 경로는 상단 아이콘, 식물 말풍선, Task 카드에서 연결됨
+- 개발자 메뉴를 통해 날짜 시뮬레이션, 성장 단계 강제 설정, 오늘 기록 초기화 등을 수행 가능
 
-- 오늘 날짜 및 연속 관리 일수(스트릭) 표시
-- 식물 캐릭터를 중앙에 표시하며, 상황에 따라 표정 자동 변화
-- 오늘의 Task 카드 목록 (완료 여부에 따라 체크/취소 표시)
-- 채팅 진입 경로 3가지: 상단 채팅 아이콘, 식물 옆 말풍선 버튼, Task 카드 탭
-- 개발자 메뉴 (날짜 3초 길게 누르면 접근): 날짜 시뮬레이션, 성장 단계 강제 설정, 기록 리셋 등
+### 채팅 화면 (`chat.tsx`) — 핵심 플로우
 
-### 채팅 화면 (`chat.tsx`) — 핵심
-
-매일 1회 진행되는 식물과의 대화 흐름입니다.
+하루 1회 진행되는 식물과의 대화 과정입니다.
 
 **1단계: Task 확인**
-- 오늘 해야 할 Task를 순서대로 확인
-- 완료 / 미완료 선택 가능
-- 물주기 Task는 "흙이 아직 촉촉해요" 옵션 추가 제공
-- 미완료 선택 시 알림 설정 여부 질문 후 세션 종료
+- 오늘 해야 할 Task를 순서대로 확인하고 완료 여부를 선택
+- 물주기 항목은 "흙이 아직 촉촉해요"처럼 상황별 대안을 함께 제시
+- 미완료 항목이 있으면 알림 여부를 묻고 대화 세션을 종료할 수 있음
 
-**2단계: 사진 찍기 Task (수·일요일)**
-- 식물 사진 촬영 또는 갤러리에서 선택
-- 선택 전 사진 가이드라인 모달 표시
-- 업로드된 사진을 AI가 분석해 커스텀 식물 캐릭터 생성
-- 캐릭터 생성 후 프리뷰에서 확인 및 사용 확정
+**2단계: 사진 촬영 Task**
+- 특정 요일(예: 수·일)에 사진 촬영 또는 갤러리 선택 화면이 활성화됨
+- 촬영 전 가이드 모달을 통해 사진 구성을 안내
+- 업로드된 사진을 AI가 분석해 커스텀 식물 캐릭터 이미지를 생성
+- 생성 결과를 프리뷰로 확인하고 확정 가능
 
-**3단계: 마음 건강 질문 (모든 Task 완료 시에만)**
-- AI가 생성한 오늘의 질문을 채팅 형식으로 표시
-- 유저가 텍스트 또는 사진으로 자유 답변
-- 답변에 대한 식물의 짧고 따뜻한 AI 반응
+**3단계: 마음 건강 질문**
+- 모든 Task를 마친 경우 오늘의 질문이 채팅 형식으로 제시됨
+- 사용자는 텍스트 또는 사진으로 자유롭게 답변 가능
+- 답변에 대한 식물의 짧고 따뜻한 반응이 이어짐
 
-**4단계: 완료**
-- 연속 관리 화면으로 이동 (하루 1회만 표시, 이후엔 홈으로 이동)
-
-**기타**
-- 세션 중단 시 draft 자동 저장, 재진입 시 이어서 진행
-- 기존 기록이 있고 미완료 Task만 남은 경우 Task만 이어서 진행
+**4단계: 완료 처리**
+- 하루 관리 완료 후 연속 관리 화면으로 이동
+- 이미 하루 기록이 있는 상태에서 미완료 Task만 남아 있으면 해당 Task 흐름만 이어서 진행
+- 세션이 중간에 종료되어도 draft를 저장해 다시 이어서 진행 가능
 
 ### 연속 관리 화면 (`streak.tsx`)
-- 채팅 완료 후 하루 1회만 표시
-- 현재 연속 관리 일수 및 스파클 애니메이션
-- 최근 7일간 관리 현황 트래커 (완료 / 미완료 / 미래)
+- 채팅 완료 직후 하루 1회 노출되는 보상 화면
+- 현재 연속 관리 일수와 스파클 애니메이션을 통해 성취감을 강조
+- 최근 7일 관리 기록을 완료/미완료/미래 상태로 트래킹
 
 ### 캘린더 화면 (`calendar.tsx`)
-- 월간 달력 뷰: 기록 완료한 날 표시
-- 앨범 뷰: 날짜별 식물 사진 + 채팅 기록 요약
+- 월 단위 달력 뷰와 앨범 뷰를 탭 전환으로 제공
+- 기록이 있는 날짜는 표시되고, 특정 날짜를 누르면 해당 일의 관리 기록 및 사진 요약 확인 가능
+- 사용자가 키운 식물의 하루 기록을 한눈에 정리하는 공간 역할
 
 ### 도감 화면 (`collection.tsx`)
-- 식물별 상세 정보, 성장 단계별 가이드, 관리 방법 제공
+- 식물 카드 형태로 바질, 방울토마토, 튤립을 보여줌
+- 현재 입양한 식물만 해제 없이 열람 가능하며 잠금 상태를 표현
+- 각 식물 상세보기는 `plant-detail.tsx`로 이동
+
+### 식물 상세 화면 (`plant-detail.tsx`)
+- 선택한 식물의 설명, 꽃말, 성장 단계별 가이드, 관리 요령을 확인
+- 현재 성장 단계에 맞는 섹션이 강조 표시됨
+- 아코디언 형태로 단계별 정보를 구성해 읽기 쉽게 설계됨
+
+### 온보딩 화면 (`onboarding/`)
+- `step1`에서 사용자 닉네임 입력
+- `step2`에서 식물 종류 선택
+- `step3`에서 식물 애칭 설정
+- `step4`와 `step5`에서 소개 및 최종 확인 단계 진행
+- `complete.tsx`에서 온보딩 완료 후 홈으로 이동
 
 ---
 

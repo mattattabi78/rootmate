@@ -1,9 +1,7 @@
 import {
   DAILY_QUESTIONS,
   WEEKEND_DAILY_QUESTIONS,
-  DEEP_QUESTIONS_1_MONTH,
-  DEEP_QUESTIONS_2_TO_3_MONTHS,
-  DEEP_QUESTIONS_4_MONTHS,
+  SUNDAY_DEEP_QUESTIONS,
   NEW_YEAR_QUESTION,
   YEAR_END_QUESTION,
   MONTHLY_START_QUESTION,
@@ -56,13 +54,14 @@ export function getTodayQuestion(
   if (dayOfMonth === 1) return replaceNickname(MONTHLY_START_QUESTION, plantNickname);
   if (dayOfMonth === lastDay) return replaceNickname(MONTHLY_END_QUESTION, plantNickname);
 
-  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-  if (isWeekend) {
-    if (installedMonths >= 4) return pickDeepQuestion(DEEP_QUESTIONS_4_MONTHS);
-    if (installedMonths >= 2) return pickDeepQuestion(DEEP_QUESTIONS_2_TO_3_MONTHS);
-    if (installedMonths >= 1) return pickDeepQuestion(DEEP_QUESTIONS_1_MONTH);
+  if (dayOfWeek === 0) {
+    return replaceNickname(
+      SUNDAY_DEEP_QUESTIONS[deepQuestionIndex % SUNDAY_DEEP_QUESTIONS.length],
+      plantNickname,
+    );
   }
 
+  const isWeekend = dayOfWeek === 6;
   const questions = isWeekend ? WEEKEND_DAILY_QUESTIONS : DAILY_QUESTIONS;
   const monthlyOrder = seededShuffle(questions, year * 100 + month);
   return replaceNickname(monthlyOrder[Math.max(0, dayOfMonth - 2) % monthlyOrder.length], plantNickname);
