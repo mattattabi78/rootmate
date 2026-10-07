@@ -95,8 +95,8 @@ export function pickSubHeading(
 ): string {
   const data = HOMESCREEN_SUBHEADING[plantType];
 
-  // 방치 후 복귀 (2일 이상 기록 없음)
-  if (daysNeglected >= 2 && data.neglectReturn.length > 0) {
+  // 방치 후 복귀 (7일 이상 기록 없음)
+  if (daysNeglected >= 7 && data.neglectReturn.length > 0) {
     return pickRandom(data.neglectReturn) ?? '';
   }
 

@@ -6,6 +6,7 @@ import {
   YEAR_END_QUESTION,
   MONTHLY_START_QUESTION,
   MONTHLY_END_QUESTION,
+  LONG_BREAK_QUESTIONS,
   Question,
 } from '../../constants/questions';
 import { getDevAdjustedDate } from '../../utils/devOverrides';
@@ -23,6 +24,11 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 
 function replaceNickname(question: Question, plantNickname: string): string {
   return question.text.replace('{plantNickname}', plantNickname);
+}
+
+export function getLongBreakQuestion(plantNickname: string): string {
+  const idx = new Date(getDevAdjustedDate().getTime()).getDate() % LONG_BREAK_QUESTIONS.length;
+  return replaceNickname(LONG_BREAK_QUESTIONS[idx], plantNickname);
 }
 
 /** 날짜와 식물과 함께한 기간에 맞는 기준 질문을 선택한다. */

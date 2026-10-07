@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PlantType } from '../constants/character';
-import { PlantTask, PLANT_TASKS } from '../constants/plants';
+import { isSupportedTask, isTaskDue, isObservationDue, PlantTask, PLANT_TASKS } from '../constants/plants';
 import {
   AUTO_ADVANCE_MESSAGES,
   getNextStageConfig, getActiveTaskIds, getMaxStage,
@@ -25,19 +25,28 @@ export interface StageProgressionResult {
 }
 
 // ─── 오늘의 task 계산 ─────────────────────────────────────────────
-// 현재 단계의 활성 task를 전부 표시 (홈 화면용)
-// intervalDays 주기 체크 제거 — 홈에서는 단계 기준으로 모두 노출
+// 현재 단계의 활성 task 중 오늘 due인 항목을 표시
 function computeTodayTasks(state: GrowthState, completedTodayIds: string[]): PlantTask[] {
   const { plantType, currentStage, completedTasks } = state;
   const activeIds = getActiveTaskIds(plantType, currentStage);
   const allTasks  = PLANT_TASKS[plantType] ?? [];
   const kstDow = getKstDayOfWeek();
+  const observationDue = isObservationDue(plantType, state.plantedAt, completedTasks);
+  const observationDay = observationDue || completedTodayIds.includes('observe');
 
   return allTasks.filter(task => {
+    if (!isSupportedTask(task.id)) return false;
     if (!activeIds.includes(task.id as any)) return false;
+    if (task.id === 'sunlight' && observationDay) return false;
+    if (task.id === 'observe' && !observationDue) return false;
 
     // 요일 제한
     if (task.daysOfWeek && !task.daysOfWeek.includes(kstDow)) return false;
+
+    if (
+      (task.id === 'water' || task.id === 'sunlight' || task.id === 'observe') &&
+      !isTaskDue(task, state.plantedAt, completedTasks)
+    ) return false;
 
     // 1회성: 한 번이라도 완료했으면 제외
     if (task.oneTime || task.intervalDays === 0) {

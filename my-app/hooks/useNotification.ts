@@ -3,7 +3,7 @@
 //
 // 현재는 함수 껍데기만 구현. 백엔드 팀원이 실제 로직 채움.
 import { PlantType } from '../constants/character';
-import { PLANT_TASKS, PlantTask, getRandomNotification } from '../constants/plants';
+import { isSupportedTask, PLANT_TASKS, PlantTask, getRandomNotification } from '../constants/plants';
 import { STAGE_TASKS, getActiveTaskIds } from '../constants/growthStages';
 
 let Notifications: any = null;
@@ -40,7 +40,7 @@ export async function rescheduleNotifications(
   // 2. 현재 단계의 활성 task id 목록
   const activeIds = getActiveTaskIds(plantType, currentStage);
   const allTasks = PLANT_TASKS[plantType] ?? [];
-  const activeTasks = allTasks.filter(t => activeIds.includes(t.id as any));
+  const activeTasks = allTasks.filter(t => isSupportedTask(t.id) && activeIds.includes(t.id as any));
 
   // 3. 각 task의 notificationTime 기반으로 반복 알림 등록
   for (const task of activeTasks) {

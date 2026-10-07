@@ -22,6 +22,7 @@ import {
   growthStageToStep,
 } from '../constants/plants';
 import { PlantType, GrowthStage, growthStageToNumber, getExpressionImage } from '../constants/character';
+import { getTodayCompletedTaskIds, loadGrowthState } from '../store/growthStore';
 
 export default function PlantDetailScreen() {
   const router = useRouter();
@@ -30,6 +31,7 @@ export default function PlantDetailScreen() {
   const [growthStage, setGrowthStage] = useState<GrowthStage>(4);
   const [plantedAt, setPlantedAt] = useState<string>(new Date().toISOString());
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
+  const [taskCompletionHistory, setTaskCompletionHistory] = useState<{ taskId: string; completedAt: string }[]>([]);
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
   const [generatedPlantUri, setGeneratedPlantUri] = useState<string | null>(null);
   const [generatedFacePos, setGeneratedFacePos] = useState<{ x: number; y: number; pot_width: number } | null>(null);
@@ -42,18 +44,21 @@ export default function PlantDetailScreen() {
         const typeToUse = (plantTypeParam as PlantType) || plantType;
         setPlantType(typeToUse);
 
-        const [plantData, todayRecord, savedPlant] = await Promise.all([
+        const [plantData, todayRecord, savedPlant, todayCompletions, growthState] = await Promise.all([
           storage.getPlantData(),
           storage.getDailyRecord(getLocalDateString()),
           storage.getGeneratedPlant(),
+          getTodayCompletedTaskIds(),
+          loadGrowthState(),
         ]);
         if (plantData?.id) {
           setGrowthStage(growthStageToNumber(plantData.growthStage));
           setPlantedAt(plantData.adoptedAt ?? new Date().toISOString());
         }
-        const done: string[] = [];
-        if (todayRecord?.waterDone) done.push('water');
-        setCompletedTaskIds(done);
+        const done = new Set(todayCompletions);
+        if (todayRecord?.waterDone) done.add('water');
+        setCompletedTaskIds([...done]);
+        setTaskCompletionHistory(growthState?.completedTasks ?? []);
         if (savedPlant) {
           setGeneratedPlantUri(savedPlant.uri);
           setGeneratedFacePos(savedPlant.facePos);
@@ -63,7 +68,7 @@ export default function PlantDetailScreen() {
   );
 
   const info = PLANT_INFO[plantType];
-  const todayTasks = getTodayTasks(plantType, plantedAt, completedTaskIds);
+  const todayTasks = getTodayTasks(plantType, plantedAt, completedTaskIds, taskCompletionHistory);
   const currentStep = growthStageToStep(
     ['seed', 'sprout', 'growing', 'done'][Math.min(growthStage - 1, 3)] ?? 'seed',
     info?.growthSteps.length ?? 1

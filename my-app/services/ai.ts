@@ -1,5 +1,5 @@
 import { PlantType as AppPlantType } from '../constants/character';
-import { generatePlantQuote, generatePlantReply, PlantType as ApiPlantType } from './api/chat';
+import { generatePlantQuote, generatePlantReply, generateDiarySummary, PlantType as ApiPlantType, QuestionCategory, MemorySummaryInput } from './api/chat';
 import { transferImageStyle, StyleId, removePlantBackground, transferWithCustomPot } from './api/styleTransfer';
 import { ENV, validateEnv } from './config/env';
 
@@ -20,11 +20,26 @@ export async function generateQuestion(
   _plantNickname: string,
   _userNickname: string,
   plantType?: AppPlantType,
+  category: QuestionCategory = '오늘의 마음 질문',
+  memorySummaries: MemorySummaryInput[] = [],
 ): Promise<string> {
-  if (plantType) {
-    return generatePlantQuote(PLANT_TYPE_MAP[plantType], questionBase);
+  try {
+    if (plantType) {
+      return await generatePlantQuote(PLANT_TYPE_MAP[plantType], questionBase, category, memorySummaries);
+    }
+    return questionBase;
+  } catch (error) {
+    console.warn('generateQuestion fallback:', error);
+    return questionBase;
   }
-  return questionBase;
+}
+
+export async function summarizePlantConversation(
+  conversation: string,
+  plantType?: AppPlantType,
+): Promise<string> {
+  if (!plantType) return '특별히 기억할 내용 없음';
+  return generateDiarySummary(PLANT_TYPE_MAP[plantType], conversation);
 }
 
 interface ChatMessage {
@@ -40,17 +55,30 @@ export async function generatePlantResponse(
   isFirstRound: boolean = true,
   isLastRound: boolean = false,
   chatHistory: ChatMessage[] = [],
+  isCheckinReply: boolean = false,
+  memorySummaries: MemorySummaryInput[] = [],
 ): Promise<string> {
-  if (plantType) {
-    return generatePlantReply(PLANT_TYPE_MAP[plantType], question, userAnswer, isFirstRound, isLastRound, chatHistory);
+  try {
+    if (plantType) {
+      return await generatePlantReply(PLANT_TYPE_MAP[plantType], question, userAnswer, isFirstRound, isLastRound, chatHistory, isCheckinReply, memorySummaries);
+    }
+    const responses = [
+      '그렇군요. 오늘도 잘 하셨어요 🌿',
+      '말해줘서 고마워요. 잘 들었어요 🌱',
+      '그런 날도 있어요. 괜찮아요 🌿',
+      '오늘도 함께해줘서 고마워요 🌱',
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
+  } catch (error) {
+    console.warn('generatePlantResponse fallback:', error);
+    const fallbackResponses = [
+      '그렇군요. 잘 들었어요. 오늘도 수고 많았어요 🌿',
+      '그렇게 느꼈군요. 오늘도 잘 해내고 있어요 🌱',
+      '그 말 듣고 마음이 조금 가볍게 느껴졌어요. 고마워요 🌿',
+      '잘 들어뒀어요. 그 마음도 충분히 중요해요 🌱',
+    ];
+    return fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
   }
-  const responses = [
-    '그렇군요. 오늘도 잘 하셨어요 🌿',
-    '말해줘서 고마워요. 잘 들었어요 🌱',
-    '그런 날도 있어요. 괜찮아요 🌿',
-    '오늘도 함께해줘서 고마워요 🌱',
-  ];
-  return responses[Math.floor(Math.random() * responses.length)];
 }
 
 // 생성된 이미지 URL을 받아 Claude 비전으로 식물 얼굴 위치를 분석

@@ -4,6 +4,16 @@ import { ENV, validateEnv } from '../config/env';
 // 식물 종류 타입
 export type PlantType = '방울토마토' | '바질' | '튤립';
 
+export type QuestionCategory =
+  | '오랜만 복귀 체크인 질문'
+  | '오늘의 마음 질문'
+  | '깊은 마음 질문';
+
+export interface MemorySummaryInput {
+  date: string;
+  summary: string;
+}
+
 // 식물별 캐릭터 설정 (말투 차이)
 const PLANT_PERSONAS: Record<PlantType, string> = {
   '방울토마토': `당신은 '방울토마토'입니다.
@@ -57,13 +67,16 @@ function buildSystemPrompt(plantType: PlantType): string {
 - 따옴표나 부가 텍스트 없이, 질문만 출력합니다.`;
 }
 
-function buildUserPrompt(plantType: PlantType, category: string, question: string): string {
+function buildUserPrompt(plantType: PlantType, category: string, question: string, memorySummaries: MemorySummaryInput[] = []): string {
   const examplesText = `1. ${question}`;
+  const memoryText = memorySummaries.length > 0
+    ? `\n최근 대화에서 기억할 만한 내용:\n${memorySummaries.map(item => `- ${item.date}: ${item.summary}`).join('\n')}\n이 내용을 참고하되, 사적인 내용을 그대로 반복하거나 같은 질문을 반복하지 마세요.`
+    : '';
 
   if (plantType === '튤립') {
-    return `'${category}'에 대한 질문을 하나 만들어주세요. ${examplesText} 이 질문에서 말투만 바뀌되, 앞에 올 문장과 자연스럽게 연결되게 해주고, 이 질문 앞에 질문을 자연스럽게 여는 새로운 문장을 자연스럽게 추가해주세요.`;
+    return `'${category}'에 대한 질문을 하나 만들어주세요. ${examplesText}${memoryText} 이 질문에서 말투만 바뀌되, 이 질문 앞에 질문을 자연스럽게 여는 따스한 문장을 앞에 자연스럽게 추가해주세요.`;
   } else {
-    return `'${category}'에 대한 질문을 하나 만들어주세요. 아래의 질문에서 말투정도만 수정해서 물어봐주세요: ${examplesText}`;
+    return `'${category}'에 대한 질문을 하나 만들어주세요. 아래의 질문에서 말투정도만 수정해서 물어봐주세요: ${examplesText}${memoryText}`;
   }
 }
 
@@ -71,13 +84,19 @@ function buildUserPrompt(plantType: PlantType, category: string, question: strin
 /**
  * 식물 친구가 사용자에게 던지는 다정한 질문을 생성합니다.
  */
-export async function generatePlantQuote(plantType: PlantType, selectedQuestion: string): Promise<string> {
+export async function generatePlantQuote(
+  plantType: PlantType,
+  selectedQuestion: string,
+  category: QuestionCategory = '오늘의 마음 질문',
+  memorySummaries: MemorySummaryInput[] = [],
+): Promise<string> {
   validateEnv();
 
-  const category = '오늘의 마음 질문';
   const question = selectedQuestion;
   const systemPrompt = buildSystemPrompt(plantType);
-  const userPrompt = buildUserPrompt(plantType, category, question);
+  const userPrompt = buildUserPrompt(plantType, category, question, memorySummaries);
+
+  console.log('memory summaries:', memorySummaries);
 
   console.log(`[${plantType}] 호출`);
   console.log('user prompt:', userPrompt);
@@ -123,6 +142,37 @@ export async function generatePlantQuote(plantType: PlantType, selectedQuestion:
   return quote;
 }
 
+export async function generateDiarySummary(
+  plantType: PlantType,
+  conversation: string,
+): Promise<string> {
+  validateEnv();
+  const response = await fetch(`${ENV.API_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${ENV.API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: ENV.DEFAULT_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: `당신은 사용자의 하루 일기를 정리하는 기록자입니다. 식물 캐릭터는 ${plantType}입니다. 아래 대화 전체를 사용자가 직접 쓴 자연스러운 일기처럼 1인칭 시점으로 한국어 1~3문장, 200자 이내로 요약하세요. '사용자는'이라고 부르지 말고 사용자의 목소리를 유지하세요. 매번 '오늘은'이나 날짜 표현으로 문장을 시작하지 말고, '나는/내가'를 불필요하게 반복하지 않으며 한국어에서 자연스럽게 주어를 생략해도 됩니다. 대화의 내용과 흐름에 맞춰 문장 시작과 표현을 다양하게 하고, 사용자가 나눈 일과 감정, 식물과의 대화를 충실히 담으세요. 대화에 없는 사실은 만들지 말고 이름·연락처·주소·금융정보 같은 직접 식별 정보는 제외하세요. 대화가 인사뿐이거나 요약할 내용이 없다면 '특별히 기억할 내용 없음'이라고만 출력하세요.`,
+        },
+        {
+          role: 'user',
+          content: conversation,
+        },
+      ],
+      temperature: 0.2,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok || !data.choices?.[0]) throw new Error(`일기 요약 실패: HTTP ${response.status}`);
+  return data.choices[0].message.content.trim().replace(/^['"]|['"]$/g, '');
+}
+
 
 interface ChatMessage {
   from: 'plant' | 'user';
@@ -132,7 +182,7 @@ interface ChatMessage {
 /**
  * 사용자의 답변에 식물 친구가 아주 짧게 화답합니다.
  */
-export async function generatePlantReply(plantType: PlantType, question: string, userAnswer: string, isFirstRound: boolean = true, isLastRound: boolean = false, chatHistory: ChatMessage[] = []): Promise<string> {
+export async function generatePlantReply(plantType: PlantType, question: string, userAnswer: string, isFirstRound: boolean = true, isLastRound: boolean = false, chatHistory: ChatMessage[] = [], isCheckinReply: boolean = false, memorySummaries: MemorySummaryInput[] = []): Promise<string> {
   validateEnv();
 
   const baseSystemPrompt = `
@@ -178,6 +228,14 @@ export async function generatePlantReply(plantType: PlantType, question: string,
   - 처음 건낸 질문을 적절히 고려해서 사용자의 답변에 대해 후속 질문을 합니다. (예: 그때 감정은 어땠는지, 왜 그런 생각을 했는지)
   - 세 문장 이내로 아주 짧게 작성합니다.`;  
 
+  const checkinReplyRules = `
+  [오랜만 복귀 안부 답변]
+  - 이 규칙은 위의 질문 관련 규칙보다 우선합니다.
+  - 사용자의 답변에 짧게 공감하고 반응합니다.
+  - 후속 질문, 의문문, 조언을 절대 포함하지 않습니다.
+  - 다음에 오늘의 식물 task를 확인할 예정이므로, task나 오늘 할 일을 언급하지 않고 자연스럽게 마무리합니다.
+  - 한두 문장, 40자 이내로 아주 짧게 작성합니다.`;
+
   const continuationRules = `
   [두 번째 라운드 이상]
   - 처음 질문(\"${question}\")의 주제를 중심으로 자연스럽게 대화를 이어갑니다.
@@ -188,6 +246,12 @@ export async function generatePlantReply(plantType: PlantType, question: string,
   - 전체 문장은 50자 이내를 유지합니다.
   - 질문 없이 공감만 하고 끝내지 않습니다.`;
 
+  const memoryRules = memorySummaries.length > 0 ? `
+  [이전 대화의 기억]
+  아래 기억은 사용자의 답변에 공감하고 대화를 이어갈 때만 참고합니다.
+  현재 질문을 바꾸거나 기억을 나열하지 말고, 답변과 자연스럽게 연결되는 경우에만 활용하세요.
+  ${memorySummaries.map(item => `- ${item.date}: ${item.summary}`).join('\n')}` : '';
+
   const lastRoundRules = `
   [마지막 라운드 - 대화 마무리]
   - 이번 응답이 대화의 마지막 응답입니다.
@@ -195,11 +259,13 @@ export async function generatePlantReply(plantType: PlantType, question: string,
   - 사용자의 마지막 답변에 짧고 따뜻하게 화답합니다.
   - 오늘의 대화를 간단히 인정해주고, "내일 또 보자" 또는 "내일 또 만나자" 같은 말로 정중하게 마무리합니다.`;
 
-  const systemPrompt = isLastRound
-    ? `${baseSystemPrompt}${lastRoundRules}`
+  const systemPrompt = isCheckinReply
+    ? `${baseSystemPrompt}${checkinReplyRules}${memoryRules}`
+    : isLastRound
+    ? `${baseSystemPrompt}${lastRoundRules}${memoryRules}`
     : isFirstRound
-    ? `${baseSystemPrompt}${firstRoundRules}`
-    : `${baseSystemPrompt}${continuationRules}`;
+    ? `${baseSystemPrompt}${firstRoundRules}${memoryRules}`
+    : `${baseSystemPrompt}${continuationRules}${memoryRules}`;
 
   console.log(`[${plantType}] 화답 호출 (라운드: ${isFirstRound ? '첫' : isLastRound ? '마지막' : '중간'})`);
   console.log('user answer:', userAnswer);

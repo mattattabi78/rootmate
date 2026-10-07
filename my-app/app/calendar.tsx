@@ -11,8 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { COLORS } from '../constants';
-import { storage, DailyRecord } from '../store/storage';
-import { PLANT_TASKS } from '../constants/plants';
+import { storage, DailyRecord, MemorySummary } from '../store/storage';
+import { getTaskLabel } from '../constants/plants';
 import { PlantType } from '../constants/character';
 import TopAppBar from '../components/common/TopAppBar';
 import BottomNavBar from '../components/common/BottomNavBar';
@@ -61,7 +61,7 @@ function formatDateLabel(year: number, month: number, day: number) {
 }
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────
-type TabView = 'calendar' | 'album';
+type TabView = 'calendar' | 'album' | 'memory';
 
 export default function CalendarScreen() {
   const [view, setView] = useState<TabView>('calendar');
@@ -71,6 +71,8 @@ export default function CalendarScreen() {
   const [month, setMonth]           = useState(today.getMonth());
   const [recordDays, setRecordDays] = useState<number[]>([]);
   const [plantType, setPlantType]   = useState<PlantType>('tomato');
+  const [memorySummaries, setMemorySummaries] = useState<MemorySummary[]>([]);
+  const [memoryEnabled, setMemoryEnabled] = useState(true);
 
   // 모달 상태
   const [modalVisible,   setModalVisible]   = useState(false);
@@ -91,6 +93,10 @@ export default function CalendarScreen() {
     loadRecordDays(devToday.getFullYear(), devToday.getMonth());
     storage.getPlantData().then(d => {
       if (d?.id) setPlantType(d.id as PlantType);
+    });
+    Promise.all([storage.getAllMemorySummaries(), storage.isMemoryEnabled()]).then(([summaries, enabled]) => {
+      setMemorySummaries(summaries);
+      setMemoryEnabled(enabled);
     });
   }, [loadRecordDays]));
 
@@ -138,7 +144,7 @@ export default function CalendarScreen() {
       >
         {/* 탭 스위처 */}
         <View style={styles.tabRow}>
-          {(['calendar', 'album'] as const).map(tab => (
+          {(['calendar', 'album', 'memory'] as const).map(tab => (
             <TouchableOpacity
               key={tab}
               style={styles.tabWrapper}
@@ -147,11 +153,15 @@ export default function CalendarScreen() {
             >
               {view === tab ? (
                 <Grad colors={['#f3f4f1', '#b5ff22']} style={styles.tabActive}>
-                  <Text style={styles.tabActiveText}>{tab === 'calendar' ? '캘린더' : '앨범'}</Text>
+                  <Text style={styles.tabActiveText}>
+                    {tab === 'calendar' ? '캘린더' : tab === 'album' ? '앨범' : '기억'}
+                  </Text>
                 </Grad>
               ) : (
                 <View style={styles.tabInactive}>
-                  <Text style={styles.tabInactiveText}>{tab === 'calendar' ? '캘린더' : '앨범'}</Text>
+                  <Text style={styles.tabInactiveText}>
+                    {tab === 'calendar' ? '캘린더' : tab === 'album' ? '앨범' : '기억'}
+                  </Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -178,12 +188,14 @@ export default function CalendarScreen() {
               year={year} month={month} today={today}
               recordDays={recordDays} onDayPress={handleDayPress}
             />
-          ) : (
+          ) : view === 'album' ? (
             <AlbumList
               year={year} month={month}
               recordDays={recordDays}
               onDayPress={handleDayPress}
             />
+          ) : (
+            <MemoryList summaries={memorySummaries} enabled={memoryEnabled} />
           )}
         </View>
       </ScrollView>
@@ -221,9 +233,39 @@ export default function CalendarScreen() {
   );
 }
 
+function MemoryList({ summaries, enabled }: { summaries: MemorySummary[]; enabled: boolean }) {
+  if (!enabled) {
+    return (
+      <View style={styles.memoryEmpty}>
+        <Text style={styles.memoryEmptyTitle}>기억 기능이 꺼져 있어요</Text>
+        <Text style={styles.emptyText}>홈 화면의 기억 설정에서 다시 켤 수 있어요.</Text>
+      </View>
+    );
+  }
+
+  if (summaries.length === 0) {
+    return (
+      <View style={styles.memoryEmpty}>
+        <Text style={styles.memoryEmptyTitle}>아직 기억된 내용이 없어요</Text>
+        <Text style={styles.emptyText}>대화를 마치면 중요한 내용이 한 문장으로 기록돼요.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.memoryList}>
+      {summaries.map(item => (
+        <View key={item.date} style={styles.memoryEntry}>
+          <Text style={styles.memoryDate}>{item.date}</Text>
+          <Text style={styles.memorySummary}>{item.summary}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 // ─── 날짜 기록 요약 ───────────────────────────────────────────────
 function DayRecordSummary({ record, plantType }: { record: DailyRecord; plantType: PlantType }) {
-  const allTasks = PLANT_TASKS[plantType] ?? [];
   const completedIds = record.completedTaskIds ?? (record.waterDone ? ['water'] : []);
 
   // 완료한 task + 완료 못 한 water task 모두 표시
@@ -233,7 +275,7 @@ function DayRecordSummary({ record, plantType }: { record: DailyRecord; plantTyp
     ...(completedIds.length === 0 && record.waterDone ? ['water'] : []),
   ])];
 
-  const hasContent = shownTaskIds.length > 0 || record.question || record.answer || record.plantPhotoUri;
+  const hasContent = shownTaskIds.length > 0 || record.question || record.answer || record.plantPhotoUri || record.conversationSummary;
 
   return (
     <View style={sumStyles.container}>
@@ -246,19 +288,25 @@ function DayRecordSummary({ record, plantType }: { record: DailyRecord; plantTyp
         <View style={sumStyles.section}>
           <Text style={sumStyles.sectionTitle}>오늘의 관리</Text>
           {shownTaskIds.map(taskId => {
-            const def  = allTasks.find(t => t.id === taskId);
             const done = completedIds.includes(taskId);
             return (
               <View key={taskId} style={sumStyles.taskRow}>
                 <Text style={[sumStyles.taskCheck, done ? sumStyles.taskDone : sumStyles.taskSkip]}>
                   {done ? '✓' : '✗'}
                 </Text>
-                <Text style={sumStyles.taskLabel}>{def?.label ?? taskId}</Text>
+                <Text style={sumStyles.taskLabel}>{getTaskLabel(plantType, taskId)}</Text>
               </View>
             );
           })}
         </View>
       )}
+
+      {record.conversationSummary ? (
+        <View style={sumStyles.section}>
+          <Text style={sumStyles.sectionTitle}>대화 요약</Text>
+          <Text style={sumStyles.answer}>{record.conversationSummary}</Text>
+        </View>
+      ) : null}
 
       {/* 오늘의 질문 + 답변 */}
       {(record.question || record.answer) ? (
@@ -516,6 +564,12 @@ const styles = StyleSheet.create({
   albumPhotoPlaceholder: { fontSize: 40 },
   emptyAlbum:         { paddingVertical: 32, alignItems: 'center' },
   emptyText:          { fontFamily: 'Paperlogy-5Medium', fontSize: 15, color: COLORS.textTertiary },
+  memoryList:         { gap: 12 },
+  memoryEntry:        { gap: 8, padding: 16, borderRadius: 16, borderWidth: 1.5, borderColor: COLORS.outline, backgroundColor: COLORS.cardBg },
+  memoryDate:         { fontFamily: 'ahn2006-B', fontSize: 15, color: COLORS.green },
+  memorySummary:      { fontFamily: 'Paperlogy-4Regular', fontSize: 15, color: COLORS.textPrimary, lineHeight: 23 },
+  memoryEmpty:        { alignItems: 'center', paddingVertical: 44, gap: 10 },
+  memoryEmptyTitle:   { fontFamily: 'ahn2006-B', fontSize: 19, color: COLORS.textPrimary },
 
   // 모달
   modalOverlay: {

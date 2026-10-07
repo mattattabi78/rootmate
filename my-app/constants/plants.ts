@@ -1,3 +1,6 @@
+import { getLocalDateString } from '../utils/date';
+import { getDevAdjustedDate } from '../utils/devOverrides';
+
 // ─── 기존 인터페이스 ──────────────────────────────────────────────
 export interface PlantCare {
   water: string;
@@ -30,6 +33,7 @@ export interface PlantData {
 export type TaskId =
   | 'water'
   | 'sunlight'
+  | 'observe'
   | 'pruning'
   | 'flower_remove'
   | 'fertilize'
@@ -49,6 +53,10 @@ export interface PlantTask {
   oneTime?: boolean;
   daysOfWeek?: number[]; // 특정 요일에만 표시 (0=일, 3=수, 6=토)
   notifications: string[];
+}
+
+export function isSupportedTask(taskId: TaskId): boolean {
+  return taskId === 'water' || taskId === 'sunlight' || taskId === 'observe';
 }
 
 // ─── 도감 정보 타입 ───────────────────────────────────────────────
@@ -148,7 +156,7 @@ export const PLANT_TASKS: Record<string, PlantTask[]> = {
       id: 'sunlight',
       label: '햇빛 확인',
       description: '하루 6시간 이상 햇빛이 필요해요',
-      startWeek: 1,
+      startWeek: 0,
       intervalDays: 1,
       notificationTime: '19:00',
       notifications: [
@@ -157,60 +165,13 @@ export const PLANT_TASKS: Record<string, PlantTask[]> = {
       ],
     },
     {
-      id: 'fertilize',
-      label: '비료 주기',
-      description: '액체 비료를 2주마다 한 번씩 줘요',
-      startWeek: 2,
-      intervalDays: 14,
-      notificationTime: '19:00',
-      notifications: [
-        '비료 줄 때가 됐어. 액체 비료 한 번 부탁해.',
-      ],
-    },
-    {
-      id: 'pruning',
-      label: '순 따기',
-      description: '줄기 끝 2~3마디를 잘라줘요',
-      startWeek: 3,
-      intervalDays: 7,
-      notificationTime: '19:00',
-      notifications: [
-        '키가 좀 컸지? 위쪽 줄기 2~3마디 잘라줘.',
-        '꽃 올라오기 전에 끝 부분 잘라줘. 안 자르면 꽃 피워버린다.',
-        '난 꽃이 나면 맛이 없어지니까 그 전에 끝 부분을 잘라줘.',
-      ],
-    },
-    {
-      id: 'flower_remove',
-      label: '꽃대 제거',
-      description: '꽃대가 올라오면 즉시 잘라줘요',
-      startWeek: 4,
-      intervalDays: 7,
-      notificationTime: '19:00',
-      notifications: [
-        '꽃대 올라오고 있으면 잘라줘. 꽃 피면 나 맛없어져.',
-      ],
-    },
-    {
-      id: 'harvest',
-      label: '수확',
-      description: '줄기째 마디 바로 위에서 잘라요',
-      startWeek: 6,
+      id: 'observe',
+      label: '관찰하기',
+      description: '지금 내 모습이 어떤지 이야기해요',
+      startWeek: 0,
       intervalDays: 3,
       notificationTime: '19:00',
-      notifications: [
-        '이제 수확해도 될 것 같아. 줄기째 잘라줘.',
-      ],
-    },
-    {
-      id: 'photo',
-      label: '사진 찍기',
-      description: '화·토요일마다 내 모습을 찍어줘요',
-      startWeek: 0,
-      intervalDays: 0,
-      daysOfWeek: [2, 6],
-      notificationTime: '19:00',
-      notifications: ['오늘은 내 모습 한 장 찍어줄래? 📸'],
+      notifications: ['지금 내 모습 어때?'],
     },
   ],
   tomato: [
@@ -230,7 +191,7 @@ export const PLANT_TASKS: Record<string, PlantTask[]> = {
       id: 'sunlight',
       label: '햇빛 확인',
       description: '하루 8시간 이상 햇빛이 필요해요',
-      startWeek: 1,
+      startWeek: 0,
       intervalDays: 1,
       notificationTime: '19:00',
       notifications: [
@@ -239,73 +200,13 @@ export const PLANT_TASKS: Record<string, PlantTask[]> = {
       ],
     },
     {
-      id: 'side_shoot',
-      label: '곁순 제거',
-      description: '줄기와 잎 사이 곁순을 제거해요',
-      startWeek: 3,
+      id: 'observe',
+      label: '관찰하기',
+      description: '지금 내 모습이 어떤지 이야기해요',
+      startWeek: 0,
       intervalDays: 3,
       notificationTime: '19:00',
-      notifications: [
-        '줄기 사이에 새 순 나온 거 보여? 어릴 때 바로 제거해줘야해!',
-        '곁순 방치하면 열매가 작아질거야. 확인해줘.',
-      ],
-    },
-    {
-      id: 'fertilize',
-      label: '비료 주기',
-      description: '토마토용 액체 비료를 2주마다 줘요',
-      startWeek: 3,
-      intervalDays: 14,
-      notificationTime: '19:00',
-      notifications: [
-        '비료 줄 때야. 토마토 전용 액체 비료 부탁해!',
-      ],
-    },
-    {
-      id: 'support_stake',
-      label: '지지대 세우기',
-      description: '키가 크면 지지대를 세워줘요',
-      startWeek: 5,
-      intervalDays: 0,
-      oneTime: true,
-      notificationTime: '19:00',
-      notifications: [
-        '나 키 많이 컸지? 지지대 세워서 줄기 묶어주라! 안 그러면 쓰러져.',
-      ],
-    },
-    {
-      id: 'pollinate',
-      label: '수분 돕기',
-      description: '꽃을 살살 흔들어 수분을 도와요',
-      startWeek: 8,
-      intervalDays: 1,
-      notificationTime: '19:00',
-      notifications: [
-        '꽃 피었지? 손가락으로 살살 흔들어줘. 실내엔 벌이 없으니까.',
-        '꽃 흔들어줘야 열매 맺혀. 오늘도 한 번 부탁해~',
-      ],
-    },
-    {
-      id: 'harvest',
-      label: '수확',
-      description: '열매가 붉게 익으면 꼭지째 잘라요',
-      startWeek: 13,
-      intervalDays: 1,
-      notificationTime: '19:00',
-      notifications: [
-        '빨갛게 익은 거 있으면 꼭지 위 줄기째 잘라줘.',
-        '다 익은 것 같은데? 수확해봐!!',
-      ],
-    },
-    {
-      id: 'photo',
-      label: '사진 찍기',
-      description: '화·토요일마다 내 모습을 찍어줘요',
-      startWeek: 0,
-      intervalDays: 0,
-      daysOfWeek: [2, 6],
-      notificationTime: '19:00',
-      notifications: ['오늘은 내 모습 한 장 찍어줄래? 📸'],
+      notifications: ['지금 내 모습 어때?'],
     },
   ],
   tulip: [
@@ -334,17 +235,44 @@ export const PLANT_TASKS: Record<string, PlantTask[]> = {
       ],
     },
     {
-      id: 'photo',
-      label: '사진 찍기',
-      description: '화·토요일마다 내 모습을 찍어줘요',
+      id: 'observe',
+      label: '관찰하기',
+      description: '지금 내 모습이 어떤지 이야기해요',
       startWeek: 0,
-      intervalDays: 0,
-      daysOfWeek: [2, 6],
+      intervalDays: 3,
       notificationTime: '19:00',
-      notifications: ['오늘은 제 모습 한 장 찍어주시겠어요? 📸'],
+      notifications: ['지금 내 모습 어때?'],
     },
   ],
 };
+
+const LEGACY_TASK_LABELS: Record<string, Record<string, string>> = {
+  basil: {
+    fertilize: '비료 주기',
+    pruning: '순 따기',
+    flower_remove: '꽃대 제거',
+    harvest: '수확',
+    photo: '사진 찍기',
+  },
+  tomato: {
+    side_shoot: '곁순 제거',
+    fertilize: '비료 주기',
+    support_stake: '지지대 세우기',
+    pollinate: '수분 돕기',
+    harvest: '수확',
+    photo: '사진 찍기',
+  },
+  tulip: { photo: '사진 찍기' },
+};
+
+export function getTaskLabel(plantType: string | undefined, taskId: string): string {
+  const activeTasks = plantType ? PLANT_TASKS[plantType] : Object.values(PLANT_TASKS).flat();
+  const activeLabel = activeTasks?.find(task => task.id === taskId)?.label;
+  const legacyLabel = plantType
+    ? LEGACY_TASK_LABELS[plantType]?.[taskId]
+    : Object.values(LEGACY_TASK_LABELS).map(labels => labels[taskId]).find(Boolean);
+  return activeLabel ?? legacyLabel ?? taskId;
+}
 
 // ─── 도감 정보 데이터 ─────────────────────────────────────────────
 export const PLANT_INFO: Record<string, PlantInfo> = {
@@ -417,6 +345,56 @@ export const PLANT_INFO: Record<string, PlantInfo> = {
 
 // ─── 헬퍼 함수 ───────────────────────────────────────────────────
 
+/** 완료 후 주기가 지났거나 아직 완료하지 않아 밀린 task인지 확인 */
+export function isTaskDue(
+  task: PlantTask,
+  plantedAt: string,
+  completedTasks: { taskId: string; completedAt: string }[],
+  today = getLocalDateString(getDevAdjustedDate()),
+): boolean {
+  if (task.oneTime || task.intervalDays <= 0) return true;
+
+  const lastCompletedDate = completedTasks
+    .filter(entry => entry.taskId === task.id)
+    .reduce<string | undefined>(
+      (latest, entry) => !latest || entry.completedAt > latest ? entry.completedAt : latest,
+      undefined,
+    );
+
+  const dueDate = lastCompletedDate
+    ? new Date(`${lastCompletedDate}T00:00:00`)
+    : new Date(plantedAt);
+
+  if (!lastCompletedDate) {
+    dueDate.setHours(0, 0, 0, 0);
+    dueDate.setDate(dueDate.getDate() + task.startWeek * 7);
+  } else {
+    dueDate.setDate(dueDate.getDate() + task.intervalDays);
+  }
+
+  return new Date(`${today}T00:00:00`) >= dueDate;
+}
+
+export function isObservationDue(
+  plantType: string,
+  plantedAt: string,
+  completedTasks: { taskId: string; completedAt: string }[],
+  today = getLocalDateString(getDevAdjustedDate()),
+): boolean {
+  const tasks = PLANT_TASKS[plantType] ?? [];
+  const observationTask = tasks.find(item => item.id === 'observe');
+  const sunlightTask = tasks.find(item => item.id === 'sunlight');
+  const waterTask = tasks.find(item => item.id === 'water');
+  const waterCompletedToday = completedTasks.some(
+    entry => entry.taskId === 'water' && entry.completedAt === today,
+  );
+
+  if (!observationTask || !sunlightTask || !waterTask || waterCompletedToday) return false;
+  if (!isTaskDue(sunlightTask, plantedAt, completedTasks, today)) return false;
+  if (isTaskDue(waterTask, plantedAt, completedTasks, today)) return false;
+  return isTaskDue(observationTask, plantedAt, completedTasks, today);
+}
+
 /** 파종일 기준 현재 주차 계산 */
 export function getCurrentWeek(plantedAt: string): number {
   const planted = new Date(plantedAt);
@@ -430,8 +408,11 @@ export function getTodayTasks(
   plantType: string,
   plantedAt: string,
   completedTaskIds: string[],
+  completedTasks: { taskId: string; completedAt: string }[] = [],
 ): PlantTask[] {
   const tasks = PLANT_TASKS[plantType] ?? [];
+  const observationDue = isObservationDue(plantType, plantedAt, completedTasks);
+  const observationDay = observationDue || completedTaskIds.includes('observe');
   const currentWeek = getCurrentWeek(plantedAt);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -440,10 +421,18 @@ export function getTodayTasks(
   const daysSincePlanted = Math.floor((today.getTime() - planted.getTime()) / (1000 * 60 * 60 * 24));
 
   return tasks.filter(task => {
+    if (!isSupportedTask(task.id)) return false;
     if (currentWeek < task.startWeek) return false;
+    if (task.id === 'sunlight' && observationDay) return false;
+    if (task.id === 'observe' && !observationDue) return false;
 
-    if (task.oneTime || task.intervalDays === 0) {
-      return !completedTaskIds.includes(task.id);
+    if (task.oneTime) {
+      return !completedTasks.some(entry => entry.taskId === task.id);
+    }
+
+    if (task.intervalDays === 0) return !completedTaskIds.includes(task.id);
+    if (task.id === 'water' || task.id === 'sunlight' || task.id === 'observe') {
+      return isTaskDue(task, plantedAt, completedTasks);
     }
 
     const daysFromStart = daysSincePlanted - task.startWeek * 7;

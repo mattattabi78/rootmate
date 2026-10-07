@@ -1,5 +1,5 @@
 import { DailyRecord } from '../store/storage';
-import { PLANT_TASKS } from '../constants/plants';
+import { getTaskLabel } from '../constants/plants';
 import { PlantType } from '../constants/character';
 import { getPlantMessages } from '../constants/chatMessages';
 
@@ -22,8 +22,7 @@ export function reconstructDayChat(record: DailyRecord, plantNickname: string, p
   const allTaskIds = [...new Set([...completedIds, ...(record.waterDone ? ['water'] : [])])];
 
   for (const taskId of allTaskIds) {
-    const taskDef = Object.values(PLANT_TASKS).flat().find(t => t.id === taskId);
-    const label = taskDef?.label ?? taskId;
+    const label = getTaskLabel(plantType, taskId);
     const done  = completedIds.includes(taskId);
 
     msgs.push({ id: id(), from: 'plant', text: m ? m.taskAsk(label) : `오늘 ${label} 하셨나요?` });

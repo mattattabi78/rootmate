@@ -18,7 +18,7 @@ import { router } from 'expo-router';
 import { COLORS } from '../constants';
 import { PlantType, GrowthStage, Expression, growthStageToNumber, getExpressionImage } from '../constants/character';
 import PlantCharacter from '../components/common/PlantCharacter';
-import { getTodayQuestion } from '../services/api/questionPool';
+import { getTodayQuestion, getLongBreakQuestion } from '../services/api/questionPool';
 import { usePlantExpression } from '../hooks/usePlantExpression';
 import {
   getOrInitGrowthState, recordStageEntry, getDaysSinceStageEntry,
@@ -26,10 +26,10 @@ import {
   recordTaskCompletion, getTodayCompletedTaskIds,
 } from '../store/growthStore';
 import { getNextStageConfig, AUTO_ADVANCE_MESSAGES, STAGE_CONFIRM_MESSAGES, getActiveTaskIds } from '../constants/growthStages';
-import { storage, DailyRecord } from '../store/storage';
-import { PlantTask, PLANT_TASKS } from '../constants/plants';
+import { storage, DailyRecord, MemorySummary } from '../store/storage';
+import { isSupportedTask, isTaskDue, isObservationDue, PlantTask, PLANT_TASKS } from '../constants/plants';
 import { getPlantMessages } from '../constants/chatMessages';
-import { generateQuestion, generatePlantResponse, updatePlantCharacterWithCustomPot, PlantFacePosition } from '../services/ai';
+import { generateQuestion, generatePlantResponse, summarizePlantConversation, updatePlantCharacterWithCustomPot, PlantFacePosition } from '../services/ai';
 import { reconstructDayChat } from '../utils/chatHistory';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView } from 'expo-camera';
@@ -70,6 +70,7 @@ type Phase =
   | 'already_done'     // 오늘 이미 완료
   | 'stage_confirm'    // 성장 단계 USER_CONFIRMED 질문 버튼 표시
   | 'task_check'       // 오늘의 task 확인 (task 순서대로)
+  | 'observing'        // 식물 관찰 답변 대기
   | 'photo_capture'    // 식물 사진 촬영 대기
   | 'water_reminder'   // 못 했을 때 알림 선택
   | 'reminder_done'    // 알림 설정 후 종료 (기록 미완료)
@@ -92,12 +93,16 @@ export default function ChatScreen() {
   const [plantNickname, setPlantNickname] = useState('');
   const [plantType, setPlantType]         = useState<PlantType>('tomato');
   const plantTypeRef = useRef<PlantType>('tomato');
+  const observationChatRef = useRef(false);
   // 오늘 기록은 있지만 미완료 task가 남은 경우 (AI 질문 건너뜀)
   const hasExistingRecordRef = useRef(false);
   const [todayQuestion, setTodayQuestion] = useState('');
+  const [longBreakCheckin, setLongBreakCheckin] = useState<string | null>(null);
+  const memorySummariesRef = useRef<MemorySummary[]>([]);
   const [tasks, setTasks]               = useState<PlantTask[]>([]);
   const [taskIdx, setTaskIdx]           = useState(0);
   const [chatDoneTaskIds, setChatDoneTaskIds] = useState<string[]>([]);
+  const [canEndConversation, setCanEndConversation] = useState(false);
   const [plantStage, setPlantStage]   = useState<GrowthStage>(1);
   const [plantPhotoUri, setPlantPhotoUri] = useState<string | undefined>();
   const [generatedPlantUri, setGeneratedPlantUri] = useState<string | null>(null);
@@ -124,13 +129,28 @@ export default function ChatScreen() {
   const { expression: plantExpression, setTemporaryExpression } = usePlantExpression(plantType);
 
   // ── 오늘 task 목록 계산 (daysOfWeek 필터 포함) ────────────────────
-  const buildTodayTasks = (pType: PlantType, stage: number, alreadyDoneToday: string[], everDoneIds: string[] = []): PlantTask[] => {
+  const buildTodayTasks = (
+    pType: PlantType,
+    stage: number,
+    alreadyDoneToday: string[],
+    completedTasks: { taskId: string; completedAt: string }[],
+    plantedAt: string,
+  ): PlantTask[] => {
     const activeIds = getActiveTaskIds(pType, stage);
+    const observationDue = isObservationDue(pType, plantedAt, completedTasks, todayStr);
+    const observationDay = observationDue || alreadyDoneToday.includes('observe');
     return (PLANT_TASKS[pType] ?? []).filter(t => {
+      if (!isSupportedTask(t.id)) return false;
       if (!activeIds.includes(t.id as any)) return false;
-      if (t.oneTime && everDoneIds.includes(t.id)) return false;
+      if (t.id === 'sunlight' && observationDay) return false;
+      if (t.id === 'observe' && !observationDue) return false;
+      if (t.oneTime && completedTasks.some(entry => entry.taskId === t.id)) return false;
       if (alreadyDoneToday.includes(t.id)) return false;
       if (t.daysOfWeek && !t.daysOfWeek.includes(kstDow)) return false;
+      if (
+        (t.id === 'water' || t.id === 'sunlight' || t.id === 'observe') &&
+        !isTaskDue(t, plantedAt, completedTasks, todayStr)
+      ) return false;
       return true;
     });
   };
@@ -144,8 +164,8 @@ export default function ChatScreen() {
         setPhase('done');
         return;
       }
-      // 전환 메시지 → 잠깐 대기 → 로딩 점 → AI 질문
-      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: m.transitionToQuestion() }]);
+      setCanEndConversation(true);
+      // 잠깐 대기 → 로딩 점 → AI 질문
       setPhase('loading');
       setTimeout(() => {
         const loadingId = newId();
@@ -155,7 +175,8 @@ export default function ChatScreen() {
           dots = (dots % 3) + 1;
           setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: '.'.repeat(dots) } : msg));
         }, 400);
-        generateQuestion(fallbackQuestion, '', '', plantTypeRef.current).then(aiQuestion => {
+        const questionCategory = kstDow === 0 ? '깊은 마음 질문' : '오늘의 마음 질문';
+        generateQuestion(fallbackQuestion, '', '', plantTypeRef.current, questionCategory).then(aiQuestion => {
           clearInterval(dotInterval);
           setTodayQuestion(aiQuestion);
           setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: aiQuestion } : msg));
@@ -170,7 +191,12 @@ export default function ChatScreen() {
       }, 800);
     } else {
       const task = taskList[idx];
-      if (task.id === 'photo') {
+      if (task.id === 'observe') {
+        observationChatRef.current = true;
+        setCurrentRound(0);
+        setMessages(prev => [...prev, { id: newId(), from: 'plant', text: '지금 내 모습 어때?' }]);
+        setPhase('observing');
+      } else if (task.id === 'photo') {
         setMessages(prev => [...prev, { id: newId(), from: 'plant', text: m.photoAsk }]);
         setPhase('photo_capture');
       } else {
@@ -202,6 +228,7 @@ export default function ChatScreen() {
       plantTypeRef.current = pType;
       setPlantType(pType);
       if (plantData?.growthStage) setPlantStage(growthStageToNumber(plantData.growthStage));
+      memorySummariesRef.current = await storage.getRecentMemorySummaries();
 
       // 성장 상태 먼저 확인 (task 필터링에 필요)
       const growthState = await getOrInitGrowthState(pType, pAt);
@@ -210,8 +237,13 @@ export default function ChatScreen() {
       const existingRecord = await storage.getDailyRecord(todayStr);
       if (existingRecord) {
         const alreadyDoneIds = await getTodayCompletedTaskIds();
-        const everDoneIds    = growthState.completedTasks.map(e => e.taskId);
-        const pendingTasks   = buildTodayTasks(pType, growthState.currentStage, alreadyDoneIds, everDoneIds);
+        const pendingTasks   = buildTodayTasks(
+          pType,
+          growthState.currentStage,
+          alreadyDoneIds,
+          growthState.completedTasks,
+          growthState.plantedAt,
+        );
 
         if (pendingTasks.length === 0) {
           // 모든 task 완료 → 완료 화면
@@ -225,11 +257,45 @@ export default function ChatScreen() {
         // fall through to task flow below
       }
 
+      const lastRecordDate = await storage.getLastRecordDate();
+      const daysSinceLastRecord = lastRecordDate
+        ? Math.floor((new Date(todayStr + 'T00:00:00').getTime() - new Date(lastRecordDate + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      if (daysSinceLastRecord >= 7) {
+        const alreadyDoneToday = await getTodayCompletedTaskIds();
+        const longBreakTasks = buildTodayTasks(
+          pType,
+          growthState.currentStage,
+          alreadyDoneToday,
+          growthState.completedTasks,
+          growthState.plantedAt,
+        );
+        const fallbackQuestion = getTodayQuestion(pNick, new Date(pAt), qIdx, dqIdx);
+        setTasks(longBreakTasks);
+        setTodayQuestion(fallbackQuestion);
+
+        const longBreakQuestion = await generateQuestion(
+          getLongBreakQuestion(pNick),
+          '',
+          '',
+          plantTypeRef.current,
+          '오랜만 복귀 체크인 질문',
+        ).catch(() => getLongBreakQuestion(pNick));
+
+        setLongBreakCheckin(longBreakQuestion);
+        setMessages([{ id: newId(), from: 'plant' as const, text: longBreakQuestion }]);
+        setPhase('answering');
+        setTemporaryExpression('default', 2000);
+        return;
+      }
+
       // draft 복원 (미완료 세션) — hasExistingRecordRef 이미 설정된 상태일 수 있음
       const draft = await storage.getChatDraft(todayStr);
       if (draft) {
         const draftTasks: PlantTask[] = draft.tasks ?? [];
         const draftTaskIdx: number = draft.taskIdx ?? 0;
+        observationChatRef.current = !!draft.observationChat;
 
         if (draft.phase === 'reminder_done') {
           const skippedTask = draftTasks[draftTaskIdx];
@@ -242,6 +308,7 @@ export default function ChatScreen() {
           setTasks(draftTasks);
           setTaskIdx(draftTaskIdx);
           setChatDoneTaskIds(draft.chatDoneTaskIds ?? []);
+          setCanEndConversation(!!draft.canEndConversation);
           setTodayQuestion(draft.todayQuestion ?? '');
           setPhase(skippedTask ? 'task_check' : 'answering');
         } else {
@@ -249,6 +316,7 @@ export default function ChatScreen() {
           setTasks(draftTasks);
           setTaskIdx(draftTaskIdx);
           setChatDoneTaskIds(draft.chatDoneTaskIds ?? []);
+          setCanEndConversation(!!draft.canEndConversation);
           setTodayQuestion(draft.todayQuestion ?? '');
           setPhase(draft.phase ?? 'task_check');
         }
@@ -263,8 +331,13 @@ export default function ChatScreen() {
 
       const alreadyChecked = await wasStageCheckedToday();
       const alreadyDone    = await getTodayCompletedTaskIds();
-      const everDone       = growthState.completedTasks.map(e => e.taskId);
-      const todayTaskList  = buildTodayTasks(pType, growthState.currentStage, alreadyDone, everDone);
+      const todayTaskList  = buildTodayTasks(
+        pType,
+        growthState.currentStage,
+        alreadyDone,
+        growthState.completedTasks,
+        growthState.plantedAt,
+      );
       setTasks(todayTaskList);
 
       let growthMsg: string | null = null;
@@ -295,7 +368,9 @@ export default function ChatScreen() {
         confirmQ    = growthState.pendingConfirmQuestion;
       }
 
-      const greetMsg = { id: newId(), from: 'plant' as const, text: getPlantMessages(plantTypeRef.current).greeting(pNick) };
+      const plantMessages = getPlantMessages(plantTypeRef.current);
+      const greetMsg = { id: newId(), from: 'plant' as const, text: plantMessages.greeting(pNick) };
+
       setMessages([greetMsg]);
 
       setTimeout(() => {
@@ -320,8 +395,12 @@ export default function ChatScreen() {
   // draft 자동 저장 (완료·로딩 제외, reminder_done 포함)
   useEffect(() => {
     if (phase === 'loading' || phase === 'already_done' || phase === 'done' || messages.length === 0) return;
-    storage.saveChatDraft(todayStr, { messages, phase, tasks, taskIdx, chatDoneTaskIds, todayQuestion });
-  }, [messages, phase]);
+    storage.saveChatDraft(todayStr, {
+      messages, phase, tasks, taskIdx, chatDoneTaskIds, todayQuestion,
+      canEndConversation,
+      observationChat: observationChatRef.current,
+    });
+  }, [messages, phase, canEndConversation]);
 
   // ── 성장 단계 확인 답변 ─────────────────────────────────────────
   const handleGrowthConfirm = async (confirmed: boolean) => {
@@ -566,7 +645,17 @@ export default function ChatScreen() {
     const chatHistoryForAI = messages
       .filter(msg => msg.id !== loadingId)
       .map(msg => ({ from: msg.from as 'plant' | 'user', text: msg.text }));
-    const aiReply = await generatePlantResponse('[사진으로 답변했어요]', plantNickname, todayQuestion, plantType, currentRound === 0, isLastRound, chatHistoryForAI);
+    const aiReply = await generatePlantResponse(
+      '[사진으로 답변했어요]',
+      plantNickname,
+      todayQuestion,
+      plantType,
+      currentRound === 0,
+      isLastRound,
+      chatHistoryForAI,
+      false,
+      memorySummariesRef.current,
+    );
     clearInterval(dotInterval);
     setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: aiReply } : msg));
     
@@ -601,33 +690,96 @@ export default function ChatScreen() {
       dots = (dots % 3) + 1;
       setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: '.'.repeat(dots) } : msg));
     }, 400);
+
+    const isLongBreakReply = !!longBreakCheckin;
+    const isObservationChat = observationChatRef.current;
+    const checkinQuestion = isObservationChat ? '지금 내 모습 어때?' : longBreakCheckin ?? todayQuestion;
     const isLastRound = currentRound === maxRounds - 1;
-    // 현재까지의 대화 히스토리를 AI에 전달 (답변 직전까지만)
     const chatHistoryForAI = messages
       .filter(msg => msg.id !== loadingId)
       .map(msg => ({ from: msg.from as 'plant' | 'user', text: msg.text }));
-    const aiReply = await generatePlantResponse(text, plantNickname, todayQuestion, plantType, currentRound === 0, isLastRound, chatHistoryForAI);
+    const aiReply = await generatePlantResponse(
+      text,
+      plantNickname,
+      checkinQuestion,
+      plantType,
+      currentRound === 0,
+      isLongBreakReply ? false : isLastRound,
+      chatHistoryForAI,
+      isLongBreakReply,
+      memorySummariesRef.current,
+    );
     clearInterval(dotInterval);
     setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: aiReply } : msg));
-    
+
+    if (isLongBreakReply) {
+      setLongBreakCheckin(null);
+      setTimeout(() => {
+        startTaskAt(0, tasks, todayQuestion);
+      }, 600);
+      return;
+    }
+
+    if (isObservationChat) {
+      const nextRound = currentRound + 1;
+      if (nextRound < maxRounds) {
+        setCurrentRound(nextRound);
+        setTimeout(() => {
+          setPhase('observing');
+          setTemporaryExpression('default', 2000);
+        }, 1000);
+        return;
+      }
+
+      observationChatRef.current = false;
+      await recordTaskCompletion('observe');
+      setChatDoneTaskIds(prev => prev.includes('observe') ? prev : [...prev, 'observe']);
+      setCurrentRound(0);
+      const next = taskIdx + 1;
+      setTaskIdx(next);
+      setTimeout(() => startTaskAt(next, tasks, todayQuestion), 700);
+      return;
+    }
+
     // 라운드 체크: 다음 라운드가 있으면 계속 대화
     const nextRound = currentRound + 1;
     if (nextRound < maxRounds) {
       setCurrentRound(nextRound);
-      // 첫 라운드가 아니면 새로운 질문 없이 입력 필드만 활성화
       setTimeout(() => {
         setPhase('answering');
         setTemporaryExpression('default', 2000);
       }, 1000);
     } else {
-      // 모든 라운드 완료 - 기록 저장 후 종료
       await saveRecord(text, undefined, aiReply);
       setTimeout(() => setPhase('done'), 1000);
     }
   };
 
+  const handleEndConversation = async () => {
+    if (phase !== 'answering' || !canEndConversation) return;
+    setPhase('loading');
+    await saveRecord('');
+    setPhase('done');
+  };
+
   // ── 기록 저장 + 연속 관리일 업데이트 ────────────────────────────
   const saveRecord = async (answer: string, answerImageUri?: string, aiReply?: string) => {
+    const transcript = messages
+      .filter(message => !/^\.+$/.test(message.text.trim()))
+      .map(message => {
+        const text = message.text.trim() || (message.imageUri ? '[사진]' : '');
+        return text ? `${message.from === 'user' ? '사용자' : '식물'}: ${text}` : '';
+      })
+      .filter(Boolean);
+    const lastMessage = [...messages].reverse().find(message =>
+      message.text.trim() && !/^\.+$/.test(message.text.trim()) || message.imageUri,
+    );
+    const answerAlreadyIncluded = lastMessage?.from === 'user' && (
+      lastMessage.text === answer || (!!answerImageUri && lastMessage.imageUri === answerImageUri)
+    );
+    if (answer && !answerAlreadyIncluded) transcript.push(`사용자: ${answer}`);
+    if (aiReply) transcript.push(`식물: ${aiReply}`);
+
     const record: DailyRecord = {
       date: todayStr,
       waterDone: chatDoneTaskIds.includes('water'),
@@ -641,6 +793,20 @@ export default function ChatScreen() {
       aiReply,
     };
     await storage.saveDailyRecord(record);
+    let conversationSummary: string | undefined;
+    try {
+      const summary = await summarizePlantConversation(transcript.join('\n'), plantType);
+      if (summary && summary !== '특별히 기억할 내용 없음') {
+        conversationSummary = summary;
+        record.conversationSummary = summary;
+        await storage.saveDailyRecord(record);
+        if (await storage.isMemoryEnabled()) {
+          await storage.saveMemorySummary({ date: todayStr, summary });
+        }
+      }
+    } catch (error) {
+      console.warn('diary summary fallback:', error);
+    }
     await storage.clearChatDraft(todayStr);
     await storage.setFirstRecordDateIfEmpty(todayStr);
     await storage.incrementQuestionIndex();
@@ -665,6 +831,7 @@ export default function ChatScreen() {
     }
     await storage.setLastRecordDate(todayStr);
     cancelEveningNotification().catch(() => {});
+    return conversationSummary;
   };
 
   // ── 렌더 ─────────────────────────────────────────────────────────
@@ -846,16 +1013,18 @@ export default function ChatScreen() {
         )}
 
         {/* 하단 입력창 */}
-        {phase === 'answering' && (
+        {(phase === 'answering' || phase === 'observing') && (
           <View style={styles.inputBar}>
-            <TouchableOpacity style={styles.addBtn} onPress={handlePlusButton}>
-              <Text style={styles.addBtnText}>+</Text>
-            </TouchableOpacity>
+            {phase === 'answering' && (
+              <TouchableOpacity style={styles.addBtn} onPress={handlePlusButton}>
+                <Text style={styles.addBtnText}>+</Text>
+              </TouchableOpacity>
+            )}
             <TextInput
               style={styles.input}
               value={inputText}
               onChangeText={setInputText}
-              placeholder="답장하기..."
+              placeholder={phase === 'observing' ? '식물에게 답장하기...' : '답장하기...'}
               placeholderTextColor={COLORS.textTertiary}
               returnKeyType="send"
               onSubmitEditing={handleSend}
@@ -868,6 +1037,15 @@ export default function ChatScreen() {
               <Text style={styles.sendArrow}>→</Text>
             </TouchableOpacity>
           </View>
+        )}
+        {phase === 'answering' && canEndConversation && (
+          <TouchableOpacity
+            style={styles.endConversationBtn}
+            onPress={handleEndConversation}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.endConversationText}>대화 마치기</Text>
+          </TouchableOpacity>
         )}
       </KeyboardAvoidingView>
 
@@ -1174,6 +1352,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1.5,
     borderTopColor: COLORS.outline,
     backgroundColor: COLORS.bg,
+  },
+  endConversationBtn: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    backgroundColor: COLORS.bg,
+  },
+  endConversationText: {
+    fontFamily: 'ahn2006-M',
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textDecorationLine: 'underline',
   },
   addBtn: {
     width: 44,

@@ -5,8 +5,8 @@ export const ENV = {
   // Mindlogic (텍스트 + 이미지 생성)
   API_KEY: process.env.EXPO_PUBLIC_OPENAI_API_KEY ?? '',
   API_BASE_URL: 'https://factchat-cloud.mindlogic.ai/v1/gateway',
-  DEFAULT_MODEL: 'claude-sonnet-4-6',
-  
+  DEFAULT_MODEL: process.env.EXPO_PUBLIC_DEFAULT_MODEL ?? 'claude-sonnet-5',
+
   // Replicate (image-to-image)
   REPLICATE_API_KEY: process.env.EXPO_PUBLIC_REPLICATE_API_KEY ?? '',
   REPLICATE_BASE_URL: 'https://api.replicate.com/v1',

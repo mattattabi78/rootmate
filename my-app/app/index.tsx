@@ -35,7 +35,7 @@ import EmojiText from '../components/common/EmojiText';
 import { getLocalDateString } from '../utils/date';
 import { setDevDayOfWeek, advanceDevDay, resetDevDateOffset, getDevAdjustedDate, getDevDateOffsetDays, setDevChatRounds, getDevChatRounds } from '../utils/devOverrides';
 import { refreshDailyNotifications } from '../utils/notifications';
-import { PLANT_TASKS, getRandomNotification } from '../constants/plants';
+import { isSupportedTask, PLANT_TASKS, getRandomNotification } from '../constants/plants';
 import { getActiveTaskIds } from '../constants/growthStages';
 import * as Notifications from 'expo-notifications';
 
@@ -158,7 +158,7 @@ export default function HomeScreen() {
     return hasConsonant ? pair[0] : pair[1];
   };
 
-  // 마지막 기록일로부터 며칠이 지났는지 (0 = 오늘, 1 = 어제, 2+ = 스트릭 끊김)
+  // 마지막 기록일로부터 며칠이 지났는지 (0 = 오늘, 1 = 어제, 7+ = 오랜만 복귀)
   const daysNeglected = (() => {
     if (!lastRecordDate) return 0;
     const last = new Date(lastRecordDate + 'T00:00:00');
@@ -169,7 +169,7 @@ export default function HomeScreen() {
   const headingMain = pickSubHeading(plantType, streak, daysNeglected);
 
   const sub = (() => {
-    if (daysNeglected >= 2 && plantNickname) {
+    if (daysNeglected >= 7 && plantNickname) {
       return `${plantNickname}${josa(plantNickname, ['이', '가'])} 방치된지 ${daysNeglected}일 째...`;
     }
     if (nickname && plantNickname) {
@@ -179,6 +179,8 @@ export default function HomeScreen() {
   })();
 
   const goToChat = () => router.push('/chat' as any);
+
+  const openMemorySettings = () => router.push('/settings' as any);
 
   // 개발 모드: 단계/표정/상황 선택
   const handleDevStage = (s: GrowthStage) => setDevStage(s);
@@ -241,7 +243,7 @@ export default function HomeScreen() {
     // 현재 식물·단계의 활성 task 알림을 실제 내용으로 예약
     const activeIds = getActiveTaskIds(plantType, growthCurrentStage);
     const allTasks  = PLANT_TASKS[plantType] ?? [];
-    const activeTasks = allTasks.filter(t => activeIds.includes(t.id as any));
+    const activeTasks = allTasks.filter(t => isSupportedTask(t.id) && activeIds.includes(t.id as any));
 
     if (activeTasks.length === 0) {
       Alert.alert('활성 task 없음', '현재 단계에 알림이 설정된 task가 없어요.');
@@ -273,9 +275,14 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <TopAppBar
         rightAction={
-          <TouchableOpacity onPress={goToChat} hitSlop={10}>
-            <ChatImage width={styles.chatIcon.width} height={styles.chatIcon.height} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={openMemorySettings} hitSlop={8} style={styles.memoryButton}>
+              <Text style={styles.memoryButtonText}>설정</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={goToChat} hitSlop={10}>
+              <ChatImage width={styles.chatIcon.width} height={styles.chatIcon.height} />
+            </TouchableOpacity>
+          </View>
         }
       />
 
@@ -640,6 +647,9 @@ const styles = StyleSheet.create({
   messageBubble: { position: 'absolute', bottom: 64, right: 100, width: 44, height: 44 },
   bubbleIcon: { width: 44, height: 44 },
   chatIcon: { width: 22, height: 32 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  memoryButton: { paddingVertical: 4 },
+  memoryButtonText: { fontFamily: 'ahn2006-M', fontSize: 13, color: COLORS.green },
 
   tasksSection: { paddingHorizontal: 16, paddingBottom: 8, gap: 12 },
   sectionTitle: { fontFamily: 'ahn2006-B', fontSize: 23, color: COLORS.green, marginTop: 20, lineHeight: 32 },

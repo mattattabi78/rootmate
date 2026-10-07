@@ -56,34 +56,34 @@ export const GROWTH_STAGES: Record<PlantType, GrowthStageConfig[]> = {
 // ─── 단계별 활성 Task 매핑 ─────────────────────────────────────────
 
 export const BASIL_STAGE_TASKS: Record<number, TaskId[]> = {
-  1: ['water', 'sunlight', 'photo'],
-  2: ['water', 'sunlight', 'photo'],
-  3: ['water', 'sunlight', 'photo'],
-  4: ['water', 'sunlight', 'fertilize', 'photo'],
-  5: ['water', 'sunlight', 'fertilize', 'photo'],
-  6: ['water', 'sunlight', 'fertilize', 'pruning', 'flower_remove', 'photo'],
-  7: ['water', 'sunlight', 'fertilize', 'pruning', 'flower_remove', 'photo'],
-  8: ['water', 'sunlight', 'fertilize', 'harvest', 'photo'],
+  1: ['water', 'sunlight', 'observe'],
+  2: ['water', 'sunlight', 'observe'],
+  3: ['water', 'sunlight', 'observe'],
+  4: ['water', 'sunlight', 'observe'],
+  5: ['water', 'sunlight', 'observe'],
+  6: ['water', 'sunlight', 'observe'],
+  7: ['water', 'sunlight', 'observe'],
+  8: ['water', 'sunlight', 'observe'],
 };
 
 export const TOMATO_STAGE_TASKS: Record<number, TaskId[]> = {
-  1: ['water', 'sunlight', 'photo'],
-  2: ['water', 'sunlight', 'photo'],
-  3: ['water', 'sunlight', 'photo'],
-  4: ['water', 'sunlight', 'photo'],
-  5: ['water', 'sunlight', 'fertilize', 'side_shoot', 'photo'],
-  6: ['water', 'sunlight', 'fertilize', 'side_shoot', 'support_stake', 'photo'],
-  7: ['water', 'sunlight', 'fertilize', 'side_shoot', 'pollinate', 'photo'],
-  8: ['water', 'sunlight', 'fertilize', 'harvest', 'photo'],
+  1: ['water', 'sunlight', 'observe'],
+  2: ['water', 'sunlight', 'observe'],
+  3: ['water', 'sunlight', 'observe'],
+  4: ['water', 'sunlight', 'observe'],
+  5: ['water', 'sunlight', 'observe'],
+  6: ['water', 'sunlight', 'observe'],
+  7: ['water', 'sunlight', 'observe'],
+  8: ['water', 'sunlight', 'observe'],
 };
 
 export const TULIP_STAGE_TASKS: Record<number, TaskId[]> = {
-  1: ['water', 'sunlight', 'photo'],
-  2: ['water', 'sunlight', 'photo'],
-  3: ['water', 'sunlight', 'photo'],
-  4: ['water', 'sunlight', 'photo'],
-  5: ['water', 'sunlight', 'photo'],
-  6: ['water', 'sunlight', 'photo'],
+  1: ['water', 'sunlight', 'observe'],
+  2: ['water', 'sunlight', 'observe'],
+  3: ['water', 'sunlight', 'observe'],
+  4: ['water', 'sunlight', 'observe'],
+  5: ['water', 'sunlight', 'observe'],
+  6: ['water', 'sunlight', 'observe'],
 };
 
 export const STAGE_TASKS: Record<PlantType, Record<number, TaskId[]>> = {

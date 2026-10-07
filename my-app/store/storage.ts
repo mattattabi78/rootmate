@@ -13,6 +13,12 @@ export interface DailyRecord {
   skippedQuestion: boolean;
   plantPhotoUri?: string;  // 오늘 찍은 식물 사진 (AI 생성용)
   aiReply?: string;        // AI가 생성한 답변 텍스트
+  conversationSummary?: string; // 오늘 대화 전체 요약
+}
+
+export interface MemorySummary {
+  date: string;
+  summary: string;
 }
 
 export const KEYS = {
@@ -27,6 +33,8 @@ export const KEYS = {
   QUESTION_INDEX:      '@plant/question_index',
   DEEP_Q_INDEX:        '@plant/deep_q_index',
   DAILY_RECORD:        (date: string) => `@plant/record_${date}`,
+  MEMORY_SUMMARY:      (date: string) => `@rootmate/memory_summary_${date}`,
+  MEMORY_ENABLED:      '@rootmate/memory_enabled',
   PLANT_PHOTOS:        (date: string) => `@plant/photos_${date}`,
   CHAT_DRAFT:          (date: string) => `@plant/chat_draft_${date}`,
   GROWTH_STATE:           '@rootmate/growth_state',
@@ -118,6 +126,46 @@ export const storage = {
   async isRecordDoneForDate(date: string): Promise<boolean> {
     const raw = await AsyncStorage.getItem(KEYS.DAILY_RECORD(date));
     return raw !== null;
+  },
+  async saveMemorySummary(summary: MemorySummary): Promise<void> {
+    await AsyncStorage.setItem(KEYS.MEMORY_SUMMARY(summary.date), JSON.stringify(summary));
+  },
+  async removeMemorySummary(date: string): Promise<void> {
+    await AsyncStorage.removeItem(KEYS.MEMORY_SUMMARY(date));
+  },
+  async getRecentMemorySummaries(limit = 7): Promise<MemorySummary[]> {
+    if (!(await storage.isMemoryEnabled())) return [];
+    const keys = (await AsyncStorage.getAllKeys())
+      .filter(key => key.startsWith('@rootmate/memory_summary_'))
+      .sort()
+      .reverse()
+      .slice(0, limit);
+    const values = await AsyncStorage.multiGet(keys);
+    return values
+      .map(([, raw]) => raw ? JSON.parse(raw) as MemorySummary : null)
+      .filter((item): item is MemorySummary => item !== null);
+  },
+  async getAllMemorySummaries(): Promise<MemorySummary[]> {
+    if (!(await storage.isMemoryEnabled())) return [];
+    const keys = (await AsyncStorage.getAllKeys())
+      .filter(key => key.startsWith('@rootmate/memory_summary_'))
+      .sort()
+      .reverse();
+    const values = await AsyncStorage.multiGet(keys);
+    return values
+      .map(([, raw]) => raw ? JSON.parse(raw) as MemorySummary : null)
+      .filter((item): item is MemorySummary => item !== null);
+  },
+  async isMemoryEnabled(): Promise<boolean> {
+    const value = await AsyncStorage.getItem(KEYS.MEMORY_ENABLED);
+    return value !== 'false';
+  },
+  async setMemoryEnabled(enabled: boolean): Promise<void> {
+    await AsyncStorage.setItem(KEYS.MEMORY_ENABLED, String(enabled));
+    if (!enabled) {
+      const keys = (await AsyncStorage.getAllKeys()).filter(key => key.startsWith('@rootmate/memory_summary_'));
+      if (keys.length > 0) await AsyncStorage.multiRemove(keys);
+    }
   },
   async getRecordedDaysForMonth(year: number, month: number): Promise<number[]> {
     const allKeys = await AsyncStorage.getAllKeys();
