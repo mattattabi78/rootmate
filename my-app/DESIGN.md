@@ -1,429 +1,222 @@
-# DESIGN.md — Rootmate 디자인 시스템
+# DESIGN.md — Rootmate 디자인 시스템 (Y2K 개정판)
 
-> 피그마 디자인 파일: https://www.figma.com/design/2fBhs18ET6zp7eIrI2FDWl/Roommate
+> 피그마 디자인 파일: https://www.figma.com/design/jXKweeUqBSBAFwVjlJaJLq/RootMate-my-app
 >
-> 이 문서는 피그마 실제 디자인을 기준으로 작성되었습니다. 코드 작성 시 이 파일의 값을 그대로 사용하세요.
+> 개정된 Y2K 레트로 OS 스타일 기준입니다. 이전(그라디언트 + 안상수체) 디자인은 폐기되었습니다.
+> 수치는 Figma 프레임 **402×874** 기준이며, 본문 좌표는 헤더(69px) 아래부터 계산합니다.
+> 코드 작성 시 이 파일의 값과 `constants/colors.ts`, `constants/typography.ts`를 그대로 사용하세요.
 
 ---
 
-## 1. 컬러 팔레트
+## 1. 디자인 방향
+
+| 항목 | 내용 |
+|---|---|
+| 스타일 | Y2K 레트로 OS. 라임 헤더, 단색 라임 버튼, 반경 10의 카드·버튼, 얇은 회색 선 |
+| 그라디언트 | 선택지 버튼(`#f3f4f1`→`#e2e2e2`)과 `+` 버튼에만 사용. 카드·탭·버튼의 라임 그라디언트는 폐기 |
+| 배경 | 채팅·도감 화면은 키치 체크 월페이퍼(`assets/images/kitsch wallpaper.png`), 나머지는 흰색 |
+| 이모지 | UI 버튼·안내 문구에는 쓰지 않음 (식물 대사의 이모지는 캐릭터 말투라 유지) |
+
+---
+
+## 2. 컬러 팔레트
 
 ```typescript
-// constants/colors.ts
-export const COLORS = {
-  // 배경
-  bg:           '#FFFFFF',              // 전체 화면 배경
-  cardBg:       '#f3f4f1',             // 카드/그라디언트 시작색
-  headerBg:     'rgba(255,255,255,0.8)', // 헤더 배경 (backdrop-blur)
-
-  // 브랜드 컬러
-  green:        '#286905',             // 메인 그린 (날짜, 섹션 제목, 카드 서브텍스트)
-  lime:         '#b5ff22',             // 라임 액센트 (카드/버튼 그라디언트 끝색)
-  outline:      '#303a1e',             // 모든 테두리, 내비 아이콘, 텍스트 일부
-
-  // 텍스트
-  textPrimary:  '#191c1b',             // 앱 타이틀, 인사 헤딩, 카드 제목
-  textDark:     '#1b1c1b',             // 본문 텍스트 (textPrimary와 거의 동일)
-
-  // 상태
-  red:          '#ff6565',             // 취소/X 버튼 그라디언트 끝색
-
-  // 그라디언트
-  gradCard:     ['#f3f4f1', '#b5ff22'], // 카드·활성 탭 그라디언트 (위→아래)
-  gradCancel:   ['#f3f4f1', '#ff6565'], // X 버튼 그라디언트 (위→아래)
-};
+// constants/colors.ts (주요 값)
+bg:        '#FFFFFF'
+headerBg:  '#BAFE32'               // 상단 헤더 (라임)
+lime:      '#BAFE32'               // 라임 액센트 (헤더·버튼·기록일)
+limeLight: 'rgba(186,254,50,0.5)'  // 연속 기록 띠·기록 카드 하단 띠
+green:     '#286905'               // 날짜·섹션 제목
+pine:      '#14532d'               // 캘린더/도감 탭·월 제목, 연속 관리 숫자
+outline:   '#052e16'               // 진초록 (헤더 로고·배지 테두리·강조 텍스트)
+forest:    '#064e3b'               // 캐릭터 대사·식물 이름
+line:      '#7f7f7f'               // 헤더 하단선·카드 테두리·비활성 탭
+tabActive: '#7ab10b'               // 하단 탭 활성 (아이콘·라벨)
+tabInactive:'#7f7f7f'
+tabTextOff:'#c5c7c0'               // 비활성 상단 탭(캘린더/앨범) 글자·입력창 placeholder
+weekend:   '#ff6b49'               // 캘린더 일·토 요일 헤더
+waterBadge:'#62d8ff'               // 캘린더 물방울 뱃지
+prevMonthText: '#b7b7b7'           // 이전/다음 달 날짜
+textPrimary:   '#052e16'
+textSecondary: '#5b5b5b'
 ```
 
 ### 컬러 사용 규칙
 | 용도 | 값 |
 |---|---|
-| 앱 전체 배경 | `#FFFFFF` |
-| 헤더 배경 | `rgba(255,255,255,0.8)` + backdrop-blur 12px |
-| 테두리 (모든 카드·버튼·내비) | `#303a1e` 1.5px solid |
+| 헤더 배경 | `#BAFE32`, 하단 2px `#7f7f7f` |
+| 하단 탭바 상단선 | 2px `rgba(122,177,11,0.30)` |
+| 카드·버튼 테두리 | 채팅 말풍선 `#2a2a2a`, 채팅 입력·선택지·버튼 `#303a1e`, 도감·상세 카드 `#7f7f7f` |
 | 날짜 텍스트 | `#286905` |
-| 메인 인사 텍스트 | `#191c1b` |
-| 섹션 제목 | `#286905` |
-| 카드 제목 | `#191c1b` |
-| 카드 설명 | `#286905` |
-| 카드 배경 | 그라디언트 `#f3f4f1` → `#b5ff22` |
-| 취소 버튼 | 그라디언트 `#f3f4f1` → `#ff6565` |
+| 캐릭터 대사·이름 | `#064e3b` |
+| 말풍선·선택지 글자 | `#424343` |
+| 기록 있는 날 원 | `#BAFE32` / 오늘(기록 전) `#7f7f7f` + 흰 글자 |
 
 ---
 
-## 2. 타이포그래피
+## 3. 타이포그래피
 
-피그마에서 사용하는 폰트는 2종입니다.
-
-- **ahn2006-B / ahn2006-M**: 한국어 UI 전반 (안상수 계열)
-- **Be Vietnam Pro SemiBold**: 영어 레이블 (내비게이션 탭 등)
+폰트는 **SUITE** 정적 7종 하나만 사용합니다 (`assets/fonts/SUITE-*.ttf`, `app/_layout.tsx`에서 등록).
 
 ```typescript
 // constants/typography.ts
-export const TYPOGRAPHY = {
-  // 앱 타이틀 ("Rootmate" 로고)
-  appTitle: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 30,
-    lineHeight: 45,
-    color: '#191c1b',
-  },
+FONTS = { light, regular, medium, semiBold, bold, extraBold, heavy }  // 'SUITE-Light' … 'SUITE-Heavy'
+```
 
-  // 날짜 표시 (예: "MAY 13, 2026")
-  dateLabel: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 20,
-    lineHeight: 20,
-    color: '#286905',
-  },
+| 용도 | 폰트 | 크기 / 줄높이 | 비고 |
+|---|---|---|---|
+| 헤더 로고 `Rootmate` | ExtraBold | 20 / 28 | 자간 0.9, 흰색 1px 그림자, `#052e16` |
+| 헤더 배지 `D+N` | ExtraBold | 15 / 16.5 | |
+| 날짜 | ExtraBold | 15 / 20 | `#286905` |
+| 홈 대사 | Bold | 20 / 40 | `#064e3b`, 한 줄 |
+| 하단 탭 라벨 | ExtraBold | 14 / 15 | 자간 -0.25 |
+| 상단 탭 (캘린더/앨범) | Bold | 22 / 45 | 활성 `#14532d`, 비활성 `#c5c7c0` |
+| 도감 상세 탭 | ExtraBold(활성) / Bold | 16 / 45 | 비활성 `#7f7f7f` |
+| 말풍선 본문·선택지 | **SemiBold** | 15 / 23 | 자간 -0.275, `#424343`. Figma Bold(700)가 기기에서 더 굵게 보여 SemiBold 사용 |
+| 식물 이름(채팅) | SemiBold | 17 / 16.5 | `#064e3b` |
+| 도감 카드 이름 | ExtraBold | 24 | `#286905` |
+| 도감 카드 태그라인 | ExtraBold | 16 / 20 | |
+| 도감 카드 설명 | SemiBold | 10 / 15 | |
+| 도감 상세 카드 제목 / 본문 | SemiBold | 16 / 25, 14 / 25 | |
 
-  // 메인 인사 헤딩 (예: "서영님,\n오늘은 물 주는 날이에요!")
-  headingXl: {
-    fontFamily: 'ahn2006-M',
-    fontSize: 40,
-    lineHeight: 45,
-    color: '#191c1b',
-  },
+> 굵기 규칙: 말풍선·카드 본문처럼 Figma가 Bold(700)로 지정한 긴 글은 SemiBold로 렌더링합니다.
 
-  // 보조 헤딩 (예: "토마토가 새 메시지를 보냈어요 💌")
-  headingMd: {
-    fontFamily: 'ahn2006-M',
-    fontSize: 20,
-    lineHeight: 20,
-    color: '#286905',
-  },
+---
 
-  // 섹션 제목 (예: "오늘의 Tasks")
-  sectionTitle: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 20,
-    lineHeight: 20,
-    color: '#286905',
-  },
+## 4. 레이아웃 공통 수치
 
-  // 카드 제목 (예: "물 주기", "기록 남기기")
-  cardTitle: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 23,
-    lineHeight: 22,
-    color: '#191c1b',
-  },
+| 항목 | 값 |
+|---|---|
+| 기준 프레임 | 402×874 |
+| 헤더 높이 | 69 (하단 선 포함) |
+| 하단 탭바 높이 | 80 + 하단 안전 영역 |
+| 기본 카드 반경 | 10 |
+| 화면 좌우 여백 | 16 |
 
-  // 카드 설명 텍스트
-  cardBody: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 16,
-    lineHeight: 20,
-    color: '#286905',
-  },
+---
 
-  // 내비게이션 탭 레이블 (영문)
-  navLabel: {
-    fontFamily: 'Be Vietnam Pro',
-    fontWeight: '600',
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 0.6,
-    color: '#303a1e',
-  },
+## 5. 컴포넌트 스펙
 
-  // 캘린더 월 표시 (예: "May 2026")
-  calendarMonth: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 20,
-    lineHeight: 20,
-  },
+### 5.1 TopAppBar (`components/common/TopAppBar.tsx`)
 
-  // 캘린더 날짜 숫자
-  calendarDate: {
-    fontSize: 22,
-    lineHeight: 22,
-  },
+```
+높이:        69px, 배경 #BAFE32, 하단 2px #7f7f7f
+좌우 패딩:   12
+로고:        "Rootmate" ExtraBold 20, 자간 0.9, 앞 여백 8, 흰색 1px 그림자
+우측 배지:   "D+N ♥" — 흰 배경, 1.5px #052e16 테두리, 반경 4, 패딩 10 × 2
+             N = 식물을 입양한 날(D+0)부터 경과 일수, 누르면 연속 관리 화면으로 이동
+뒤로가기:    showBack — 7.4×12 화살표(좌우 여백 5), 로고와의 간격 12+8
+```
 
-  // 연속 관리일 수 표시 (예: "11일")
-  streakDay: {
-    fontSize: 22,
-    lineHeight: 22,
-  },
-};
+### 5.2 BottomNavBar (`components/common/BottomNavBar.tsx`)
+
+```
+높이:        80 + 안전 영역
+배경:        #FFFFFF, 상단 2px rgba(122,177,11,0.30)
+탭 4개:      Home / Record / Collection / Chat — 같은 폭으로 4등분
+항목:        선 아래 21px에서 아이콘(높이 20), 6px 아래 라벨(14 ExtraBold)
+활성:        아이콘·라벨 #7AB10B / 비활성 #7F7F7F
+```
+
+### 5.3 홈 액션 버튼 (`components/common/ActionIconButton.tsx`)
+
+```
+버튼 4개:    물주기(파랑 #14B5EB) · 햇볕에 두기(주황 #FF8E47) · 식물 사진 찍기(분홍 #FF5C8D) · 식물 관찰(초록 #38D76D)
+크기:        45×45, 흰 배경, 2px rgba(20,83,45,0.3) 테두리, 반경 10
+비활성:      아이콘 #474747 불투명도 0.2, 터치 불가
+간격:        13.6
+```
+
+### 5.4 Button (`components/common/Button.tsx`, 온보딩 등)
+
+```
+높이 54, 반경 10, 1.5px #303a1e 테두리
+primary:  #BAFE32 단색 / secondary: 흰 배경 / ghost: 투명 / 비활성: 회색
+글자: Bold 18, #052e16
+```
+
+### 5.5 Wallpaper (`components/common/Wallpaper.tsx`)
+
+```
+채팅·도감 배경. 화면 가로폭에 맞춰 원본 비율(1206×2595)로 상단 기준 배치.
+크기를 숫자로 명시해야 absolute 이미지가 원본 해상도로 커지지 않음.
+빈 영역 색: #dbfba7
+```
+
+### 5.6 채팅 말풍선·입력
+
+```
+식물 행:   아바타 40×40(반경 10, 1.5px #2a2a2a) + 간격 13 + 말풍선(폭 317)
+식물 이름: 17 SemiBold #064e3b, 말풍선과 간격 10
+말풍선:    흰 배경, 반경 10, 1.5px #2a2a2a, 안쪽 가로 17.5 / 세로 12.25
+내 말풍선: 오른쪽 정렬, 글자 폭에 맞춤(최대 317), 안쪽 가로 10.5, 글자 오른쪽 정렬
+메시지 간격: 40
+하단 패널: 흰 배경, 상단 2px rgba(20,83,45,0.30)
+선택지:    382×54, 좌우 10, 간격 7, 반경 10, 1.5px #303a1e, 회색 그라디언트
+입력 행:   좌우 16, + 버튼 32 | 입력창 높이 46 (13px #c5c7c0 placeholder) | 전송 버튼 32 라임
 ```
 
 ---
 
-## 3. 간격 시스템
+## 6. 화면별 레이아웃
 
-```typescript
-// constants/spacing.ts
-export const SPACING = {
-  xs:   4,
-  sm:   8,
-  md:  12,
-  lg:  16,   // 화면 좌우 패딩 (px-16)
-  xl:  24,
-  xxl: 32,
-};
-
-// 컴포넌트별 주요 수치
-export const LAYOUT = {
-  screenWidth:       390,   // 기준 디바이스 너비 (px)
-  screenPaddingH:     16,   // 화면 좌우 여백
-  contentWidth:      358,   // 컨텐츠 영역 너비 (390 - 16*2)
-  cardPadding:      17.5,   // 카드 내부 패딩
-  cardRadius:        32,    // 카드 border-radius
-  cardBorderWidth:  1.5,    // 카드 테두리 두께
-  topAppBarHeight:   61,    // 상단 앱바 높이
-  bottomNavHeight:   76,    // 하단 내비바 높이
-  bottomNavRadius:   32,    // 하단 내비바 상단 모서리
-};
-```
-
----
-
-## 4. 컴포넌트 스펙
-
-### 4.1 TopAppBar (상단 헤더)
-
-```
-높이:        61px
-배경:        rgba(255,255,255,0.8) + backdrop-blur 12px
-하단 테두리: 1.5px solid #303a1e
-패딩:        px-20, py-16~17.5
-앱 타이틀:  "Rootmate", ahn2006-B 30px, #191c1b
-```
-
-### 4.2 BottomNavBar (하단 내비게이션)
-
-```
-높이:          76px
-배경:          #FFFFFF
-상단 테두리:   1.5px solid #303a1e
-상단 모서리:   border-top-left-radius 32px, border-top-right-radius 32px
-탭 간격:       gap 55px
-패딩:          pl-58.42px, pr-63.62px, py-12px
-
-활성 탭 버튼:
-  배경:        그라디언트 #f3f4f1 → #b5ff22 (위→아래)
-  테두리:      1.5px solid #303a1e
-  모양:        pill (border-radius 9999px)
-  크기:        약 119×61px
-  아이콘:      16×18px
-  레이블:      Be Vietnam Pro SemiBold 12px, #303a1e, letter-spacing 0.6px
-
-비활성 탭:
-  배경:        없음 (투명)
-  아이콘:      18×20px
-  레이블:      Be Vietnam Pro SemiBold 12px, #303a1e
-```
-
-**탭 구성**: Home | Calendar (탭 2개)
-
-### 4.3 Task Card (할 일 카드)
-
-```
-높이:        80px
-너비:        358px (screenWidth - 32)
-배경:        그라디언트 #f3f4f1 → #b5ff22 (위→아래)
-테두리:      1.5px solid #303a1e
-모서리:      border-radius 32px
-패딩:        17.5px 전체
-
-카드 제목:   ahn2006-B 23px, #191c1b
-카드 설명:   ahn2006-B 16px, #286905
-
-우측 액션 버튼 (원형):
-  크기:      32×32px
-  모양:      circle (border-radius 9999px)
-  테두리:    1.5px solid #303a1e
-  완료 전:   그라디언트 #f3f4f1 → #ff6565 (X 아이콘)
-  완료 후:   그라디언트 #f3f4f1 → #b5ff22 (체크 아이콘)
-  아이콘:    14×14px
-```
-
-### 4.4 Chat Bubble — 식물 메시지
-
-```
-위치:        x:60 (왼쪽 식물 아바타 공간 확보)
-너비:        314px
-패딩:        17.5px
-모서리:      rounded (Background+Border)
-테두리:      있음
-
-식물 아바타: 40×40px, 원형, 카드 왼쪽 외부 (-46px)
-식물 이름:   ahn2006-B (소제목)
-메시지:      ahn2006 본문
-```
-
-### 4.5 Chat Bubble — 유저 답변
-
-```
-위치:        x:16 (화면 좌우 여백)
-너비:        358px
-패딩:        17.5px
-모서리:      rounded
-테두리:      있음
-
-닉네임:      상단 표시
-내용:        텍스트 or 이미지 (234×312px)
-```
-
-### 4.6 캘린더 탭 스위처 (캘린더/앨범)
-
-```
-컨테이너:    mx:24, 높이:54px, gap:10px
-활성 탭:     그라디언트 #f3f4f1→#b5ff22, border 1.5px #303a1e, radius:9999px
-비활성 탭:   배경 #FFFFFF, border 1.5px #303a1e, radius:9999px
-활성 레이블: ahn2006 18px #303a1e, fontWeight:600
-비활성 레이블: 18px rgba(71,84,103,0.8), fontWeight:500
-
-홈 화면:    Home 탭 활성(그라디언트), Calendar 탭 비활성
-캘린더 화면: Home 탭 비활성, Record 탭 활성(그라디언트)
-```
-
-### 4.7 캘린더 날짜 그리드
-
-```
-캘린더 카드:     배경 #FFFFFF, border 1.5px #303a1e, radius:32px, padding:21px
-월 헤더:         ahn2006-B 20px #286905
-이전/다음 달 날짜: #b7b7b7
-오늘 셀:         그라디언트 #f3f4f1→#b5ff22, border 1.5px #303a1e, radius:12px, 32×32px
-기록 점:         #3e98ff, 4×4px, radius:2px (날짜 아래)
-```
-
-### 4.7 연속 관리 위젯 (Streak Tracker)
-
-```
-컨테이너:   너비:358px, 높이:123px
-섹션 제목:  "연속 관리일", ahn2006-B 22px
-날짜 아이템: 7개 (일~토), 너비:28px
-  배경 원:  28×28px
-  날짜 텍스트: 22px (아래)
-  완료 상태: 체크 아이콘 12×12px + 배경
-  미완료:   X or 시계 아이콘
-```
-
-### 4.8 Button (탭 선택형, 예: "물 주기 완료!" / "물 주기 못했어..")
-
-```
-너비:       166px
-높이:       54px
-레이블:     ahn2006 22px, 중앙 정렬
-테두리:     있음 (Option 2: School 스타일)
-```
-
-### 4.9 답장하기 버튼 (질문 화면 하단)
-
-```
-위치:       하단 고정 (y:820 기준)
-너비:       354px (x:20)
-높이:       51px
-내용:       "답장하기" 텍스트 + 우측 + 아이콘 (24×24px)
-```
-
----
-
-## 5. 화면별 레이아웃
-
-### 홈 화면 (index.tsx)
-
-```
-[TopAppBar]             — "Rootmate" 타이틀, blur 배경
-  날짜 (MAY 13, 2026)   — ahn2006-B 20px #286905
-  메인 인사 헤딩         — ahn2006-M 40px #191c1b (2줄)
-  서브 메시지            — ahn2006-M 20px #286905
-
-[식물 캐릭터 이미지]     — 164×310px, x:91 y:-12 (카드 위에 겹침)
-
-[오늘의 Tasks 섹션]
-  섹션 제목             — "오늘의 Tasks", ahn2006-B 20px #286905
-  Task Card 1           — "물 주기" / 250ml 안내 / X or Check 버튼
-  Task Card 2           — "기록 남기기" / 사진 안내 / X or Check 버튼
-
-[BottomNavBar]          — Home(활성) | Calendar(비활성)
-```
-
-### Task 확인 화면 (task.tsx)
-
-```
-[Header]                — 뒤로가기 버튼 + "Rootmate"
-날짜 표시               — "2026.05.25 (월)", 중앙 정렬
-
-[식물 말풍선]           — 식물 아바타 + 메시지
-[Task Card들]           — 물 주기, 기록 남기기 등
-
-[선택 버튼 2개]
-  "물 주기 완료!" | "물 주기 못했어.."
-  "사진 추가하기" | "다음에.."
-
-[유저 답변 카드]        — 닉네임 + 선택 결과
-```
-
-### 질문 화면 (질문.tsx)
-
-```
-[Header]                — 뒤로가기 + "Rootmate"
-날짜
-
-[식물 말풍선들]         — 순차적으로 쌓이는 대화 형식
-[유저 답변들]           — 텍스트 / 사진 답변 카드
-
-[답장하기 버튼]         — 하단 고정, 텍스트 입력 + 아이콘
-```
-
-### 연속 관리 화면
-
+### 홈 (`app/index.tsx`)
 ```
 [TopAppBar]
-[식물 캐릭터]
-[인사 헤딩]             — "2 일 연속 관리 중 🫳🏻"
+날짜 (2026.09.28 (월))  — 헤더 아래 92
+캐릭터 영역            — 날짜와 51 간격, 높이 340
+대사 "…"               — 캐릭터와 25 간격, Bold 20, 한 줄
+액션 버튼 4개           — 대사와 51 간격
+[BottomNavBar]
+```
+날짜를 1.5초 길게 누르면 개발자 메뉴가 열립니다 (대화 기억 on/off 포함).
 
-[연속 관리 위젯]
-  제목: "연속 관리일"
-  7일 트래커 (날짜별 완료/미완료)
+### Record (`app/calendar.tsx`)
+```
+상단 탭: 캘린더 | 앨범 — 62×45, 간격 50, 활성 밑줄 1.5px #14532d
+월 헤더: ‹ (15) · 간격 20 · 2026년 9월 (22px, 최소 폭 111) · 간격 20 · › (15)
+요일 헤더 17px (일·토 #ff6b49), 날짜 16px, 날짜 원 40, 행 간격 69.5
+기록 날: 라임 원 / 3일 이상 연속: 시작~끝 중심까지 연한 띠
+오늘: 기록 전 회색 원 → 기록 후 라임 원
+물방울: 날짜 원 우상단, 오늘 물주기를 끝내면 즉시 표시
+앨범: 월별 2열 사진(150×150, 간격 10)
+날짜별 기록 카드: 362×480 고정, 제목(top 51) / 사진 260×180(top 94, 없으면 그날의 캐릭터)
+                 / 요약(top 299, 4줄) / 하단 라임 띠 63 + 아이콘 4개
 ```
 
-### 캘린더 탭 (calendar.tsx)
+### 채팅 (`app/chat.tsx`)
+탭바 없이 뒤로가기 헤더 + 월페이퍼 + 말풍선 + 하단 패널(선택지·입력).
+선택지 문구 (물주기): `당연하지!` / `아직 흙이 촉촉해.` / `깜빡했어 ㅜㅜ`.
+콘텐츠·단계가 바뀔 때마다 맨 아래로 스크롤.
 
+### 도감 (`app/collection.tsx`)
 ```
-[TopAppBar]
-[탭 스위처]             — 캘린더 | 앨범
-
-[캘린더 뷰 (월간)]
-  월 헤딩 + 이전/다음 화살표
-  요일 헤더 (S M T W T F S)
-  날짜 그리드 (날짜 + 기록 도트)
-
-[선택된 날짜 기록]
-  날짜 제목 (예: "May 14, 2026")
-  180×180px 사진 영역
+카드 덱:  메인 카드 240×360(위 215), 뒤 카드 2장(167×250, ±10°, 중심 −63 / +54)
+          이름 24 / 캐릭터 영역 101×150 / 태그라인 16 / 설명 10
+          좌우 스와이프로 순환 전환
+더 알아보기: 아래 화살표 26×32 + 텍스트 16 ExtraBold #14532d
+같은 화면 세로 페이저: 위로 스와이프(또는 더 알아보기) → 상세가 아래에서 올라옴
+                      상세 맨 위에서 아래로 당기거나 Collection 탭 → 덱으로 복귀
+상세 탭: 기본 정보 | 성장 과정 | 잘 키우기 (62×45, 간격 50)
+상세 카드: 좌우 29, 간격 15, 안쪽 16.5 × 10, 1.5px #7f7f7f, 반경 10
 ```
+
+### 연속 관리 (`app/streak.tsx`)
+캐릭터 → 큰 숫자(연속일, Heavy 120) → `Day Streak` → `{닉네임}와 함께한지 N일째`(입양일 = 1일째)
+→ 월~일 7칸(완료 라임 ✓ / 지난 미기록 회색 ✕ / 그 외 빈 원) → 라임 CTA `앞으로도 함께하자!`.
+
+### 온보딩
+별도 Figma 디자인 없이 공통 컴포넌트(Button, ProgressDots)와 새 팔레트·폰트만 적용.
+입력창·카드는 반경 10, 입력 포커스 테두리 `#14532d`.
 
 ---
 
-## 6. 컴포넌트 작성 규칙
+## 7. 컴포넌트 작성 규칙
 
-- 모든 색상은 `COLORS` 상수 사용, 하드코딩 금지
-- 모든 간격·크기는 `SPACING` / `LAYOUT` 상수 사용
-- 테두리는 항상 `1.5px solid COLORS.outline`
-- 카드 배경 그라디언트: LinearGradient `COLORS.gradCard`
-- 취소 버튼 그라디언트: LinearGradient `COLORS.gradCancel`
-- 컴포넌트 파일명은 PascalCase
-- StyleSheet는 컴포넌트 파일 하단에 위치
-- props 타입은 컴포넌트 상단에 interface로 정의
-
-```typescript
-// 카드 컴포넌트 기본 구조 예시
-import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, LAYOUT, TYPOGRAPHY } from '../../constants';
-
-<LinearGradient
-  colors={COLORS.gradCard}
-  style={{
-    borderRadius: LAYOUT.cardRadius,
-    borderWidth: LAYOUT.cardBorderWidth,
-    borderColor: COLORS.outline,
-    padding: LAYOUT.cardPadding,
-  }}
->
-  <Text style={{ ...TYPOGRAPHY.cardTitle }}>{title}</Text>
-  <Text style={{ ...TYPOGRAPHY.cardBody }}>{description}</Text>
-</LinearGradient>
-```
+- 색상은 `COLORS`, 폰트는 `FONTS` 상수 사용 (하드코딩은 Figma 고유 값일 때만)
+- 새 화면은 헤더에 `TopAppBar`, 하단에 필요 시 `BottomNavBar`를 사용
+- 월페이퍼 화면은 `<Wallpaper />` 컴포넌트 사용
+- 컴포넌트 파일명은 PascalCase, StyleSheet는 파일 하단, props 타입은 상단 interface
+- 아이콘은 코드로 그린 SVG(`Icons.tsx`, `ActionIconButton.tsx`)를 사용. 파일 에셋은 `assets/images/icons/`
+- 이모지는 UI 버튼·안내 문구에 쓰지 않음

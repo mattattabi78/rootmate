@@ -139,7 +139,7 @@ await AsyncStorage.setItem('@plant/user_nickname', nickname.trim());
 const PLANT_CODES: Record<string, string> = {
   'BAS-001': 'basil',
   'TOM-001': 'tomato',
-  'TUL-001': 'tulip',
+  'MAR-001': 'marigold',
   // 추가 코드...
 };
 
@@ -160,7 +160,7 @@ const plantId = PLANT_CODES[code.toUpperCase()];
   탭하면 직접 선택 모드로 전환
 
 직접 선택 모드:
-  [바질] [방울토마토] [튤립] 카드 형태
+  [바질] [방울토마토] [메리골드] 카드 형태
   각 카드: 이미지 + 이름
   선택 시 테두리 COLORS.green
 ```
@@ -169,7 +169,7 @@ const plantId = PLANT_CODES[code.toUpperCase()];
 
 ```typescript
 interface PlantData {
-  id: string;           // 'basil' | 'tomato' | 'tulip'
+  id: string;           // 'basil' | 'tomato' | 'marigold'
   code?: string;        // 구매 코드 (없으면 undefined)
   adoptedAt: string;    // ISO date string
   nickname: string;     // step4에서 설정
@@ -225,7 +225,7 @@ interface PlantData {
   플레이스홀더: 식물 종별 예시
     바질:      "바질이, 초록이, 버질..."
     방울토마토: "토마링, 토토, 방울이..."
-    튤립:      "튤리, 빨강이, 봄이..."
+    메리골드:  "메리, 골드, 노랑이..."
 
 확인 메시지:
   닉네임 입력 시 하단에
