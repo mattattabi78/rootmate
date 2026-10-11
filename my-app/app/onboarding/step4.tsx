@@ -10,11 +10,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, PLANTS } from '../../constants';
+import { COLORS, FONTS, PLANTS } from '../../constants';
 import { storage } from '../../store/storage';
 import ProgressDots from '../../components/common/ProgressDots';
 import Button from '../../components/common/Button';
-import EmojiText from '../../components/common/EmojiText';
 
 const MAX_LENGTH = 10;
 
@@ -83,9 +82,7 @@ export default function Step4() {
           </View>
 
           {isValid && (
-            <EmojiText style={styles.confirmation}>
-              {plantNickname.trim()} 잘 부탁해요 🌱
-            </EmojiText>
+            <Text style={styles.confirmation}>예쁜 이름이네요!</Text>
           )}
         </View>
 
@@ -113,13 +110,14 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  backArrow: { fontFamily: 'ahn2006-B', fontSize: 22, color: COLORS.textPrimary },
-  content: { flex: 1, paddingHorizontal: 24, paddingTop: 32 },
+  backArrow: { fontFamily: FONTS.extraBold, fontSize: 22, color: COLORS.pine },
+  content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 48 },
   heading: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 36,
-    color: COLORS.textPrimary,
-    lineHeight: 44,
+    fontFamily: FONTS.extraBold,
+    fontSize: 28,
+    color: COLORS.pine,
+    lineHeight: 38,
+    textAlign: 'center',
     marginBottom: 40,
   },
   inputWrap: {
@@ -129,17 +127,18 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.inputBg,
     borderWidth: 1,
     borderColor: COLORS.inputBorder,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 16,
   },
   inputWrapFocused: { borderColor: COLORS.inputBorderFocus, borderWidth: 1.5 },
-  input: { flex: 1, fontFamily: 'ahn2006-M', fontSize: 20, color: COLORS.textPrimary, padding: 0 },
-  counter: { fontFamily: 'ahn2006-M', fontSize: 20, color: COLORS.textTertiary, marginLeft: 8 },
+  input: { flex: 1, fontFamily: FONTS.bold, fontSize: 20, color: COLORS.textPrimary, padding: 0, textAlign: 'center' },
+  counter: { fontFamily: FONTS.bold, fontSize: 20, color: COLORS.textTertiary, marginLeft: 8 },
   confirmation: {
-    fontFamily: 'Paperlogy-5Medium',
+    fontFamily: FONTS.bold,
     fontSize: 15,
+    textAlign: 'center',
     marginTop: 16,
-    color: COLORS.green,
+    color: COLORS.pine,
   },
   footer: { paddingHorizontal: 24, paddingBottom: 32 },
 });

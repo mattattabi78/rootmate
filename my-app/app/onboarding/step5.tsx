@@ -7,11 +7,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS } from '../../constants';
-import { storage } from '../../store/storage';
+import { COLORS, FONTS } from '../../constants';
+import { storage, DEFAULT_NOTIFICATION_TIMES } from '../../store/storage';
 import ProgressDots from '../../components/common/ProgressDots';
 import Button from '../../components/common/Button';
-import EmojiText from '../../components/common/EmojiText';
+import TimeStepper, { MORNING_RANGE, EVENING_RANGE } from '../../components/settings/TimeStepper';
 
 // NOTE: expo-notifications가 필요합니다.
 // npx expo install expo-notifications
@@ -22,23 +22,23 @@ try {
   // expo-notifications 미설치 시 건너뜀
 }
 
-const NOTIFICATION_ITEMS = [
-  { icon: '💧', title: '물 주기 알림', desc: '식물에게 물 줄 때가 됐을 때' },
-  { icon: '☀️', title: '햇빛 알림',   desc: '오전 10시, 햇빛 체크 알림' },
-  { icon: '🌿', title: '기록 알림',   desc: '오후 8시, 오늘 기록 독려' },
-  { icon: '🌱', title: '성장 알림',   desc: '특별한 순간 (새싹, 꽃 등)' },
-];
-
 export default function Step5() {
   const [plantNickname, setPlantNickname] = useState('');
+  const [morning, setMorning] = useState(DEFAULT_NOTIFICATION_TIMES.morning);
+  const [evening, setEvening] = useState(DEFAULT_NOTIFICATION_TIMES.evening);
 
   useEffect(() => {
     storage.getPlantData().then((data) => {
       if (data?.nickname) setPlantNickname(data.nickname);
     });
+    storage.getNotificationTimes().then((t) => {
+      setMorning(t.morning);
+      setEvening(t.evening);
+    });
   }, []);
 
   const requestAndContinue = async () => {
+    await storage.setNotificationTimes({ ...DEFAULT_NOTIFICATION_TIMES, morning, evening });
     if (Notifications) {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status === 'granted') {
@@ -48,7 +48,8 @@ export default function Step5() {
     router.push('/onboarding/complete' as any);
   };
 
-  const skipAndContinue = () => {
+  const skipAndContinue = async () => {
+    await storage.setNotificationTimes({ ...DEFAULT_NOTIFICATION_TIMES, morning, evening });
     router.push('/onboarding/complete' as any);
   };
 
@@ -70,20 +71,21 @@ export default function Step5() {
             : '제때 알려드릴게요.'}
         </Text>
         <Text style={styles.sub}>
-          알림을 허용하면 물 주기, 햇빛,{'\n'}성장 기록 알림을 받아요.
+          아침과 저녁에 알림을 보내드려요.{'\n'}받고 싶은 시간을 정해주세요.
         </Text>
 
-        {/* 알림 종류 리스트 */}
+        {/* 알림 시간 설정 */}
         <View style={styles.list}>
-          {NOTIFICATION_ITEMS.map((item) => (
-            <View key={item.title} style={styles.listItem}>
-              <EmojiText style={styles.listIcon}>{item.icon}</EmojiText>
-              <View>
-                <Text style={styles.listTitle}>{item.title}</Text>
-                <Text style={styles.listDesc}>{item.desc}</Text>
-              </View>
-            </View>
-          ))}
+          <View style={styles.timeBox}>
+            <Text style={styles.listTitle}>아침 알림</Text>
+            <TimeStepper value={morning} range={MORNING_RANGE} onChange={setMorning} />
+            <Text style={styles.listDesc}>오늘 식물을 챙겨달라고 알려줘요</Text>
+          </View>
+          <View style={styles.timeBox}>
+            <Text style={styles.listTitle}>저녁 알림</Text>
+            <TimeStepper value={evening} range={EVENING_RANGE} onChange={setEvening} />
+            <Text style={styles.listDesc}>아직 기록 전이라면 알려줘요</Text>
+          </View>
         </View>
       </View>
 
@@ -108,33 +110,45 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  backArrow: { fontFamily: 'ahn2006-B', fontSize: 22, color: COLORS.textPrimary },
-  content: { flex: 1, paddingHorizontal: 24, paddingTop: 32 },
+  backArrow: { fontFamily: FONTS.extraBold, fontSize: 22, color: COLORS.pine },
+  content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 48 },
   heading: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 32,
-    color: COLORS.textPrimary,
+    fontFamily: FONTS.extraBold,
+    fontSize: 28,
+    color: COLORS.pine,
     lineHeight: 38,
+    textAlign: 'center',
     marginBottom: 8,
   },
   sub: {
-    fontFamily: 'Paperlogy-4Regular',
+    fontFamily: FONTS.bold,
     fontSize: 15,
-    color: COLORS.textGreen,
-    lineHeight: 25,
+    color: COLORS.forest,
+    lineHeight: 22,
+    textAlign: 'center',
     marginBottom: 36,
   },
-  list: { gap: 20 },
-  listItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },
-  listIcon: { fontSize: 24, width: 32, textAlign: 'center' },
-  listTitle: {
-    fontFamily: 'Paperlogy-5Medium',
-    fontSize: 15,
-    color: COLORS.textPrimary,
-    marginBottom: 5,
+  list: { gap: 12 },
+  timeBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.bg,
+    borderWidth: 1.5,
+    borderColor: '#303a1e',
+    borderRadius: 10,
   },
-  listDesc: { fontFamily: 'Paperlogy-4Regular', fontSize: 13, color: COLORS.textTertiary },
+  listTitle: {
+    fontFamily: FONTS.extraBold,
+    fontSize: 16,
+    color: COLORS.pine,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  listDesc: { fontFamily: FONTS.semiBold, fontSize: 13, lineHeight: 19, color: COLORS.textSecondary, textAlign: 'center' },
   footer: { paddingHorizontal: 24, paddingBottom: 32, gap: 12 },
   skipBtn: { alignItems: 'center', paddingVertical: 8 },
-  skipText: { fontFamily: 'Paperlogy-4Regular', fontSize: 13, color: COLORS.textTertiary, textDecorationLine: 'underline' },
+  skipText: { fontFamily: 'SUITE-Regular', fontSize: 13, color: COLORS.textTertiary, textDecorationLine: 'underline' },
 });

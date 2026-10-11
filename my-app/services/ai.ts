@@ -12,7 +12,7 @@ export interface PlantFacePosition {
 const PLANT_TYPE_MAP: Record<AppPlantType, ApiPlantType> = {
   basil: '바질',
   tomato: '방울토마토',
-  tulip: '튤립',
+  marigold: '메리골드',
 };
 
 export async function generateQuestion(

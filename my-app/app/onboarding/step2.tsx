@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, PLANTS, PLANT_CODES } from '../../constants';
+import { COLORS, FONTS, PLANTS, PLANT_CODES } from '../../constants';
 import { storage } from '../../store/storage';
 import PlantCharacter from '../../components/common/PlantCharacter';
 import { PlantType } from '../../constants/character';
@@ -20,6 +20,10 @@ import Button from '../../components/common/Button';
 import EmojiText from '../../components/common/EmojiText';
 
 type Mode = 'code' | 'select';
+
+// 식물 선택 카드 안 캐릭터 (박스 가로 ≈ 108px). 박스 밖으로 나온 부분은 잘림
+const CARD_CHAR_WIDTH = 100;      // 캐릭터 캔버스 가로폭 (세로는 비율로 ×1.48)
+const CARD_CHAR_OFFSET_Y = -35;     // 캐릭터를 위(−)/아래(+)로 이동 (px)
 
 export default function Step2() {
   const [mode, setMode] = useState<Mode>('code');
@@ -133,12 +137,15 @@ export default function Step2() {
                       styles.plantCard,
                       selectedId === plant.id && styles.plantCardSelected,
                     ]}>
-                      <PlantCharacter
-                        plantType={plant.id as PlantType}
-                        stage={1}
-                        expression="default"
-                        size="small"
-                      />
+                      {/* 박스 중앙에 배치 (이전 64의 2배). 세로 위치는 CARD_CHAR_OFFSET_Y로 조정 */}
+                      <View style={{ transform: [{ translateY: CARD_CHAR_OFFSET_Y }] }}>
+                        <PlantCharacter
+                          plantType={plant.id as PlantType}
+                          stage={1}
+                          expression="default"
+                          width={CARD_CHAR_WIDTH}
+                        />
+                      </View>
                     </View>
                     {/* 이름은 박스 아래 */}
                     <Text style={[
@@ -185,20 +192,22 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  backArrow: { fontFamily: 'ahn2006-B', fontSize: 22, color: COLORS.textPrimary },
-  content: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 24 },
+  backArrow: { fontFamily: FONTS.extraBold, fontSize: 22, color: COLORS.pine },
+  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingBottom: 24 },
   heading: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 36,
-    color: COLORS.textPrimary,
-    lineHeight: 44,
+    fontFamily: FONTS.extraBold,
+    fontSize: 28,
+    color: COLORS.pine,
+    lineHeight: 38,
+    textAlign: 'center',
     marginBottom: 8,
   },
   sub: {
-    fontFamily: 'Paperlogy-5Medium',
+    fontFamily: FONTS.bold,
     fontSize: 15,
-    color: COLORS.textGreen,
-    lineHeight: 24,
+    color: COLORS.forest,
+    lineHeight: 22,
+    textAlign: 'center',
     marginBottom: 32,
   },
   inputWrap: {
@@ -206,28 +215,30 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.inputBg,
     borderWidth: 1,
     borderColor: COLORS.inputBorder,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 16,
     justifyContent: 'center',
   },
   inputWrapValid: { borderColor: COLORS.inputBorderFocus, borderWidth: 1.5 },
   inputWrapError: { borderColor: COLORS.inputBorderError, borderWidth: 1.5 },
-  input: { fontFamily: 'ahn2006-M', fontSize: 20, color: COLORS.textPrimary },
+  input: { fontFamily: FONTS.bold, fontSize: 20, color: COLORS.textPrimary, textAlign: 'center' },
   feedbackValid: {
-    fontFamily: 'Paperlogy-5Medium',
+    fontFamily: FONTS.bold,
+    textAlign: 'center',
     marginTop: 8,
     fontSize: 15,
     color: COLORS.green,
   },
   feedbackError: {
-    fontFamily: 'Paperlogy-5Medium',
+    fontFamily: FONTS.bold,
+    textAlign: 'center',
     marginTop: 8,
     fontSize: 15,
     color: COLORS.red,
   },
   switchLink: { marginTop: 20, alignSelf: 'center' },
   switchLinkText: {
-    fontFamily: 'Paperlogy-5Medium',
+    fontFamily: 'SUITE-Medium',
     fontSize: 15,
     color: COLORS.textTertiary,
     textDecorationLine: 'underline',
@@ -247,28 +258,28 @@ const styles = StyleSheet.create({
   plantCard: {
     width: '100%',
     aspectRatio: 1 / 1,
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 16,
-    borderWidth: 1,
+    backgroundColor: COLORS.bg,
+    borderRadius: 10,
+    borderWidth: 1.5,
     borderColor: COLORS.inputBorder,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   plantCardSelected: {
-    borderColor: COLORS.green,
-    backgroundColor: '#EEF6E9',
+    borderColor: COLORS.pine,
+    backgroundColor: COLORS.limeLight,
   },
   plantEmoji: { fontSize: 28 },
   plantName: {
-    fontFamily: 'ahn2006-M',
-    fontSize: 20,
+    fontFamily: FONTS.bold,
+    fontSize: 17,
     color: COLORS.textPrimary,
     textAlign: 'center',
   },
   plantNameSelected: {
-    color: COLORS.green,
-    fontFamily: 'ahn2006-B',
+    color: COLORS.pine,
+    fontFamily: FONTS.extraBold,
   },
   footer: { paddingHorizontal: 24, paddingBottom: 32 },
 });

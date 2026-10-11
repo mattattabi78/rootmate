@@ -1,152 +1,136 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Animated,
-  Easing,
   Image,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 import { router } from 'expo-router';
-import { COLORS } from '../constants';
+import { COLORS, FONTS } from '../constants';
 import { storage } from '../store/storage';
 import PlantCharacter from '../components/common/PlantCharacter';
-import { PlantType, GrowthStage, growthStageToNumber, getExpressionImage } from '../constants/character';
-import EmojiText from '../components/common/EmojiText';
+import { PlantType, GrowthStage, getExpressionImage } from '../constants/character';
+import { loadGrowthState } from '../store/growthStore';
 import { getLocalDateString } from '../utils/date';
 import { getDevAdjustedDate } from '../utils/devOverrides';
 
-import BackImg from '../assets/images/back-button.svg';
+const WEEK_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
 
-// 시작일부터 오늘까지 날짜 배열. 7일 초과면 최근 7일만 반환.
-function getTrackerDays(startDateStr: string): string[] {
+// 이번 주(월~일) 날짜 문자열 배열
+function getThisWeekDates(): string[] {
   const today = getDevAdjustedDate();
   today.setHours(0, 0, 0, 0);
-  
-  // 'YYYY-MM-DD' 문자열을 로컬 기준으로 정확히 파싱하기 위한 처리
-  const [year, month, day] = startDateStr.split('-').map(Number);
-  const start = new Date(year, month - 1, day);
-  start.setHours(0, 0, 0, 0);
-
-  const diffDays = Math.floor((today.getTime() - start.getTime()) / 86400000);
-  const totalDays = Math.min(diffDays + 1, 7);
-  const fromOffset = totalDays - 1;             
-
-  const days: string[] = [];
-  for (let i = fromOffset; i >= 0; i--) {
+  const mondayOffset = (today.getDay() + 6) % 7; // 월=0 … 일=6
+  return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    // 🔴 기존: days.push(d.toISOString().split('T')[0]);
-    // 🟢 수정: 
-    days.push(getLocalDateString(d));
-  }
-  return days;
+    d.setDate(today.getDate() - mondayOffset + i);
+    return getLocalDateString(d);
+  });
 }
 
-interface DayStatus {
-  date: string;
-  dayNum: number;
-  status: 'done' | 'missed' | 'future';
+function hasFinalConsonant(word: string): boolean {
+  if (!word) return false;
+  const code = word.charCodeAt(word.length - 1);
+  return code >= 0xAC00 && code <= 0xD7A3 && (code - 0xAC00) % 28 !== 0;
+}
+
+type DayStatus = 'done' | 'missed' | 'future';
+
+const ICON_COLOR = '#303a1e';
+
+function CheckIcon() {
+  return (
+    <Svg width={12} height={12} viewBox="0 0 12 12" fill="none">
+      <Path d="M2 6.5L5 9.5L10 3" stroke={ICON_COLOR} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function CrossIcon() {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 14 14" fill="none">
+      <Path d="M3.5 3.5L10.5 10.5M10.5 3.5L3.5 10.5" stroke={ICON_COLOR} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
 }
 
 export default function StreakScreen() {
   const [streakCount, setStreakCount] = useState(0);
-  const [weekDays, setWeekDays] = useState<DayStatus[]>([]);
+  const [daysTogether, setDaysTogether] = useState(1);
+  const [nickname, setNickname] = useState('');
+  const [week, setWeek] = useState<{ date: string; status: DayStatus }[]>([]);
   const [plantType, setPlantType] = useState<PlantType>('tomato');
   const [plantStage, setPlantStage] = useState<GrowthStage>(1);
   const [generatedPlantUri, setGeneratedPlantUri] = useState<string | null>(null);
   const [generatedFacePos, setGeneratedFacePos] = useState<{ x: number; y: number; pot_width: number } | null>(null);
 
-  // 스파클 애니메이션 (각각 다른 타이밍으로 깜빡임)
-  const sparks = [
-    useRef(new Animated.Value(0)).current,
-    useRef(new Animated.Value(0)).current,
-    useRef(new Animated.Value(0)).current,
-    useRef(new Animated.Value(0)).current,
-  ];
-
-  useEffect(() => {
-    const startSpark = (anim: Animated.Value, delay: number) => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(anim, { toValue: 1, duration: 500, easing: Easing.ease, useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0.15, duration: 600, easing: Easing.ease, useNativeDriver: true }),
-        ])
-      ).start();
-    };
-    startSpark(sparks[0], 0);
-    startSpark(sparks[1], 350);
-    startSpark(sparks[2], 700);
-    startSpark(sparks[3], 175);
-  }, []);
-
   useEffect(() => {
     (async () => {
-      const [streak, firstRecordDate, plantData, savedPlant] = await Promise.all([
+      const [streak, nick, plantData, savedPlant] = await Promise.all([
         storage.getStreakCount(),
-        storage.getFirstRecordDate(),
+        storage.getNickname(),
         storage.getPlantData(),
         storage.getGeneratedPlant(),
       ]);
       setStreakCount(streak);
+      setNickname(nick ?? '');
       if (plantData?.id) setPlantType(plantData.id as PlantType);
-      if (plantData?.growthStage) setPlantStage(growthStageToNumber(plantData.growthStage));
+      // 대체(기본) 캐릭터 이미지는 성장 상태의 현재 단계를 따라감
+      const growth = await loadGrowthState();
+      setPlantStage((growth?.currentStage ?? 1) as GrowthStage);
       if (savedPlant) {
         setGeneratedPlantUri(savedPlant.uri);
         setGeneratedFacePos(savedPlant.facePos);
       }
 
-      const today = getLocalDateString();
-      const startDate = firstRecordDate ?? today;
-      const days = getTrackerDays(startDate);
+      // 함께한 일수 (입양일이 1일째)
+      if (plantData?.adoptedAt) {
+        const a = new Date(plantData.adoptedAt);
+        const t = getDevAdjustedDate();
+        const start = new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime();
+        const end = new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
+        setDaysTogether(Math.max(0, Math.round((end - start) / 86400000)) + 1);
+      }
 
-      // 관리 시작일 기준 N번째 날 계산
-      const [sy, sm, sd] = startDate.split('-').map(Number);
-      const startMs = new Date(sy, sm - 1, sd).getTime();
-
-      const results: DayStatus[] = await Promise.all(
-        days.map(async (date) => {
-          const [cy, cm, cd] = date.split('-').map(Number);
-          const dayNum = Math.floor((new Date(cy, cm - 1, cd).getTime() - startMs) / 86400000) + 1;
-          if (date > today) return { date, dayNum, status: 'future' as const };
+      // 이번 주 월~일 상태
+      const today = getLocalDateString(getDevAdjustedDate());
+      const dates = getThisWeekDates();
+      const statuses = await Promise.all(
+        dates.map(async date => {
+          if (date > today) return { date, status: 'future' as const };
           const record = await storage.getDailyRecord(date);
-          return { date, dayNum, status: record !== null ? 'done' as const : 'missed' as const };
-        })
+          if (record !== null) return { date, status: 'done' as const };
+          // 오늘은 아직 기록 전일 수 있으므로 '미래'처럼 빈 원으로 표시
+          return { date, status: (date === today ? 'future' : 'missed') as DayStatus };
+        }),
       );
-      setWeekDays(results);
+      setWeek(statuses);
     })();
   }, []);
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      {/* 헤더 */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity
-            onPress={() => router.replace('/' as any)}
-            hitSlop={12}
-          >
-            <BackImg width={styles.backIcon.width} height={styles.backIcon.height} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>RootMate</Text>
-        </View>
-      </View>
+  const goHome = () => router.replace('/' as any);
+  const together = nickname
+    ? `${nickname}${hasFinalConsonant(nickname) ? '이와' : '와'} 함께한지 ${daysTogether}일째`
+    : `함께한지 ${daysTogether}일째`;
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* 식물 캐릭터 + 스파클 */}
-        <View style={styles.plantZone}>
+  // 가운데 그룹을 화면(컨테이너) 정중앙에 두기 위해 실제 크기를 측정해 위치를 계산 (고정 상수 없음)
+  const [areaH, setAreaH] = useState(0);
+  const [groupH, setGroupH] = useState(0);
+  const measured = areaH > 0 && groupH > 0;
+  const groupTop = measured ? (areaH - groupH) / 2 : 0;
+
+  return (
+    <View style={styles.safe} onLayout={e => setAreaH(e.nativeEvent.layout.height)}>
+      {/* 위쪽 영역: 캐릭터를 그룹 바로 위(간격 38)에 붙임 */}
+      <View style={[styles.topArea, { top: groupTop - PLANT_GAP - PLANT_H, opacity: measured ? 1 : 0 }]}>
+        <View style={styles.plantBox}>
           {generatedPlantUri ? (
-            <View style={{ width: 220, height: 220 }}>
+            <View style={styles.genChar}>
               <Image
                 source={{ uri: generatedPlantUri }}
-                style={{ width: 220, height: 220 }}
+                style={{ width: 180, height: 180 }}
                 resizeMode="contain"
               />
               {generatedFacePos && (
@@ -154,9 +138,9 @@ export default function StreakScreen() {
                   source={getExpressionImage(plantType, 'sparkle')}
                   style={{
                     position: 'absolute',
-                    width: 110, height: 110,
-                    left: (generatedFacePos.x / 100) * 220 - 55,
-                    top:  (generatedFacePos.y / 100) * 220 - 55,
+                    width: 90, height: 90,
+                    left: (generatedFacePos.x / 100) * 180 - 45,
+                    top:  (generatedFacePos.y / 100) * 180 - 45,
                   }}
                   resizeMode="contain"
                 />
@@ -167,206 +151,144 @@ export default function StreakScreen() {
               plantType={plantType}
               stage={plantStage}
               expression="sparkle"
-              size="large"
+              width={122}
             />
           )}
-          {/* 스파클: 식물 위에 렌더링되도록 뒤에 배치 */}
-          {([styles.sparkle1, styles.sparkle2, styles.sparkle3, styles.sparkle4] as const).map((pos, i) => (
-            <Animated.Text
-              key={i}
-              style={[
-                styles.sparkle,
-                pos,
-                {
-                  opacity: sparks[i],
-                  transform: [{
-                    scale: sparks[i].interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.4] }),
-                  }],
-                },
-              ]}
-            >
-              ✦
-            </Animated.Text>
-          ))}
         </View>
+      </View>
 
-        {/* 연속 관리 일수 heading */}
-        <EmojiText style={[styles.heading, generatedPlantUri ? { marginTop: 16 } : undefined]}>
-          {streakCount}일 연속 관리 중 🫶
-        </EmojiText>
+      {/* 가운데 그룹: 숫자 + Day Streak + 함께한 일수 — 화면 가로·세로 정중앙 */}
+      <View
+        style={[styles.group, { top: groupTop, opacity: measured ? 1 : 0 }]}
+        onLayout={e => setGroupH(e.nativeEvent.layout.height)}
+      >
+        <Text style={styles.count}>{streakCount}</Text>
+        <Text style={styles.streakLabel}>Day Streak</Text>
+        <Text style={styles.together} numberOfLines={1}>{together}</Text>
+      </View>
 
-        {/* 주간 트래커 */}
-        <View style={styles.trackerCard}>
-          <Text style={styles.trackerTitle}>연속 관리일</Text>
-          <View style={styles.trackerRow}>
-            {Array.from({ length: 7 }).map((_, idx) => {
-              const day = weekDays[idx];
-              if (day) {
-                return (
-                  <View key={day.date} style={styles.dayCell}>
-                    <View style={[
-                      styles.dayIcon,
-                      day.status === 'done'   && styles.dayIconDone,
-                      day.status === 'missed' && styles.dayIconMissed,
-                      day.status === 'future' && styles.dayIconFuture,
-                    ]}>
-                      <EmojiText style={[
-                        styles.dayIconText,
-                        day.status === 'done'   && styles.dayIconTextDone,
-                        day.status === 'missed' && styles.dayIconTextMissed,
-                      ]}>
-                        {day.status === 'done' ? '✓' : day.status === 'missed' ? '✕' : '🔒'}
-                      </EmojiText>
-                    </View>
-                    <Text style={styles.dayLabel}>{day.dayNum}일</Text>
-                  </View>
-                );
-              }
-              return (
-                <View key={`empty-${idx}`} style={styles.dayCell}>
-                  <View style={[styles.dayIcon, styles.dayIconEmpty]} />
+      {/* 아래쪽 영역: 트래커·CTA */}
+      <View style={[styles.bottomArea, { top: groupTop + groupH + TRACKER_GAP, opacity: measured ? 1 : 0 }]}>
+        <View style={styles.trackerRow}>
+          {WEEK_LABELS.map((label, idx) => {
+            const day = week[idx];
+            const status = day?.status ?? 'future';
+            return (
+              <View key={label} style={styles.dayCell}>
+                <View style={[
+                  styles.dayIcon,
+                  status === 'done'   && styles.dayIconDone,
+                  status === 'missed' && styles.dayIconMissed,
+                  status === 'future' && styles.dayIconFuture,
+                ]}>
+                  {status === 'done' ? <CheckIcon /> : status === 'missed' ? <CrossIcon /> : null}
                 </View>
-              );
-            })}
-          </View>
+                <Text style={styles.dayLabel}>{label}</Text>
+              </View>
+            );
+          })}
         </View>
 
-        {/* 홈으로 버튼 */}
-        <TouchableOpacity
-          style={styles.homeBtn}
-          onPress={() => router.replace('/' as any)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.homeBtnText}>홈으로 가기</Text>
+        {/* CTA */}
+        <TouchableOpacity style={styles.cta} onPress={goHome} activeOpacity={0.8}>
+          <Text style={styles.ctaText}>앞으로도 함께하자!</Text>
         </TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
+const PLANT_H = 180;       // 캐릭터 영역 높이
+const PLANT_GAP = 38;      // 캐릭터 ↔ 그룹 간격
+const TRACKER_GAP = 47;    // 그룹 ↔ 주간 트래커 간격
+
+// Figma 402x874 (헤더·탭바 없는 전체 화면). 아래 margin 값은 Figma y 좌표 차이로 계산.
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
 
-  // 헤더
-  header: {
-    height: 61,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    paddingHorizontal: 20,
-    justifyContent: 'flex-end',
-    paddingBottom: 12,
-    borderBottomWidth: 1.5,
-    borderBottomColor: COLORS.outline,
-  },
-  headerContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  backIcon: { width: 22, height: 22 },
-  headerTitle: { fontFamily: 'ahn2006-B', fontSize: 30, color: COLORS.textPrimary },
+  // 모두 절대 위치 — top 값은 렌더 시 측정한 화면·그룹 높이로 계산
+  topArea:    { position: 'absolute', left: 0, right: 0, height: PLANT_H, alignItems: 'center' },
+  group:      { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  bottomArea: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
 
-  // 콘텐츠
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 40,
-    alignItems: 'center',
-    gap: 24,
-  },
+  plantBox: { width: 122, height: 180, alignItems: 'center', overflow: 'visible' },
+  genChar: { position: 'absolute', left: -29, top: 0, width: 180, height: 180 },
 
-  // 식물 + 스파클
-  plantZone: {
-    width: 220,
-    height: 220,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+  // 숫자 box 97 (top 340 → 캐릭터 하단 302 + 38), 100px ExtraBold
+  count: {
+    height: 97,
+    fontFamily: FONTS.extraBold,
+    fontSize: 100,
+    lineHeight: 100,
+    color: COLORS.pine,
+    textAlign: 'center',
   },
-  plantZoneGenerated: {
-    width: 280,
-    height: 280,
+  // Day Streak 28px Heavy, 줄높이 45 (top 437)
+  streakLabel: {
+    fontFamily: FONTS.heavy,
+    fontSize: 28,
+    lineHeight: 45,
+    color: COLORS.pine,
+    textAlign: 'center',
   },
-  sparkle: {
-    position: 'absolute',
-    fontSize: 22,
-    color: '#f5c842',
-    fontWeight: '900',
-  },
-  sparkle1: { top: 10,  left: 10  },
-  sparkle2: { top: 10,  right: 10 },
-  sparkle3: { bottom: 30, left: 20  },
-  sparkle4: { bottom: 30, right: 20 },
-
-  // 연속 관리 heading
-  heading: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 32,
-    marginTop: 60,
-    color: COLORS.textPrimary,
+  // 함께한 지 N일째 15px ExtraBold, 줄높이 45 (top 482)
+  together: {
+    fontFamily: FONTS.extraBold,
+    fontSize: 15,
+    lineHeight: 45,
+    color: COLORS.pine,
     textAlign: 'center',
   },
 
-  // 주간 트래커 카드
-  trackerCard: {
-    width: '100%',
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 24,
-    borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    padding: 20,
-    gap: 16,
-  },
-  trackerTitle: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 20,
-    color: COLORS.textPrimary,
-  },
+  // 주간 트래커: left 45 / right 45.5 (폭 311.5), 좌우 4, 칸 사이 균등 (top 574 = together 하단 527 + 47)
   trackerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    marginHorizontal: 45,
+    paddingHorizontal: 4,
   },
-  dayCell: {
-    alignItems: 'flex-start',
-    gap: 6,
-    flex: 1,
-  },
+  dayCell: { alignItems: 'center', gap: 4 },
   dayIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
+    borderColor: ICON_COLOR,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.bg,
   },
-  dayIconDone:   { backgroundColor: COLORS.lime, borderColor: COLORS.outline },
-  dayIconMissed: { backgroundColor: '#ffe5e5',    borderColor: COLORS.red },
-  dayIconFuture: { backgroundColor: COLORS.cardBg, borderColor: COLORS.outline },
-  dayIconEmpty:  { backgroundColor: 'transparent', borderColor: 'transparent' },
-  dayIconText: {
-    fontSize: 14,
-    fontFamily: 'Paperlogy-5Medium',
-    color: COLORS.textPrimary,
-  },
-  dayIconTextDone:   { color: COLORS.outline },
-  dayIconTextMissed: { color: COLORS.red },
+  dayIconDone:   { backgroundColor: COLORS.lime },
+  dayIconMissed: { backgroundColor: COLORS.tabTextOff },
+  dayIconFuture: { backgroundColor: COLORS.bg, borderColor: COLORS.line },
   dayLabel: {
-    fontFamily: 'Paperlogy-5Medium',
+    fontFamily: FONTS.bold,
     fontSize: 13,
-    color: COLORS.textPrimary,
+    lineHeight: 22,
+    color: '#191C1B',
   },
 
-  // 홈 버튼
-  homeBtn: {
-    width: '100%',
-    height: 60,
-    borderRadius: 9999,
+  // CTA 345×54 (top 688 = 트래커 하단 628 + 60), 반경 10
+  cta: {
+    width: 345,
+    maxWidth: '100%',
+    height: 54,
+    marginTop: 60,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    backgroundColor: COLORS.cardBg,
+    borderColor: '#303a1e',
+    backgroundColor: COLORS.lime,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#101828',
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
   },
-  homeBtnText: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 20,
-    color: COLORS.textPrimary,
+  ctaText: {
+    fontFamily: FONTS.bold,
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#191C1B',
   },
 });

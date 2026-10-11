@@ -1,52 +1,64 @@
 import React from 'react';
-import Svg, { Path, Rect, Line, Circle } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 
-export function HomeIcon({ color, size = 18 }: { color: string; size?: number }) {
+// 피그마(Y2K) 픽셀 스타일 아이콘 — 모두 단색 fill, color prop 으로 색 지정
+interface IconProps {
+  color: string;
+  size?: number;
+}
+
+export function HomeIcon({ color, size = 20 }: IconProps) {
   return (
-    <Svg width={Math.round(size * 16 / 18)} height={size} viewBox="0 0 16 18" fill="none">
-      <Path d="M0 18V6L8 0L16 6V18H10V11H6V18H0Z" fill={color} />
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <Path d="M10 0L0 8.57143V20H7.14286V12.8571H12.8571V20H20V8.57143L10 0Z" fill={color} />
     </Svg>
   );
 }
 
-export function RecordIcon({ color, size = 20 }: { color: string; size?: number }) {
+export function RecordIcon({ color, size = 20 }: IconProps) {
   return (
-    <Svg width={Math.round(size * 18 / 20)} height={size} viewBox="0 0 18 20" fill="none">
-      <Rect x="1" y="2" width="16" height="17" rx="1.5" stroke={color} strokeWidth="1.5" />
-      <Line x1="1" y1="7.25" x2="17" y2="7.25" stroke={color} strokeWidth="1.5" />
-      <Line x1="5" y1="0" x2="5" y2="4" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
-      <Line x1="13" y1="0" x2="13" y2="4" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
-      <Circle cx="5" cy="11" r="1" fill={color} />
-      <Circle cx="9" cy="11" r="1" fill={color} />
-      <Circle cx="13" cy="11" r="1" fill={color} />
-      <Circle cx="5" cy="15" r="1" fill={color} />
-      <Circle cx="9" cy="15" r="1" fill={color} />
-      <Circle cx="13" cy="15" r="1" fill={color} />
-    </Svg>
-  );
-}
-
-export function CollectionIcon({ color, size = 20 }: { color: string; size?: number }) {
-  return (
-    <Svg width={Math.round(size * 16 / 20)} height={size} viewBox="0 0 16 20" fill="none">
-      <Path d="M2 18C2 16.9 2.9 16 4 16H14V2H4C2.9 2 2 2.9 2 4V18Z" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
-      <Path d="M2 18C2 19.1 2.9 20 4 20H14V16H4C2.9 16 2 16.9 2 18Z" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
-      <Line x1="6" y1="6" x2="12" y2="6" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
-      <Line x1="6" y1="9" x2="10" y2="9" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
-    </Svg>
-  );
-}
-
-export function ChatBubbleIcon({ color = '#303A1E', size = 22 }: { color?: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
       <Path
-        d="M21 15C21 15.53 20.79 16.04 20.41 16.41C20.04 16.79 19.53 17 19 17H7L3 21V5C3 4.47 3.21 3.96 3.59 3.59C3.96 3.21 4.47 3 5 3H19C19.53 3 20.04 3.21 20.41 3.59C20.79 3.96 21 4.47 21 5V15Z"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        d="M2.85714 0V2.85714H0V20H20V2.85714H17.1429V0H14.2857V2.85714H5.71429V0H2.85714ZM17.1429 5.71429V17.1429H2.85714V5.71429H17.1429ZM5.71429 8.57143H8.57143V11.4286H5.71429V8.57143ZM11.4286 8.57143H14.2857V11.4286H11.4286V8.57143ZM5.71429 12.8571H8.57143V15.7143H5.71429V12.8571ZM11.4286 12.8571H14.2857V15.7143H11.4286V12.8571Z"
+        fill={color}
       />
     </Svg>
   );
 }
+
+export function CollectionIcon({ color, size = 20 }: IconProps) {
+  return (
+    <Svg width={Math.round((size * 17) / 20)} height={size} viewBox="0 0 17 20" fill="none">
+      <Path
+        d="M0 0H17V20H0V0ZM3.4 3.33333V16.6667H13.6V3.33333H3.4ZM5.1 6.66667H11.9V8.33333H5.1V6.66667ZM5.1 10H11.9V11.6667H5.1V10Z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
+export function ChatIcon({ color, size = 20 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <Path
+        d="M0 0H20V15H5L0 20V0ZM3.33333 3.33333V11.6667H15V3.33333H3.33333ZM6.66667 5H11.6667V6.66667H6.66667V5ZM6.66667 8.33333H10V10H6.66667V8.33333Z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
+// 기존 이름 호환
+export const ChatBubbleIcon = ChatIcon;
+
+export function HeartIcon({ color = '#14532D', size = 13 }: { color?: string; size?: number }) {
+  return (
+    <Svg width={Math.round((size * 14) / 13)} height={size} viewBox="0 0 14 13" fill="none">
+      <Path
+        d="M2.16719 0.00984631C3.00644 -0.0109797 3.94115 0.0193052 4.78727 0.0291701C5.4088 0.899015 6.19684 1.89457 6.86248 2.72276L9.10842 0.0564023C9.82255 -0.0267862 11.1203 0.00661611 11.8821 0.0066738C12.2998 0.351889 13.6114 1.71123 13.9751 2.12163C14.033 3.16876 13.9726 4.90533 13.9661 6.00161C12.9538 7.0946 11.7928 8.2316 10.7415 9.29915C9.57093 10.5457 8.31931 11.7336 7.15888 12.992C6.93514 13.0029 6.67558 12.9983 6.44857 13C4.37286 10.7622 2.12309 8.21551 0.0113798 6.05503C0.00873239 4.79751 -0.0255718 3.37356 0.0395442 2.13363C0.672229 1.47707 1.50432 0.612357 2.16719 0.00984631Z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+

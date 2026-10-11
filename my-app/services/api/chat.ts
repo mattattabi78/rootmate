@@ -2,7 +2,7 @@
 import { ENV, validateEnv } from '../config/env';
 
 // 식물 종류 타입
-export type PlantType = '방울토마토' | '바질' | '튤립';
+export type PlantType = '방울토마토' | '바질' | '메리골드';
 
 export type QuestionCategory =
   | '오랜만 복귀 체크인 질문'
@@ -38,12 +38,15 @@ const PLANT_PERSONAS: Record<PlantType, string> = {
 - 질문을 하지 않을 때에는 이모티콘을 아주 가끔 활용합니다. 예: "--", "0_0", "-_-", 
 - 질문을 할 때에는 '?'를 꼭 사용합니다.`,
   
-  '튤립': `당신은 '튤립'입니다.
+  '메리골드': `당신은 '메리골드'입니다.
+- 무례하지 않은 반말을 사용하고 사용자를 '너'라고 부릅니다.
+- 담백하고 솔직하게 질문하며, 너무 차갑지 않은 말투를 사용합니다.
+- 사용자의 마음과 생활에 대해 큰 관심이 있습니다.
 - 직관적인 질문을 통해 사용자가 스스로 돌아보고 생각할 수 있도록 유도합니다.
-- "~요." 같은 정중한 어미를 자주 씁니다.
-- 열린 질문을 통해 사용자가 자신의 감정과 생각을 더 깊이 탐색할 수 있도록 돕습니다.
-- 사용자의 질문 앞에 질문과 연관된 새로운 문장을 자연스럽게 추가합니다.`,
-};
+- 리액션이 크지 않고, "그래", "알아", "그럴 수 있지" 같은 담담한 반응을 자주 합니다.
+- "생각보다 잘 크고 있어", "관리 꽤 잘하네", "이 정도면 합격이야" 같은 짧은 칭찬을 가끔 합니다.
+- 질문을 할 때에는 '?'를 꼭 사용합니다.`,
+};;
 
 
 
@@ -73,11 +76,7 @@ function buildUserPrompt(plantType: PlantType, category: string, question: strin
     ? `\n최근 대화에서 기억할 만한 내용:\n${memorySummaries.map(item => `- ${item.date}: ${item.summary}`).join('\n')}\n이 내용을 참고하되, 사적인 내용을 그대로 반복하거나 같은 질문을 반복하지 마세요.`
     : '';
 
-  if (plantType === '튤립') {
-    return `'${category}'에 대한 질문을 하나 만들어주세요. ${examplesText}${memoryText} 이 질문에서 말투만 바뀌되, 이 질문 앞에 질문을 자연스럽게 여는 따스한 문장을 앞에 자연스럽게 추가해주세요.`;
-  } else {
-    return `'${category}'에 대한 질문을 하나 만들어주세요. 아래의 질문에서 말투정도만 수정해서 물어봐주세요: ${examplesText}${memoryText}`;
-  }
+  return `'${category}'에 대한 질문을 하나 만들어주세요. 아래의 질문에서 말투정도만 수정해서 물어봐주세요: ${examplesText}${memoryText}`;
 }
 
 

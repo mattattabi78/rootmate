@@ -6,6 +6,7 @@ export interface DailyRecord {
   date: string;            // 'YYYY-MM-DD'
   waterDone: boolean;
   completedTaskIds?: string[];  // 오늘 완료한 task id 목록
+  altTaskIds?: string[];        // '흙이 촉촉해' 등 오늘은 안 해도 된다고 답한 task id 목록 (완료에는 포함되지 않음)
   recordDone: boolean;     // 사진 기록 완료
   question: string;        // 오늘 노출된 질문 텍스트
   answer: string;          // 유저 답변 (빈 문자열이면 건너뜀)
@@ -42,6 +43,19 @@ export const KEYS = {
   GENERATED_PLANT_URI:    '@plant/generated_plant_uri',
   GENERATED_FACE_POS:     '@plant/generated_face_pos',
   LAST_STREAK_SHOWN_DATE: '@plant/last_streak_shown_date',
+  NOTIFICATION_TIMES:     '@plant/notification_times',
+  NOTIFICATION_SIG:       '@plant/notification_signature',
+};
+
+/** 알림 시간 (자정부터의 분). 기본: 아침 오전 9시, 저녁 오후 9시 */
+export interface NotificationTimes {
+  morning: number;
+  evening: number;
+  morningEnabled: boolean;
+  eveningEnabled: boolean;
+}
+export const DEFAULT_NOTIFICATION_TIMES: NotificationTimes = {
+  morning: 9 * 60, evening: 21 * 60, morningEnabled: true, eveningEnabled: true,
 };
 
 export const storage = {
@@ -237,6 +251,32 @@ export const storage = {
       AsyncStorage.removeItem(KEYS.GENERATED_PLANT_URI),
       AsyncStorage.removeItem(KEYS.GENERATED_FACE_POS),
     ]);
+  },
+
+  // 알림 시간 (아침·저녁)
+  async getNotificationTimes(): Promise<NotificationTimes> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.NOTIFICATION_TIMES);
+      if (!raw) return DEFAULT_NOTIFICATION_TIMES;
+      const t = JSON.parse(raw);
+      return {
+        morning: typeof t.morning === 'number' ? t.morning : DEFAULT_NOTIFICATION_TIMES.morning,
+        evening: typeof t.evening === 'number' ? t.evening : DEFAULT_NOTIFICATION_TIMES.evening,
+        morningEnabled: t.morningEnabled !== false,
+        eveningEnabled: t.eveningEnabled !== false,
+      };
+    } catch {
+      return DEFAULT_NOTIFICATION_TIMES;
+    }
+  },
+  async setNotificationTimes(times: NotificationTimes): Promise<void> {
+    await AsyncStorage.setItem(KEYS.NOTIFICATION_TIMES, JSON.stringify(times));
+  },
+  async getNotificationSignature(): Promise<string | null> {
+    return AsyncStorage.getItem(KEYS.NOTIFICATION_SIG);
+  },
+  async setNotificationSignature(sig: string): Promise<void> {
+    await AsyncStorage.setItem(KEYS.NOTIFICATION_SIG, sig);
   },
 
   // streak 화면 노출 일자

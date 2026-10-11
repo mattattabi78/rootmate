@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS } from '../../constants';
+import { COLORS, FONTS } from '../../constants';
 import { storage } from '../../store/storage';
 import ProgressDots from '../../components/common/ProgressDots';
 import Button from '../../components/common/Button';
@@ -91,19 +91,21 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  content: { flex: 1, paddingHorizontal: 24, paddingTop: 48 },
+  content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 48 },   // 세로 중앙(버튼 영역만큼 살짝 위)
   heading: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 36,
-    color: COLORS.textPrimary,
-    lineHeight: 44,
+    fontFamily: FONTS.extraBold,
+    fontSize: 28,
+    color: COLORS.pine,
+    lineHeight: 38,
+    textAlign: 'center',
     marginBottom: 8,
   },
   sub: {
-    fontFamily: 'Paperlogy-5Medium',
+    fontFamily: FONTS.bold,
     fontSize: 15,
-    color: COLORS.textGreen,
-    lineHeight: 26,
+    color: COLORS.forest,
+    lineHeight: 22,
+    textAlign: 'center',
     marginBottom: 40,
   },
   inputWrap: {
@@ -113,11 +115,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.inputBg,
     borderWidth: 1,
     borderColor: COLORS.inputBorder,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 16,
   },
   inputWrapFocused: { borderColor: COLORS.inputBorderFocus, borderWidth: 1.5 },
-  input: { flex: 1, fontFamily: 'ahn2006-M', fontSize: 20, color: COLORS.textPrimary, padding: 0 },
-  counter: { fontFamily: 'ahn2006-M', fontSize: 20, color: COLORS.textTertiary, marginLeft: 8 },
+  input: { flex: 1, fontFamily: FONTS.bold, fontSize: 20, color: COLORS.textPrimary, padding: 0, textAlign: 'center' },
+  counter: { fontFamily: FONTS.bold, fontSize: 20, color: COLORS.textTertiary, marginLeft: 8 },
   footer: { paddingHorizontal: 24, paddingBottom: 32 },
 });
