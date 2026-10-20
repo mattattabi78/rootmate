@@ -23,6 +23,7 @@ import {
 } from '../constants/plants';
 import { PlantType, GrowthStage, growthStageToNumber, getExpressionImage } from '../constants/character';
 import { getTodayCompletedTaskIds, loadGrowthState } from '../store/growthStore';
+import { getFaceOverlayPosition } from '../services/ai';
 
 export default function PlantDetailScreen() {
   const router = useRouter();
@@ -97,25 +98,29 @@ export default function PlantDetailScreen() {
         <View style={styles.topSection}>
           {/* 캐릭터 — generated 이미지 우선, 없으면 현재 성장 단계 */}
           {generatedPlantUri && !genImgFailed ? (
-            <View style={styles.generatedWrap}>
+            <View style={{ width: 220, height: 220 }}>
               <Image
                 source={{ uri: generatedPlantUri }}
-                style={styles.generatedImg}
+                style={{ width: 220, height: 220 }}
                 resizeMode="contain"
-                onError={() => { setGenImgFailed(true); }}
+                onError={() => setGenImgFailed(true)}
               />
-              {generatedFacePos && (
-                <Image
-                  source={getExpressionImage(plantType, 'default')}
-                  style={{
-                    position: 'absolute',
-                    width: 110, height: 110,
-                    left: (generatedFacePos.x / 100) * 220 - 55,
-                    top:  (generatedFacePos.y / 100) * 220 - 55,
-                  }}
-                  resizeMode="contain"
-                />
-              )}
+              {generatedFacePos && (() => {
+                const position = getFaceOverlayPosition(generatedFacePos, 220);
+                return (
+                  <Image
+                    source={getExpressionImage(plantType, 'default')}
+                    style={{
+                      position: 'absolute',
+                      width: position.width,
+                      height: position.height,
+                      left: position.left,
+                      top: position.top,
+                    }}
+                    resizeMode="contain"
+                  />
+                );
+              })()}
             </View>
           ) : (
             <PlantCharacter

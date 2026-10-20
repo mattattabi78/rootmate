@@ -11,7 +11,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import { PlantFacePosition } from '../services/ai';
+import { PlantFacePosition, getFaceOverlayPosition } from '../services/ai';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { COLORS } from '../constants';
@@ -314,25 +314,28 @@ export default function HomeScreen() {
         <View style={styles.plantZone} pointerEvents="box-none">
           <View style={styles.plantCharWrap} pointerEvents="none">
             {generatedPlantUri ? (
-              // 합성 이미지(식물+화분) + 감지된 화분 위치에 표정 오버레이
               <View style={{ width: 220, height: 220 }}>
                 <Image
                   source={{ uri: generatedPlantUri }}
                   style={{ width: 220, height: 220 }}
                   resizeMode="contain"
                 />
-                {generatedFacePos && (
-                  <Image
-                    source={getExpressionImage(plantType, displayExpr)}
-                    style={{
-                      position: 'absolute',
-                      width: 110, height: 110,
-                      left: (generatedFacePos.x / 100) * 220 - 55,
-                      top: (generatedFacePos.y / 100) * 220 - 55,
-                    }}
-                    resizeMode="contain"
-                  />
-                )}
+                {generatedFacePos && (() => {
+                  const position = getFaceOverlayPosition(generatedFacePos, 220);
+                  return (
+                    <Image
+                      source={getExpressionImage(plantType, displayExpr)}
+                      style={{
+                        position: 'absolute',
+                        width: position.width,
+                        height: position.height,
+                        left: position.left,
+                        top: position.top,
+                      }}
+                      resizeMode="contain"
+                    />
+                  );
+                })()}
               </View>
             ) : (
               <PlantCharacter

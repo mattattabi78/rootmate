@@ -18,6 +18,7 @@ import { PlantType, GrowthStage, growthStageToNumber, getExpressionImage } from 
 import EmojiText from '../components/common/EmojiText';
 import { getLocalDateString } from '../utils/date';
 import { getDevAdjustedDate } from '../utils/devOverrides';
+import { getFaceOverlayPosition } from '../services/ai';
 
 import BackImg from '../assets/images/back-button.svg';
 
@@ -149,18 +150,22 @@ export default function StreakScreen() {
                 style={{ width: 220, height: 220 }}
                 resizeMode="contain"
               />
-              {generatedFacePos && (
-                <Image
-                  source={getExpressionImage(plantType, 'sparkle')}
-                  style={{
-                    position: 'absolute',
-                    width: 110, height: 110,
-                    left: (generatedFacePos.x / 100) * 220 - 55,
-                    top:  (generatedFacePos.y / 100) * 220 - 55,
-                  }}
-                  resizeMode="contain"
-                />
-              )}
+              {generatedFacePos && (() => {
+                const position = getFaceOverlayPosition(generatedFacePos, 220);
+                return (
+                  <Image
+                    source={getExpressionImage(plantType, 'sparkle')}
+                    style={{
+                      position: 'absolute',
+                      width: position.width,
+                      height: position.height,
+                      left: position.left,
+                      top: position.top,
+                    }}
+                    resizeMode="contain"
+                  />
+                );
+              })()}
             </View>
           ) : (
             <PlantCharacter

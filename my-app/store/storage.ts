@@ -21,6 +21,17 @@ export interface MemorySummary {
   summary: string;
 }
 
+export interface StoredPlantFacePosition {
+  x: number;
+  y: number;
+  pot_width: number;
+  pot_height?: number;
+  pot_left?: number;
+  pot_top?: number;
+  pot_right?: number;
+  pot_bottom?: number;
+}
+
 export const KEYS = {
   ONBOARDING_COMPLETE: '@plant/onboarding_complete',
   ONBOARDING_STEP:     '@plant/onboarding_step',
@@ -41,6 +52,7 @@ export const KEYS = {
   LAST_STAGE_CHECK:       '@rootmate/last_stage_check',
   GENERATED_PLANT_URI:    '@plant/generated_plant_uri',
   GENERATED_FACE_POS:     '@plant/generated_face_pos',
+  GENERATED_PLANT_FORMAT: '@plant/generated_plant_format',
   LAST_STREAK_SHOWN_DATE: '@plant/last_streak_shown_date',
 };
 
@@ -217,18 +229,20 @@ export const storage = {
   },
 
   // AI 생성 식물 이미지 (세션 간 유지)
-  async saveGeneratedPlant(uri: string, facePos: { x: number; y: number; pot_width: number }): Promise<void> {
+  async saveGeneratedPlant(uri: string, facePos: StoredPlantFacePosition): Promise<void> {
     await Promise.all([
       AsyncStorage.setItem(KEYS.GENERATED_PLANT_URI, uri),
       AsyncStorage.setItem(KEYS.GENERATED_FACE_POS, JSON.stringify(facePos)),
+      AsyncStorage.setItem(KEYS.GENERATED_PLANT_FORMAT, 'layers-v1'),
     ]);
   },
-  async getGeneratedPlant(): Promise<{ uri: string; facePos: { x: number; y: number; pot_width: number } } | null> {
-    const [uri, posRaw] = await Promise.all([
+  async getGeneratedPlant(): Promise<{ uri: string; facePos: StoredPlantFacePosition } | null> {
+    const [uri, posRaw, format] = await Promise.all([
       AsyncStorage.getItem(KEYS.GENERATED_PLANT_URI),
       AsyncStorage.getItem(KEYS.GENERATED_FACE_POS),
+      AsyncStorage.getItem(KEYS.GENERATED_PLANT_FORMAT),
     ]);
-    if (!uri) return null;
+    if (!uri || format !== 'layers-v1') return null;
     const facePos = posRaw ? JSON.parse(posRaw) : { x: 50, y: 72, pot_width: 60 };
     return { uri, facePos };
   },
@@ -236,6 +250,7 @@ export const storage = {
     await Promise.all([
       AsyncStorage.removeItem(KEYS.GENERATED_PLANT_URI),
       AsyncStorage.removeItem(KEYS.GENERATED_FACE_POS),
+      AsyncStorage.removeItem(KEYS.GENERATED_PLANT_FORMAT),
     ]);
   },
 

@@ -56,7 +56,7 @@ export interface PlantTask {
 }
 
 export function isSupportedTask(taskId: TaskId): boolean {
-  return taskId === 'water' || taskId === 'sunlight' || taskId === 'observe';
+  return taskId === 'water' || taskId === 'sunlight' || taskId === 'observe' || taskId === 'photo';
 }
 
 // ─── 도감 정보 타입 ───────────────────────────────────────────────
@@ -173,6 +173,15 @@ export const PLANT_TASKS: Record<string, PlantTask[]> = {
       notificationTime: '19:00',
       notifications: ['지금 내 모습 어때?'],
     },
+    {
+      id: 'photo',
+      label: '사진 찍기',
+      description: '오늘 식물의 모습을 사진으로 기록해요',
+      startWeek: 0,
+      intervalDays: 1,
+      notificationTime: '19:00',
+      notifications: ['오늘의 내 모습을 사진으로 남겨줘.'],
+    },
   ],
   tomato: [
     {
@@ -208,6 +217,15 @@ export const PLANT_TASKS: Record<string, PlantTask[]> = {
       notificationTime: '19:00',
       notifications: ['지금 내 모습 어때?'],
     },
+    {
+      id: 'photo',
+      label: '사진 찍기',
+      description: '오늘 식물의 모습을 사진으로 기록해요',
+      startWeek: 0,
+      intervalDays: 1,
+      notificationTime: '19:00',
+      notifications: ['오늘의 내 모습을 사진으로 남겨줘.'],
+    },
   ],
   tulip: [
     {
@@ -242,6 +260,15 @@ export const PLANT_TASKS: Record<string, PlantTask[]> = {
       intervalDays: 3,
       notificationTime: '19:00',
       notifications: ['지금 내 모습 어때?'],
+    },
+    {
+      id: 'photo',
+      label: '사진 찍기',
+      description: '오늘 식물의 모습을 사진으로 기록해요',
+      startWeek: 0,
+      intervalDays: 1,
+      notificationTime: '19:00',
+      notifications: ['오늘의 내 모습을 사진으로 남겨줘.'],
     },
   ],
 };

@@ -279,16 +279,20 @@ export async function styleTransferPlantOnly(
 // ─────────────────────────────────────────────
 
 const COMPOSITE_PROMPT =
-  'Image 1 is a pixel art pot/vase — this is the REFERENCE POT. ' +
-  'Image 2 is a plant with its background removed — this is the PLANT CONTENT. ' +
-  'Task: composite the plant growing naturally out of the pot opening. ' +
-  'Scale the plant so its stem base sits exactly at the pot rim, plant fills 50–70% of total image height above the pot. ' +
-  'STYLE: strict NES/Famicom 8-bit pixel art throughout. ' +
-  'Hard square pixel edges, zero anti-aliasing, zero gradients, zero blur. Maximum 16 colors. ' +
-  'Flat fills with 3 shading levels (shadow / base / highlight). ' +
-  'Render the pot exactly as it appears in Image 1. ' +
-  'Render the plant in pixel art style using its natural colors (green for leaves, brown for stem). ' +
-  'Pure white (#FFFFFF) background. No other elements.';
+  'Image 1 is the REFERENCE POT. Preserve its original pixels and colors exactly. ' +
+  'Do not recolor, relight, color-grade, adjust the brightness, contrast, or saturation of the pot. ' +
+  'Do not change the pot material tones, outline, proportions, silhouette, or placement. ' +
+  'Image 2 is a plant with background removed. Composite it naturally into the pot opening. ' +
+  'The plant stem base must sit exactly on the pot rim and the plant should occupy 50–70% of the total image height above the pot. ' +
+  'Apply all style changes only to the plant. Leave the pot completely untouched. ' +
+  'Match the plant to the exact pixel-art visual style already present in Image 1. ' +
+  'Use the pot as the style reference: match its visible pixel size, blocky pixel clusters, crisp stepped outlines, and shading treatment. ' +
+  'Render the plant as strict NES/Famicom 8-bit pixel art with hard square pixel edges, no anti-aliasing, no smooth gradients, and no blur. ' +
+  'Use a restrained palette of at most 16 colors for the plant, with flat fills and up to 3 distinct tones per area (shadow, base, highlight). ' +
+  'Keep natural plant colors such as green leaves and a brown stem, translated into the same limited, high-contrast pixel-art palette as the pot. ' +
+  'Do not make the plant photorealistic, painterly, smooth, vector-like, or 3D. ' +
+  'Keep the background pure white (#FFFFFF) and add no extra elements. ' +
+  'The pot is not part of the style transformation: preserve its original color exactly.';
 
 /**
  * 배경 제거된 식물 + 앱 화분을 합성해 단일 정사각 이미지로 반환합니다.
@@ -316,7 +320,7 @@ export async function transferWithCustomPot(
           output_format: 'jpg',
           safety_tolerance: 2,
           resolution: '1K',
-          seed: 42,
+          seed: 777,
         },
       }),
     }

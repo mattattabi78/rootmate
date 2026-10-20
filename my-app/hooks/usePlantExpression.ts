@@ -54,6 +54,7 @@ export function usePlantExpression(plantType: PlantType): {
   expression: Expression;
   situation: PlantSituation;
   setTemporaryExpression: (exp: Expression, durationMs?: number) => void;
+  setSessionExpression: (exp: Expression) => void;
   refresh: () => Promise<void>;
 } {
   const [situation, setSituation] = useState<PlantSituation>('idle');
@@ -73,7 +74,10 @@ export function usePlantExpression(plantType: PlantType): {
   }, [plantType]);
 
   useEffect(() => {
-    refresh();
+    const loadExpression = async () => {
+      await refresh();
+    };
+    void loadExpression();
   }, [refresh]);
 
   // 일시적 표정 변경 — durationMs 후 상황 기반 표정으로 자동 복귀
@@ -95,6 +99,14 @@ export function usePlantExpression(plantType: PlantType): {
     [plantType],
   );
 
+  const setSessionExpression = useCallback((exp: Expression) => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setExpression(exp);
+  }, []);
+
   // 언마운트 시 타이머 정리
   useEffect(() => {
     return () => {
@@ -102,5 +114,5 @@ export function usePlantExpression(plantType: PlantType): {
     };
   }, []);
 
-  return { expression, situation, setTemporaryExpression, refresh };
+  return { expression, situation, setTemporaryExpression, setSessionExpression, refresh };
 }

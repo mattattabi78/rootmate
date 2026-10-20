@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,10 +14,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { COLORS } from '../constants';
-import { PlantType, GrowthStage, Expression, growthStageToNumber, getExpressionImage } from '../constants/character';
+import { PlantType, GrowthStage, Expression, growthStageToNumber, getExpressionImage, VASE_IMAGE } from '../constants/character';
 import PlantCharacter from '../components/common/PlantCharacter';
+import { Asset } from 'expo-asset';
 import { getTodayQuestion, getLongBreakQuestion } from '../services/api/questionPool';
 import { usePlantExpression } from '../hooks/usePlantExpression';
 import {
@@ -29,13 +30,11 @@ import { getNextStageConfig, AUTO_ADVANCE_MESSAGES, STAGE_CONFIRM_MESSAGES, getA
 import { storage, DailyRecord, MemorySummary } from '../store/storage';
 import { isSupportedTask, isTaskDue, isObservationDue, PlantTask, PLANT_TASKS } from '../constants/plants';
 import { getPlantMessages } from '../constants/chatMessages';
-import { generateQuestion, generatePlantResponse, summarizePlantConversation, updatePlantCharacterWithCustomPot, PlantFacePosition } from '../services/ai';
+import { generateQuestion, generatePlantResponse, summarizePlantConversation, updatePlantCharacterWithCustomPot, PlantFacePosition, getFaceOverlayPosition } from '../services/ai';
 import { reconstructDayChat } from '../utils/chatHistory';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView } from 'expo-camera';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import { Asset } from 'expo-asset';
-import { VASE_IMAGE } from '../constants/character';
 import EmojiText from '../components/common/EmojiText';
 import { getLocalDateString } from '../utils/date';
 import { getKstDayOfWeek, getDevAdjustedDate, getDevChatRounds } from '../utils/devOverrides';
@@ -106,7 +105,7 @@ export default function ChatScreen() {
   const [plantStage, setPlantStage]   = useState<GrowthStage>(1);
   const [plantPhotoUri, setPlantPhotoUri] = useState<string | undefined>();
   const [generatedPlantUri, setGeneratedPlantUri] = useState<string | null>(null);
-  const [generatedFacePos, setGeneratedFacePos] = useState<{ x: number; y: number; pot_width: number } | null>(null);
+  const [generatedFacePos, setGeneratedFacePos] = useState<PlantFacePosition | null>(null);
   // 식물 사진 변환 프리뷰
   const [isTransforming, setIsTransforming] = useState(false);
   const [previewPlantUri, setPreviewPlantUri] = useState<string | null>(null);
@@ -126,7 +125,18 @@ export default function ChatScreen() {
   const kstDow = getKstDayOfWeek();
 
   // 표정 훅 — plantType이 확정되기 전엔 'tomato' 기본값으로 시작
-  const { expression: plantExpression, setTemporaryExpression } = usePlantExpression(plantType);
+  const {
+    expression: plantExpression,
+    setTemporaryExpression,
+    setSessionExpression,
+    refresh: refreshExpression,
+  } = usePlantExpression(plantType);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshExpression();
+    }, [refreshExpression]),
+  );
 
   // ── 오늘 task 목록 계산 (daysOfWeek 필터 포함) ────────────────────
   const buildTodayTasks = (
@@ -632,7 +642,6 @@ export default function ChatScreen() {
     // 마음건강 질문 이미지 답변
     setMessages(prev => [...prev, { id: newId(), from: 'user', text: '', imageUri: uri }]);
     setPhase('loading');
-    setTemporaryExpression('heart', 3000);
     const loadingId = newId();
     setMessages(prev => [...prev, { id: loadingId, from: 'plant', text: '.' }]);
     let dots = 1;
@@ -640,7 +649,7 @@ export default function ChatScreen() {
       dots = (dots % 3) + 1;
       setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: '.'.repeat(dots) } : msg));
     }, 400);
-    const isLastRound = currentRound === maxRounds - 1;
+    const mustEndAfterReply = currentRound >= maxRounds - 1;
     // 현재까지의 대화 히스토리를 AI에 전달 (답변 직전까지만)
     const chatHistoryForAI = messages
       .filter(msg => msg.id !== loadingId)
@@ -651,26 +660,30 @@ export default function ChatScreen() {
       todayQuestion,
       plantType,
       currentRound === 0,
-      isLastRound,
+      mustEndAfterReply,
       chatHistoryForAI,
       false,
       memorySummariesRef.current,
     );
     clearInterval(dotInterval);
-    setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: aiReply } : msg));
+    setSessionExpression(aiReply.expression);
+    setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: aiReply.text } : msg));
+
+    const finalMessages: Message[] = [
+      ...messages.filter(msg => msg.id !== loadingId),
+      { id: newId(), from: 'user', text: '', imageUri: uri },
+      { id: newId(), from: 'plant', text: aiReply.text },
+    ];
     
-    // 라운드 체크: 다음 라운드가 있으면 계속 대화
+    // 모델이 대화를 이어가기로 선택하고 안전 턴 제한에 도달하지 않은 경우만 계속 진행
     const nextRound = currentRound + 1;
-    if (nextRound < maxRounds) {
+    if (aiReply.shouldContinue && nextRound < maxRounds) {
       setCurrentRound(nextRound);
-      // 첫 라운드가 아니면 새로운 질문 없이 입력 필드만 활성화
       setTimeout(() => {
         setPhase('answering');
-        setTemporaryExpression('default', 2000);
       }, 1000);
     } else {
-      // 모든 라운드 완료 - 기록 저장 후 종료
-      await saveRecord('[사진으로 답변했어요]', uri, aiReply);
+      await saveRecord('[사진으로 답변했어요]', uri, aiReply.text, finalMessages);
       setTimeout(() => setPhase('done'), 1000);
     }
   };
@@ -682,7 +695,6 @@ export default function ChatScreen() {
     setInputText('');
     setPhase('loading');
     setMessages(prev => [...prev, { id: newId(), from: 'user', text }]);
-    setTemporaryExpression('heart', 3000);
     const loadingId = newId();
     setMessages(prev => [...prev, { id: loadingId, from: 'plant', text: '.' }]);
     let dots = 1;
@@ -693,44 +705,30 @@ export default function ChatScreen() {
 
     const isLongBreakReply = !!longBreakCheckin;
     const isObservationChat = observationChatRef.current;
-    const checkinQuestion = isObservationChat ? '지금 내 모습 어때?' : longBreakCheckin ?? todayQuestion;
-    const isLastRound = currentRound === maxRounds - 1;
-    const chatHistoryForAI = messages
-      .filter(msg => msg.id !== loadingId)
-      .map(msg => ({ from: msg.from as 'plant' | 'user', text: msg.text }));
-    const aiReply = await generatePlantResponse(
-      text,
-      plantNickname,
-      checkinQuestion,
-      plantType,
-      currentRound === 0,
-      isLongBreakReply ? false : isLastRound,
-      chatHistoryForAI,
-      isLongBreakReply,
-      memorySummariesRef.current,
-    );
-    clearInterval(dotInterval);
-    setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: aiReply } : msg));
-
-    if (isLongBreakReply) {
-      setLongBreakCheckin(null);
-      setTimeout(() => {
-        startTaskAt(0, tasks, todayQuestion);
-      }, 600);
-      return;
-    }
-
     if (isObservationChat) {
-      const nextRound = currentRound + 1;
-      if (nextRound < maxRounds) {
-        setCurrentRound(nextRound);
-        setTimeout(() => {
-          setPhase('observing');
-          setTemporaryExpression('default', 2000);
-        }, 1000);
-        return;
-      }
-
+      const chatHistoryForAI = messages
+        .filter(msg => msg.id !== loadingId)
+        .map(msg => ({ from: msg.from as 'plant' | 'user', text: msg.text }));
+      const observationReply = await generatePlantResponse(
+        text,
+        plantNickname,
+        '지금 내 모습 어때?',
+        plantType,
+        true,
+        true,
+        chatHistoryForAI,
+        false,
+        memorySummariesRef.current,
+        true,
+      );
+      clearInterval(dotInterval);
+      setSessionExpression(observationReply.expression);
+      const finalMessages: Message[] = [
+        ...messages.filter(msg => msg.id !== loadingId),
+        { id: newId(), from: 'user', text },
+        { id: newId(), from: 'plant', text: observationReply.text },
+      ];
+      setMessages(finalMessages);
       observationChatRef.current = false;
       await recordTaskCompletion('observe');
       setChatDoneTaskIds(prev => prev.includes('observe') ? prev : [...prev, 'observe']);
@@ -741,16 +739,49 @@ export default function ChatScreen() {
       return;
     }
 
-    // 라운드 체크: 다음 라운드가 있으면 계속 대화
+    const checkinQuestion = longBreakCheckin ?? todayQuestion;
+    const mustEndAfterReply = currentRound >= maxRounds - 1;
+    const chatHistoryForAI = messages
+      .filter(msg => msg.id !== loadingId)
+      .map(msg => ({ from: msg.from as 'plant' | 'user', text: msg.text }));
+    const aiReply = await generatePlantResponse(
+      text,
+      plantNickname,
+      checkinQuestion,
+      plantType,
+      currentRound === 0,
+      isLongBreakReply || mustEndAfterReply,
+      chatHistoryForAI,
+      isLongBreakReply,
+      memorySummariesRef.current,
+    );
+    clearInterval(dotInterval);
+    setSessionExpression(aiReply.expression);
+    setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: aiReply.text } : msg));
+
+    const finalMessages: Message[] = [
+      ...messages.filter(msg => msg.id !== loadingId),
+      { id: newId(), from: 'user', text },
+      { id: newId(), from: 'plant', text: aiReply.text },
+    ];
+
+    if (isLongBreakReply) {
+      setLongBreakCheckin(null);
+      setTimeout(() => {
+        startTaskAt(0, tasks, todayQuestion);
+      }, 600);
+      return;
+    }
+
+    // 모델이 대화를 이어가기로 선택하고 안전 턴 제한에 도달하지 않은 경우만 계속 진행
     const nextRound = currentRound + 1;
-    if (nextRound < maxRounds) {
+    if (aiReply.shouldContinue && nextRound < maxRounds) {
       setCurrentRound(nextRound);
       setTimeout(() => {
         setPhase('answering');
-        setTemporaryExpression('default', 2000);
       }, 1000);
     } else {
-      await saveRecord(text, undefined, aiReply);
+      await saveRecord(text, undefined, aiReply.text, finalMessages);
       setTimeout(() => setPhase('done'), 1000);
     }
   };
@@ -763,22 +794,30 @@ export default function ChatScreen() {
   };
 
   // ── 기록 저장 + 연속 관리일 업데이트 ────────────────────────────
-  const saveRecord = async (answer: string, answerImageUri?: string, aiReply?: string) => {
-    const transcript = messages
+  const saveRecord = async (
+    answer: string,
+    answerImageUri?: string,
+    aiReply?: string,
+    messageSnapshot: Message[] = messages,
+  ) => {
+    const transcript = messageSnapshot
       .filter(message => !/^\.+$/.test(message.text.trim()))
       .map(message => {
         const text = message.text.trim() || (message.imageUri ? '[사진]' : '');
         return text ? `${message.from === 'user' ? '사용자' : '식물'}: ${text}` : '';
       })
       .filter(Boolean);
-    const lastMessage = [...messages].reverse().find(message =>
-      message.text.trim() && !/^\.+$/.test(message.text.trim()) || message.imageUri,
+    const lastMessage = [...messageSnapshot].reverse().find(message =>
+      (message.text.trim() && !/^\.+$/.test(message.text.trim())) || !!message.imageUri,
     );
-    const answerAlreadyIncluded = lastMessage?.from === 'user' && (
-      lastMessage.text === answer || (!!answerImageUri && lastMessage.imageUri === answerImageUri)
+    const answerAlreadyIncluded = messageSnapshot.some(message =>
+      message.from === 'user' && (
+        message.text === answer || (!!answerImageUri && message.imageUri === answerImageUri)
+      ),
     );
     if (answer && !answerAlreadyIncluded) transcript.push(`사용자: ${answer}`);
-    if (aiReply) transcript.push(`식물: ${aiReply}`);
+    const replyAlreadyIncluded = lastMessage?.from === 'plant' && lastMessage.text === aiReply;
+    if (aiReply && !replyAlreadyIncluded) transcript.push(`식물: ${aiReply}`);
 
     const record: DailyRecord = {
       date: todayStr,
@@ -793,19 +832,28 @@ export default function ChatScreen() {
       aiReply,
     };
     await storage.saveDailyRecord(record);
-    let conversationSummary: string | undefined;
+    let conversationSummary: string;
     try {
       const summary = await summarizePlantConversation(transcript.join('\n'), plantType);
-      if (summary && summary !== '특별히 기억할 내용 없음') {
-        conversationSummary = summary;
-        record.conversationSummary = summary;
-        await storage.saveDailyRecord(record);
-        if (await storage.isMemoryEnabled()) {
-          await storage.saveMemorySummary({ date: todayStr, summary });
-        }
+      if (!summary || summary === '특별히 기억할 내용 없음') {
+        throw new Error('대화 요약 응답이 비어 있거나 기록 대상이 아닙니다.');
       }
+      conversationSummary = summary;
     } catch (error) {
       console.warn('diary summary fallback:', error);
+      const fallback = transcript
+        .map(line => line.replace(/^(사용자|식물):\s*/, ''))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      conversationSummary = fallback
+        ? `${fallback.slice(0, 117)}${fallback.length > 120 ? '…' : ''}`
+        : '오늘 식물과 대화를 나눴어요.';
+    }
+    record.conversationSummary = conversationSummary;
+    await storage.saveDailyRecord(record);
+    if (await storage.isMemoryEnabled()) {
+      await storage.saveMemorySummary({ date: todayStr, summary: conversationSummary });
     }
     await storage.clearChatDraft(todayStr);
     await storage.setFirstRecordDateIfEmpty(todayStr);
@@ -1105,18 +1153,22 @@ export default function ChatScreen() {
                 style={{ width: 220, height: 220 }}
                 resizeMode="contain"
               />
-              {previewFacePos && (
-                <Image
-                  source={getExpressionImage(plantType, 'sparkle')}
-                  style={{
-                    position: 'absolute',
-                    width: 110, height: 110,
-                    left: (previewFacePos.x / 100) * 220 - 55,
-                    top:  (previewFacePos.y / 100) * 220 - 55,
-                  }}
-                  resizeMode="contain"
-                />
-              )}
+              {previewFacePos && (() => {
+                const position = getFaceOverlayPosition(previewFacePos, 220);
+                return (
+                  <Image
+                    source={getExpressionImage(plantType, 'sparkle')}
+                    style={{
+                      position: 'absolute',
+                      width: position.width,
+                      height: position.height,
+                      left: position.left,
+                      top: position.top,
+                    }}
+                    resizeMode="contain"
+                  />
+                );
+              })()}
             </View>
             <TouchableOpacity style={styles.previewConfirmBtn} onPress={handleConfirmCharacter} activeOpacity={0.8}>
               <Text style={styles.previewConfirmText}>이 캐릭터 사용하기</Text>
@@ -1139,7 +1191,7 @@ function MessageBubble({
   message: Message; plantNickname: string; plantType: PlantType;
   plantStage: GrowthStage; plantExpression: Expression;
   generatedPlantUri?: string | null;
-  generatedFacePos?: { x: number; y: number; pot_width: number } | null;
+  generatedFacePos?: PlantFacePosition | null;
   onGenImgError?: () => void;
 }) {
   const isPlant = message.from === 'plant';
@@ -1159,18 +1211,22 @@ function MessageBubble({
                 resizeMode="cover"
                 onError={onGenImgError}
               />
-              {generatedFacePos && (
-                <Image
-                  source={getExpressionImage(plantType, plantExpression)}
-                  style={{
-                    position: 'absolute',
-                    width: 22, height: 22,
-                    left: (generatedFacePos.x / 100) * 45 - 11,
-                    top: (generatedFacePos.y / 100) * 45 - 11,
-                  }}
-                  resizeMode="contain"
-                />
-              )}
+              {generatedFacePos && (() => {
+                const position = getFaceOverlayPosition(generatedFacePos, 45);
+                return (
+                  <Image
+                    source={getExpressionImage(plantType, plantExpression)}
+                    style={{
+                      position: 'absolute',
+                      width: position.width,
+                      height: position.height,
+                      left: position.left,
+                      top: position.top,
+                    }}
+                    resizeMode="contain"
+                  />
+                );
+              })()}
             </View>
           ) : (
             <View style={styles.avatarInner}>
