@@ -5,13 +5,8 @@ import {
   Text,
   TouchableOpacity,
   TouchableOpacityProps,
-  View,
 } from 'react-native';
-import { COLORS } from '../../constants';
-
-// expo-linear-gradient is optional — install with: npx expo install expo-linear-gradient
-let LinearGradient: React.ComponentType<any> | null = null;
-try { LinearGradient = require('expo-linear-gradient').LinearGradient; } catch {}
+import { COLORS, FONTS } from '../../constants';
 
 interface Props extends TouchableOpacityProps {
   label: string;
@@ -31,6 +26,7 @@ export default function Button({
 
   const baseStyle = [
     styles.base,
+    variant === 'primary'   && !isDisabled && styles.primary,
     variant === 'secondary' && styles.secondary,
     variant === 'ghost'     && styles.ghost,
     isDisabled              && styles.disabled,
@@ -54,38 +50,6 @@ export default function Button({
     <Text style={labelStyle}>{label}</Text>
   );
 
-  // Primary: lime gradient (같은 앱 디자인)
-  if (variant === 'primary' && !isDisabled) {
-    if (LinearGradient) {
-      return (
-        <TouchableOpacity
-          style={[styles.base, style]}
-          disabled={isDisabled}
-          activeOpacity={0.85}
-          {...rest}
-        >
-          <LinearGradient
-            colors={['#f3f4f1', '#b5ff22']}
-            style={styles.gradientInner}
-          >
-            {inner}
-          </LinearGradient>
-        </TouchableOpacity>
-      );
-    }
-    // LinearGradient 없을 때 fallback
-    return (
-      <TouchableOpacity
-        style={[styles.base, styles.primaryFallback, style]}
-        disabled={isDisabled}
-        activeOpacity={0.85}
-        {...rest}
-      >
-        {inner}
-      </TouchableOpacity>
-    );
-  }
-
   return (
     <TouchableOpacity
       style={baseStyle}
@@ -98,28 +62,23 @@ export default function Button({
   );
 }
 
+// Figma Y2K: 라임 단색 버튼, 반경 10, 테두리 1.5px
 const styles = StyleSheet.create({
   base: {
-    height: 56,
-    borderRadius: 9999,
+    height: 54,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
+    borderColor: '#303a1e',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  gradientInner: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryFallback: {
+  primary: {
     backgroundColor: COLORS.lime,
   },
   secondary: {
-    backgroundColor: COLORS.cardBg,
-    borderColor: COLORS.outline,
+    backgroundColor: COLORS.bg,
+    borderColor: '#303a1e',
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -130,7 +89,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.btnDisabledBg,
   },
   label: {
-    fontFamily: 'ahn2006-M',
+    fontFamily: FONTS.bold,
     fontSize: 18,
     color: COLORS.outline,
   },

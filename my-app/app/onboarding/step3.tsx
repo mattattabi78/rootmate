@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, PLANTS, Plant } from '../../constants';
+import { COLORS, FONTS, PLANTS, Plant } from '../../constants';
 import { storage } from '../../store/storage';
 import ProgressDots from '../../components/common/ProgressDots';
 import Button from '../../components/common/Button';
@@ -49,7 +49,7 @@ export default function Step3() {
             plantType={plant.id as PlantType}
             stage={1}
             expression="default"
-            size="medium"
+            width={150}
           />
         </View>
 
@@ -97,8 +97,8 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  backArrow: { fontFamily: 'ahn2006-B', fontSize: 22, color: COLORS.textPrimary },
-  content: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 32 },
+  backArrow: { fontFamily: FONTS.extraBold, fontSize: 22, color: COLORS.pine },
+  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingBottom: 32 },
   illustration: {
     alignSelf: 'center',
     alignItems: 'center',
@@ -106,26 +106,26 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   plantName: {
-    fontFamily: 'ahn2006-B',
+    fontFamily: FONTS.extraBold,
     fontSize: 28,
-    color: COLORS.textPrimary,
+    color: COLORS.pine,
     textAlign: 'center',
     marginBottom: 4,
   },
   description: {
-    fontFamily: 'Paperlogy-5Medium',
+    fontFamily: FONTS.bold,
     fontSize: 15,
-    color: COLORS.textGreen,
+    color: COLORS.forest,
     textAlign: 'center',
     lineHeight: 22,
     marginTop: 15,
     marginBottom: 28,
   },
   careCard: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 16,
+    backgroundColor: COLORS.bg,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
+    borderColor: '#303a1e',
     overflow: 'hidden',
   },
   careRow: {
@@ -135,8 +135,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
-  careLabel: { fontFamily: 'Paperlogy-5Medium', fontSize: 15, color: COLORS.textTertiary },
-  careValue: { fontFamily: 'Paperlogy-5Medium', fontSize: 15, color: COLORS.textPrimary, flex: 1, textAlign: 'right' },
+  careLabel: { fontFamily: FONTS.bold, fontSize: 15, color: COLORS.line },
+  careValue: { fontFamily: FONTS.semiBold, fontSize: 15, color: COLORS.textPrimary, flex: 1, textAlign: 'right' },
   divider: { height: 1, backgroundColor: COLORS.inputBorder, marginHorizontal: 16 },
   footer: { paddingHorizontal: 24, paddingBottom: 32 },
 });

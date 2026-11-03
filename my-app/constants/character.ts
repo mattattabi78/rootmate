@@ -1,8 +1,8 @@
 // @ts-nocheck
 /* eslint-disable @typescript-eslint/no-var-requires */
 // 식물 캐릭터 이미지 상수 — 모든 require()는 정적 경로 필수
-export type PlantType  = 'basil' | 'tomato' | 'tulip';
-export type GrowthStage = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+export type PlantType  = 'basil' | 'tomato' | 'marigold';
+export type GrowthStage = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 export type Expression =
   | 'default'
   | 'tear'
@@ -24,10 +24,10 @@ export const VASE_IMAGE = require('../assets/images/characters/vase.png');
 export const PROFILE_IMAGES: Record<PlantType, any> = {
   basil:  require('../assets/images/characters/bajil_profile.png'),
   tomato: require('../assets/images/characters/tom_profile.png'),
-  tulip:  require('../assets/images/characters/tul_profile.png'),
+  marigold:  require('../assets/images/characters/mar_profile.png'),
 };
 
-// 성장 단계 이미지 (tulip 최대 6단계)
+// 성장 단계 이미지 (marigold 최대 6단계)
 export const PLANT_IMAGES: Record<PlantType, Record<number, any>> = {
   basil: {
     1: require('../assets/images/characters/bajil/bajil_1.png'),
@@ -49,13 +49,13 @@ export const PLANT_IMAGES: Record<PlantType, Record<number, any>> = {
     7: require('../assets/images/characters/tomato/tomato_7.png'),
     8: require('../assets/images/characters/tomato/tomato_8.png'),
   },
-  tulip: {
-    1: require('../assets/images/characters/tulip/tulip_1.png'),
-    2: require('../assets/images/characters/tulip/tulip_2.png'),
-    3: require('../assets/images/characters/tulip/tulip_3.png'),
-    4: require('../assets/images/characters/tulip/tulip_4.png'),
-    5: require('../assets/images/characters/tulip/tulip_5.png'),
-    6: require('../assets/images/characters/tulip/tulip_6.png'),
+  marigold: {
+    1: require('../assets/images/characters/marigold/marigold_1.png'),
+    2: require('../assets/images/characters/marigold/marigold_2.png'),
+    3: require('../assets/images/characters/marigold/marigold_3.png'),
+    4: require('../assets/images/characters/marigold/marigold_4.png'),
+    5: require('../assets/images/characters/marigold/marigold_5.png'),
+    6: require('../assets/images/characters/marigold/marigold_6.png'),
   },
 };
 
@@ -86,13 +86,13 @@ export const EXPRESSION_IMAGES: Record<PlantType, Partial<Record<Expression, any
     heart:        require('../assets/images/characters/tomato/face_exp/tomato_heart.png'),
     angry:        require('../assets/images/characters/tomato/face_exp/tomato_angry.png'),
   },
-  tulip: {
-    default:      require('../assets/images/characters/tulip/face_exp/tulip_default.png'),
-    tear:         require('../assets/images/characters/tulip/face_exp/tulip_tear.png'),
-    sparkle:      require('../assets/images/characters/tulip/face_exp/tulip_sparkle.png'),
-    disappointed: require('../assets/images/characters/tulip/face_exp/tulip_disappointed.png'),
-    oh:           require('../assets/images/characters/tulip/face_exp/tulip_oh.png'),
-    heart:        require('../assets/images/characters/tulip/face_exp/tulip_heart.png'),
+  marigold: {
+    default:      require('../assets/images/characters/marigold/face_exp/marigold_default.png'),
+    tear:         require('../assets/images/characters/marigold/face_exp/marigold_tear.png'),
+    sparkle:      require('../assets/images/characters/marigold/face_exp/marigold_sparkle.png'),
+    disappointed: require('../assets/images/characters/marigold/face_exp/marigold_disappointed.png'),
+    oh:           require('../assets/images/characters/marigold/face_exp/marigold_oh.png'),
+    heart:        require('../assets/images/characters/marigold/face_exp/marigold_heart.png'),
   },
 };
 
@@ -100,14 +100,24 @@ export const EXPRESSION_IMAGES: Record<PlantType, Partial<Record<Expression, any
 export const PLANT_EXPRESSIONS: Record<PlantType, Expression[]> = {
   basil:  ['default','tear','sparkle','sad','oh','cry','holding_tears','smile','heart','sigh','angry'],
   tomato: ['default','tear','sparkle','sad','disappointed','oh','cry','smile','heart','angry'],
-  tulip:  ['default','tear','sparkle','disappointed','oh','heart'],
+  marigold:  ['default','tear','sparkle','disappointed','oh','heart'],
 };
 
-// 단계 이미지 getter (tulip clamp to 6)
+// 성장 단계(최대 9개)와 캐릭터 이미지(6~8장)의 연결. 옮겨심기·순 따기처럼 두 단계로 나눈 구간은 같은 이미지를 공유한다.
+//   바질 9단계 → 이미지 8장:      '15cm 이상 성장'(6)과 '순 따기'(7)가 이미지 6
+//   방울토마토 9단계 → 이미지 8장: '15cm 이상 성장'(5)과 '정식 완료'(6)가 이미지 5
+//   메리골드 7단계 → 이미지 6장:  '성장 중'(4)과 '옮겨심기'(5)가 이미지 4
+const IMAGE_STAGE_MAP: Record<PlantType, Record<number, number>> = {
+  basil:    { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 6, 8: 7, 9: 8 },
+  tomato:   { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 5, 7: 6, 8: 7, 9: 8 },
+  marigold: { 1: 1, 2: 2, 3: 3, 4: 4, 5: 4, 6: 5, 7: 6 },
+};
+
+// 단계 이미지 getter (단계 → 이미지 번호 매핑, 범위를 넘으면 해당 식물의 마지막 이미지)
 export function getPlantImage(plantType: PlantType, stage: GrowthStage): any {
-  const max  = plantType === 'tulip' ? 6 : 8;
-  const safe = Math.min(stage, max) as GrowthStage;
-  return PLANT_IMAGES[plantType][safe];
+  const map = IMAGE_STAGE_MAP[plantType];
+  const maxImage = Math.max(...Object.keys(PLANT_IMAGES[plantType]).map(Number));
+  return PLANT_IMAGES[plantType][map[stage] ?? maxImage];
 }
 
 // 표정 이미지 getter (없는 표정은 default fallback)

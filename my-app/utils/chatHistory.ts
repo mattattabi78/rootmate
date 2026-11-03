@@ -1,7 +1,7 @@
 import { DailyRecord } from '../store/storage';
 import { getTaskLabel } from '../constants/plants';
 import { PlantType } from '../constants/character';
-import { getPlantMessages } from '../constants/chatMessages';
+import { getPlantMessages, getTaskChoices } from '../constants/chatMessages';
 
 export interface ChatMsg {
   id: string;
@@ -19,21 +19,23 @@ export function reconstructDayChat(record: DailyRecord, plantNickname: string, p
   ];
 
   const completedIds: string[] = record.completedTaskIds ?? (record.waterDone ? ['water'] : []);
-  const allTaskIds = [...new Set([...completedIds, ...(record.waterDone ? ['water'] : [])])];
+  const altIds: string[] = record.altTaskIds ?? [];
+  const allTaskIds = [...new Set([...completedIds, ...altIds, ...(record.waterDone ? ['water'] : [])])];
 
   for (const taskId of allTaskIds) {
     const label = getTaskLabel(plantType, taskId);
     const done  = completedIds.includes(taskId);
+    const alt   = altIds.includes(taskId) && !done;   // '흙이 촉촉해' 등
 
-    msgs.push({ id: id(), from: 'plant', text: m ? m.taskAsk(label) : `오늘 ${label} 하셨나요?` });
+    msgs.push({ id: id(), from: 'plant', text: m ? m.taskAsk(taskId, label) : `오늘 ${label} 하셨나요?` });
     msgs.push({
       id: id(), from: 'user',
-      text: done
-        ? (taskId === 'water' ? '완료했어요 ✅' : '완료했어요 ✓')
-        : (taskId === 'water' ? '물 주지 못했어…' : '아직이요'),
+      text: done ? getTaskChoices(taskId).done : alt ? (getTaskChoices(taskId).alt ?? getTaskChoices(taskId).skip) : getTaskChoices(taskId).skip,
     });
     if (done) {
       msgs.push({ id: id(), from: 'plant', text: m ? m.taskDone() : '잘 하셨어요! 🌿' });
+    } else if (alt) {
+      msgs.push({ id: id(), from: 'plant', text: m ? (taskId === 'water' ? m.waterMoist() : m.sunlightCloudy()) : '괜찮아요.' });
     } else if (taskId === 'water') {
       msgs.push({ id: id(), from: 'plant', text: m ? m.reminderNo() : '괜찮아요. 잊기 쉬운 날도 있죠 🌱' });
     } else {

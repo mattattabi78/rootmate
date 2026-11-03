@@ -39,19 +39,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   title: {
-    fontFamily: 'ahn2006-B',
+    fontFamily: 'SUITE-ExtraBold',
     fontSize: 44,
     color: COLORS.textPrimary,
     marginBottom: 16,
   },
   plantZone: {
-    height: 300,
+    height: 340,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
   },
   hint: {
-    fontFamily: 'ahn2006-M',
+    fontFamily: 'SUITE-Bold',
     fontSize: 18,
     color: COLORS.textTertiary,
     marginTop: 32,

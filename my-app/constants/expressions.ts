@@ -20,21 +20,21 @@ export type PlantSituation =
 
 // ─── 상황 → 표정 매핑 테이블 ─────────────────────────────────────
 const SITUATION_MAP: Record<PlantSituation, Record<PlantType, Expression>> = {
-  morning_before_task: { basil: 'default',     tomato: 'default',      tulip: 'default'      },
-  task_completed:      { basil: 'sparkle',     tomato: 'sparkle',      tulip: 'sparkle'      },
-  water_due_today:     { basil: 'default',     tomato: 'default',      tulip: 'default'      },
-  water_done_today:    { basil: 'smile',       tomato: 'smile',        tulip: 'heart'        },
-  no_water_1day:       { basil: 'default',     tomato: 'sad',          tulip: 'disappointed' },
-  no_water_2days:      { basil: 'tear',        tomato: 'tear',         tulip: 'tear'         },
-  no_water_3days_plus: { basil: 'cry',         tomato: 'cry',          tulip: 'tear'         },
-  chat_opened:         { basil: 'oh',          tomato: 'oh',           tulip: 'oh'           },
-  question_asked:      { basil: 'default',     tomato: 'default',      tulip: 'default'      },
-  user_replied:        { basil: 'heart',       tomato: 'heart',        tulip: 'heart'        },
-  streak_achieved:     { basil: 'sparkle',     tomato: 'sparkle',      tulip: 'sparkle'      },
-  photo_requested:     { basil: 'oh',          tomato: 'oh',           tulip: 'oh'           },
-  photo_received:      { basil: 'heart',       tomato: 'heart',        tulip: 'heart'        },
-  evening_check:       { basil: 'sigh',        tomato: 'disappointed', tulip: 'disappointed' },
-  idle:                { basil: 'default',     tomato: 'default',      tulip: 'default'      },
+  morning_before_task: { basil: 'default',     tomato: 'default',      marigold: 'default'      },
+  task_completed:      { basil: 'sparkle',     tomato: 'sparkle',      marigold: 'sparkle'      },
+  water_due_today:     { basil: 'default',     tomato: 'default',      marigold: 'default'      },
+  water_done_today:    { basil: 'smile',       tomato: 'smile',        marigold: 'heart'        },
+  no_water_1day:       { basil: 'default',     tomato: 'sad',          marigold: 'disappointed' },
+  no_water_2days:      { basil: 'tear',        tomato: 'tear',         marigold: 'tear'         },
+  no_water_3days_plus: { basil: 'cry',         tomato: 'cry',          marigold: 'tear'         },
+  chat_opened:         { basil: 'oh',          tomato: 'oh',           marigold: 'oh'           },
+  question_asked:      { basil: 'default',     tomato: 'default',      marigold: 'default'      },
+  user_replied:        { basil: 'heart',       tomato: 'heart',        marigold: 'heart'        },
+  streak_achieved:     { basil: 'sparkle',     tomato: 'sparkle',      marigold: 'sparkle'      },
+  photo_requested:     { basil: 'oh',          tomato: 'oh',           marigold: 'oh'           },
+  photo_received:      { basil: 'heart',       tomato: 'heart',        marigold: 'heart'        },
+  evening_check:       { basil: 'sigh',        tomato: 'disappointed', marigold: 'disappointed' },
+  idle:                { basil: 'default',     tomato: 'default',      marigold: 'default'      },
 };
 
 // 상황 → 표정 변환 (해당 식물에 없는 표정은 'default' fallback)

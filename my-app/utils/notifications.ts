@@ -1,6 +1,8 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { PlantType } from '../constants/character';
+import { storage } from '../store/storage';
+import { getLocalDateString } from './date';
 
 export const MORNING_NOTIF_ID = 'rootmate-daily-am';
 export const EVENING_NOTIF_ID = 'rootmate-daily-pm';
@@ -20,11 +22,12 @@ const PLANT_NOTIF: Record<PlantType, {
     evening: { title: '🍅 아직이야?', body: '아직 못 했지? 빨리 와줘! ><' },
     remind: (label) => ({ title: `🍅 ${label} 잊은 거 아니지?`, body: `2시간 됐는데, 이제 할 수 있어?` }),
   },
-  tulip: {
-    morning: { title: '🌷 안녕하세요', body: '오늘 저 관리해주는거 잊지 말아주세요 🌷' },
-    evening: { title: '🌷 task가 남아있어요', body: '아직 완료하지 못하셨나요? 지금 해주시겠어요?' },
-    remind: (label) => ({ title: `🌷 ${label} 알림`, body: `지금은 하실 수 있으실까요?` }),
+  marigold: {
+    morning: { title: '🌼 일어났어?', body: '오늘 까먹지 말고 나 챙겨줘~' },
+    evening: { title: '🌼 아직이야?', body: '아직 안 한 거 알아. 괜찮아. 지금이라도 해 줘.' },
+    remind: (label) => ({ title: `🌼 ${label}`, body: `아까 못 했다고 했잖아. 지금은?` }),
   },
+
 };
 
 async function hasPermission(): Promise<boolean> {
@@ -38,7 +41,7 @@ async function ensureAndroidChannel(): Promise<void> {
       name: 'RootMate',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#b5ff22',
+      lightColor: '#BAFE32',
       enableVibrate: true,
     });
   }
@@ -58,28 +61,37 @@ export async function scheduleTaskReminder(taskLabel: string, plantType: PlantTy
 
 /**
  * 일일 알림 갱신 — 앱 열릴 때마다 호출
- * - 오전 9시: 없을 때만 recurring 등록 (매일 반복)
- * - 오후 9시: recurring 등록 후 완료 시 취소, 다음 날 앱 열 때 미완료면 재등록
+ * - 아침(기본 오전 9시, 온보딩에서 설정): 없을 때만 recurring 등록 (매일 반복)
+ * - 저녁(기본 오후 9시, 온보딩에서 설정): recurring 등록 후 완료 시 취소, 다음 날 앱 열 때 미완료면 재등록
  */
 export async function refreshDailyNotifications(plantType: PlantType, todayDone: boolean): Promise<void> {
   if (!(await hasPermission())) return;
   await ensureAndroidChannel();
 
   const msgs = PLANT_NOTIF[plantType] ?? PLANT_NOTIF.tomato;
+  const times = await storage.getNotificationTimes();
+
+  // 알림 시간이 바뀌었으면 기존 예약을 지우고 새 시간으로 다시 등록
+  const signature = `${times.morning}-${times.evening}-${times.morningEnabled ? 1 : 0}${times.eveningEnabled ? 1 : 0}`;
+  if ((await storage.getNotificationSignature()) !== signature) {
+    await Notifications.cancelScheduledNotificationAsync(MORNING_NOTIF_ID).catch(() => {});
+    await Notifications.cancelScheduledNotificationAsync(EVENING_NOTIF_ID).catch(() => {});
+    await storage.setNotificationSignature(signature);
+  }
   const all = await Notifications.getAllScheduledNotificationsAsync();
 
-  // 오전 9시: 아직 등록 안 된 경우에만 추가 (recurring이라 한 번만 설정)
-  if (!all.some(n => n.identifier === MORNING_NOTIF_ID)) {
+  // 아침: 아직 등록 안 된 경우에만 추가 (recurring이라 한 번만 설정)
+  if (times.morningEnabled && !all.some(n => n.identifier === MORNING_NOTIF_ID)) {
     await Notifications.scheduleNotificationAsync({
       identifier: MORNING_NOTIF_ID,
       content: { title: msgs.morning.title, body: msgs.morning.body, sound: true },
-      trigger: { type: 'calendar', repeats: true, hour: 9, minute: 0 } as any,
+      trigger: { type: 'calendar', repeats: true, hour: Math.floor(times.morning / 60), minute: times.morning % 60 } as any,
     });
   }
 
-  // 오후 9시: 미완료 → recurring 유지(없으면 등록), 완료 → 취소
+  // 저녁: 미완료 → recurring 유지(없으면 등록), 완료 → 취소
   const hasEvening = all.some(n => n.identifier === EVENING_NOTIF_ID);
-  if (todayDone) {
+  if (!times.eveningEnabled || todayDone) {
     if (hasEvening) {
       await Notifications.cancelScheduledNotificationAsync(EVENING_NOTIF_ID).catch(() => {});
     }
@@ -87,7 +99,7 @@ export async function refreshDailyNotifications(plantType: PlantType, todayDone:
     await Notifications.scheduleNotificationAsync({
       identifier: EVENING_NOTIF_ID,
       content: { title: msgs.evening.title, body: msgs.evening.body, sound: true },
-      trigger: { type: 'calendar', repeats: true, hour: 21, minute: 0 } as any,
+      trigger: { type: 'calendar', repeats: true, hour: Math.floor(times.evening / 60), minute: times.evening % 60 } as any,
     });
   }
 }
@@ -95,4 +107,12 @@ export async function refreshDailyNotifications(plantType: PlantType, todayDone:
 /** tasks 완료 시 오늘 저녁 알림 취소 */
 export async function cancelEveningNotification(): Promise<void> {
   await Notifications.cancelScheduledNotificationAsync(EVENING_NOTIF_ID).catch(() => {});
+}
+
+/** 설정에서 알림 시간·켜기/끄기를 바꾼 직후 호출 — 현재 식물·오늘 기록 상태로 예약을 다시 맞춤 */
+export async function applyNotificationSettings(): Promise<void> {
+  const plant = await storage.getPlantData();
+  if (!plant?.id) return;
+  const record = await storage.getDailyRecord(getLocalDateString());
+  await refreshDailyNotifications(plant.id as PlantType, record !== null);
 }

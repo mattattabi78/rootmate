@@ -10,26 +10,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
-import { COLORS } from '../constants';
-import { storage, DailyRecord, MemorySummary } from '../store/storage';
-import { getTaskLabel } from '../constants/plants';
-import { PlantType } from '../constants/character';
+import { COLORS, FONTS } from '../constants';
+import { storage, DailyRecord } from '../store/storage';
+import { loadGrowthState } from '../store/growthStore';
+import { PlantType, GrowthStage } from '../constants/character';
 import TopAppBar from '../components/common/TopAppBar';
 import BottomNavBar from '../components/common/BottomNavBar';
-import EmojiText from '../components/common/EmojiText';
+import PlantCharacter from '../components/common/PlantCharacter';
+import { ActionIcon } from '../components/common/ActionIconButton';
+import { ChevronPixelIcon } from '../components/common/PixelIcons';
 import { getDateStringForMonthDay } from '../utils/date';
 import { getDevAdjustedDate } from '../utils/devOverrides';
-import HeartImage from '../assets/images/heart.svg';
-
-let LinearGradient: React.ComponentType<any> | null = null;
-try { LinearGradient = require('expo-linear-gradient').LinearGradient; } catch {}
-
-function Grad({ colors, style, children }: { colors: string[]; style?: any; children?: React.ReactNode }) {
-  if (LinearGradient) {
-    return <LinearGradient colors={colors} style={style}>{children}</LinearGradient>;
-  }
-  return <View style={[style, { backgroundColor: colors[colors.length - 1] }]}>{children}</View>;
-}
 
 // ─── 달력 유틸 ────────────────────────────────────────────────────
 type DayEntry = { day: number; type: 'prev' | 'cur' | 'next' };
@@ -43,25 +34,41 @@ function buildMonthGrid(year: number, month: number): DayEntry[] {
     grid.push({ day: daysInPrev - i, type: 'prev' });
   for (let d = 1; d <= daysInMonth; d++)
     grid.push({ day: d, type: 'cur' });
-  const rem = 42 - grid.length;
+  // 마지막 주만 채움 (4~6주)
+  const rem = (7 - (grid.length % 7)) % 7;
   for (let d = 1; d <= rem; d++)
     grid.push({ day: d, type: 'next' });
   return grid;
 }
 
-const MONTH_NAMES  = ['January','February','March','April','May','June',
-  'July','August','September','October','November','December'];
-const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const DAY_HEADERS  = ['S','M','T','W','T','F','S'];
-const DAY_KOR      = ['일','월','화','수','목','금','토'];
+const DAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토'];
 
 function formatDateLabel(year: number, month: number, day: number) {
   const d = new Date(year, month, day);
-  return `${SHORT_MONTHS[month]} ${day}, ${year} (${DAY_KOR[d.getDay()]})`;
+  return `${year}년 ${month + 1}월 ${day}일 (${DAY_HEADERS[d.getDay()]})`;
+}
+
+// 해당 날짜에 도달했던 성장 단계 (stageHistory 기준, 없으면 null)
+async function getStageAtDate(dateStr: string): Promise<GrowthStage | null> {
+  try {
+    const state = await loadGrowthState();
+    if (!state) return null;
+    const entered = state.stageHistory
+      .filter(h => h.enteredAt <= dateStr)
+      .sort((a, b) => b.stage - a.stage)[0];
+    return (entered?.stage ?? state.stageHistory[0]?.stage ?? 1) as GrowthStage;
+  } catch {
+    return null;
+  }
+}
+
+function Chevron({ dir, color = COLORS.pine }: { dir: 'left' | 'right'; color?: string }) {
+  return <ChevronPixelIcon direction={dir} color={color} size={15} />;
 }
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────
-type TabView = 'calendar' | 'album' | 'memory';
+type TabView = 'calendar' | 'album';
+const TAB_LABEL: Record<TabView, string> = { calendar: '캘린더', album: '앨범' };
 
 export default function CalendarScreen() {
   const [view, setView] = useState<TabView>('calendar');
@@ -71,13 +78,12 @@ export default function CalendarScreen() {
   const [month, setMonth]           = useState(today.getMonth());
   const [recordDays, setRecordDays] = useState<number[]>([]);
   const [plantType, setPlantType]   = useState<PlantType>('tomato');
-  const [memorySummaries, setMemorySummaries] = useState<MemorySummary[]>([]);
-  const [memoryEnabled, setMemoryEnabled] = useState(true);
 
   // 모달 상태
   const [modalVisible,   setModalVisible]   = useState(false);
   const [modalDateLabel, setModalDateLabel] = useState('');
   const [modalRecord,    setModalRecord]    = useState<DailyRecord | null>(null);
+  const [modalStage,     setModalStage]     = useState<GrowthStage>(1);
 
   const loadRecordDays = useCallback(async (y: number, m: number) => {
     const days = await storage.getRecordedDaysForMonth(y, m);
@@ -94,10 +100,6 @@ export default function CalendarScreen() {
     storage.getPlantData().then(d => {
       if (d?.id) setPlantType(d.id as PlantType);
     });
-    Promise.all([storage.getAllMemorySummaries(), storage.isMemoryEnabled()]).then(([summaries, enabled]) => {
-      setMemorySummaries(summaries);
-      setMemoryEnabled(enabled);
-    });
   }, [loadRecordDays]));
 
   const goToPrev = () => {
@@ -111,8 +113,8 @@ export default function CalendarScreen() {
     setMonth(nm); setYear(ny); loadRecordDays(ny, nm);
   };
 
-  const handleDayPress = async (day: number) => {
-    const dateStr = getDateStringForMonthDay(year, month, day);
+  const openDay = async (y: number, m: number, day: number) => {
+    const dateStr = getDateStringForMonthDay(y, m, day);
     let record: DailyRecord | null = await storage.getDailyRecord(dateStr);
     if (!record) {
       const photos = await storage.getPlantPhotos(dateStr);
@@ -128,230 +130,131 @@ export default function CalendarScreen() {
         plantPhotoUri: photos[0],
       };
     }
-    setModalDateLabel(formatDateLabel(year, month, day));
+    const stage = await getStageAtDate(dateStr);
+    setModalStage(stage ?? 1);
+    setModalDateLabel(formatDateLabel(y, m, day));
     setModalRecord(record);
     setModalVisible(true);
   };
+
+  // Figma 탭: 캘린더·앨범 2개(가운데 정렬)
+  const tabs: TabView[] = ['calendar', 'album'];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <TopAppBar />
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* 탭 스위처 */}
-        <View style={styles.tabRow}>
-          {(['calendar', 'album', 'memory'] as const).map(tab => (
-            <TouchableOpacity
-              key={tab}
-              style={styles.tabWrapper}
-              onPress={() => setView(tab)}
-              activeOpacity={0.85}
-            >
-              {view === tab ? (
-                <Grad colors={['#f3f4f1', '#b5ff22']} style={styles.tabActive}>
-                  <Text style={styles.tabActiveText}>
-                    {tab === 'calendar' ? '캘린더' : tab === 'album' ? '앨범' : '기억'}
-                  </Text>
-                </Grad>
-              ) : (
-                <View style={styles.tabInactive}>
-                  <Text style={styles.tabInactiveText}>
-                    {tab === 'calendar' ? '캘린더' : tab === 'album' ? '앨범' : '기억'}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
+      <View style={styles.body}>
+        {/* 탭 (밑줄) */}
+        <View style={[styles.tabRow, view === 'album' && styles.tabRowAlbum]}>
+          {tabs.map(tab => {
+            const active = view === tab;
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={styles.tab}
+                onPress={() => setView(tab)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.tabText, active && styles.tabTextActive]}>{TAB_LABEL[tab]}</Text>
+                {active && <View style={styles.tabUnderline} />}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        {/* 카드 컨테이너 */}
-        <View style={styles.card}>
-          {/* 월 헤더 */}
-          <View style={styles.monthRow}>
-            <Text style={styles.monthTitle}>{MONTH_NAMES[month]} {year}</Text>
-            <View style={styles.monthNav}>
-              <TouchableOpacity onPress={goToPrev} hitSlop={10}>
-                <Text style={styles.navArrow}>{'<'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={goToNext} hitSlop={10}>
-                <Text style={styles.navArrow}>{'>'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {view === 'calendar' ? (
-            <CalendarGrid
-              year={year} month={month} today={today}
-              recordDays={recordDays} onDayPress={handleDayPress}
-            />
-          ) : view === 'album' ? (
-            <AlbumList
-              year={year} month={month}
-              recordDays={recordDays}
-              onDayPress={handleDayPress}
-            />
-          ) : (
-            <MemoryList summaries={memorySummaries} enabled={memoryEnabled} />
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {view === 'calendar' && (
+            <>
+              <View style={styles.monthRow}>
+                <TouchableOpacity onPress={goToPrev} hitSlop={20}>
+                  <View style={styles.chevronBox}><Chevron dir="left" /></View>
+                </TouchableOpacity>
+                <Text style={styles.monthTitle} numberOfLines={1}>{year}년 {month + 1}월</Text>
+                <TouchableOpacity onPress={goToNext} hitSlop={20}>
+                  <View style={styles.chevronBox}><Chevron dir="right" /></View>
+                </TouchableOpacity>
+              </View>
+              <CalendarGrid
+                year={year} month={month} today={today}
+                recordDays={recordDays} onDayPress={d => openDay(year, month, d)}
+              />
+            </>
           )}
-        </View>
-      </ScrollView>
+          {view === 'album' && (
+            <AlbumList today={today} onDayPress={openDay} />
+          )}
+        </ScrollView>
+      </View>
 
       <BottomNavBar activeTab="calendar" />
 
-      {/* 날짜 채팅 기록 모달 */}
+      {/* 날짜별 기록 카드 */}
       <Modal
         visible={modalVisible}
-        animationType="slide"
+        animationType="fade"
         transparent
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{modalDateLabel}</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={12}>
-                <Text style={styles.modalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView
-              style={styles.modalScroll}
-              contentContainerStyle={styles.modalScrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {modalRecord && (
-                <DayRecordSummary record={modalRecord} plantType={plantType} />
-              )}
-            </ScrollView>
-          </View>
-        </View>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setModalVisible(false)}
+        >
+          <TouchableOpacity activeOpacity={1}>
+            {modalRecord && (
+              <DayRecordCard
+                label={modalDateLabel}
+                record={modalRecord}
+                plantType={plantType}
+                stage={modalStage}
+              />
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
 }
 
-function MemoryList({ summaries, enabled }: { summaries: MemorySummary[]; enabled: boolean }) {
-  if (!enabled) {
-    return (
-      <View style={styles.memoryEmpty}>
-        <Text style={styles.memoryEmptyTitle}>기억 기능이 꺼져 있어요</Text>
-        <Text style={styles.emptyText}>홈 화면의 기억 설정에서 다시 켤 수 있어요.</Text>
-      </View>
-    );
-  }
-
-  if (summaries.length === 0) {
-    return (
-      <View style={styles.memoryEmpty}>
-        <Text style={styles.memoryEmptyTitle}>아직 기억된 내용이 없어요</Text>
-        <Text style={styles.emptyText}>대화를 마치면 중요한 내용이 한 문장으로 기록돼요.</Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.memoryList}>
-      {summaries.map(item => (
-        <View key={item.date} style={styles.memoryEntry}>
-          <Text style={styles.memoryDate}>{item.date}</Text>
-          <Text style={styles.memorySummary}>{item.summary}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-// ─── 날짜 기록 요약 ───────────────────────────────────────────────
-function DayRecordSummary({ record, plantType }: { record: DailyRecord; plantType: PlantType }) {
+// ─── 날짜별 기록 카드 (362x480 고정, 요소는 Figma 절대 좌표) ───────
+function DayRecordCard({ label, record, plantType, stage }: {
+  label: string; record: DailyRecord; plantType: PlantType; stage: GrowthStage;
+}) {
   const completedIds = record.completedTaskIds ?? (record.waterDone ? ['water'] : []);
-
-  // 완료한 task + 완료 못 한 water task 모두 표시
-  const shownTaskIds = [...new Set([
-    ...completedIds,
-    ...(record.waterDone === false && !completedIds.includes('water') ? ['water'] : []),
-    ...(completedIds.length === 0 && record.waterDone ? ['water'] : []),
-  ])];
-
-  const hasContent = shownTaskIds.length > 0 || record.question || record.answer || record.plantPhotoUri || record.conversationSummary;
+  const photoUri = record.plantPhotoUri ?? record.answerImageUri;
+  const text = record.conversationSummary || record.answer || '';
 
   return (
-    <View style={sumStyles.container}>
-      {!hasContent && (
-        <Text style={sumStyles.skipped}>기록 내용이 없어요.</Text>
-      )}
+    <View style={styles.recordCard}>
+      <Text style={styles.recordTitle}>{label}</Text>
 
-      {/* task 완료 현황 */}
-      {shownTaskIds.length > 0 && (
-        <View style={sumStyles.section}>
-          <Text style={sumStyles.sectionTitle}>오늘의 관리</Text>
-          {shownTaskIds.map(taskId => {
-            const done = completedIds.includes(taskId);
-            return (
-              <View key={taskId} style={sumStyles.taskRow}>
-                <Text style={[sumStyles.taskCheck, done ? sumStyles.taskDone : sumStyles.taskSkip]}>
-                  {done ? '✓' : '✗'}
-                </Text>
-                <Text style={sumStyles.taskLabel}>{getTaskLabel(plantType, taskId)}</Text>
-              </View>
-            );
-          })}
-        </View>
-      )}
+      <View style={styles.recordImageArea}>
+        {photoUri ? (
+          <Image source={{ uri: photoUri }} style={styles.recordPhoto} resizeMode="cover" />
+        ) : (
+          // 사진이 없으면 그날의 캐릭터만 표시
+          <View style={styles.recordPlant} pointerEvents="none">
+            <PlantCharacter plantType={plantType} stage={stage} width={101} />
+          </View>
+        )}
+      </View>
 
-      {record.conversationSummary ? (
-        <View style={sumStyles.section}>
-          <Text style={sumStyles.sectionTitle}>대화 요약</Text>
-          <Text style={sumStyles.answer}>{record.conversationSummary}</Text>
-        </View>
-      ) : null}
+      <Text style={styles.recordText} numberOfLines={4}>{text}</Text>
 
-      {/* 오늘의 질문 + 답변 */}
-      {(record.question || record.answer) ? (
-        <View style={sumStyles.section}>
-          <Text style={sumStyles.sectionTitle}>오늘의 기록</Text>
-          {record.question ? <Text style={sumStyles.question}>{record.question}</Text> : null}
-          {record.answerImageUri ? (
-            <Image source={{ uri: record.answerImageUri }} style={sumStyles.answerImage} resizeMode="cover" />
-          ) : record.answer ? (
-            <View style={sumStyles.answerBox}>
-              <Text style={sumStyles.answer}>{record.answer}</Text>
-            </View>
-          ) : (
-            <Text style={sumStyles.skipped}>건너뜀</Text>
-          )}
-        </View>
-      ) : null}
-
-      {record.plantPhotoUri ? (
-        <View style={sumStyles.section}>
-          <EmojiText style={sumStyles.sectionTitle}>오늘의 식물 사진 📸</EmojiText>
-          <Image source={{ uri: record.plantPhotoUri }} style={sumStyles.plantPhoto} resizeMode="cover" />
-        </View>
-      ) : null}
+      <View style={styles.recordFooter}>
+        <ActionIcon kind="water"  active={completedIds.includes('water')}    height={20.05} />
+        <ActionIcon kind="sun"    active={completedIds.includes('sunlight')} height={22.56} />
+        <ActionIcon kind="camera" active={!!photoUri || record.recordDone}   height={16.29} />
+        <ActionIcon kind="search" active={completedIds.includes('observe')}  height={19.42} />
+      </View>
     </View>
   );
 }
-
-const sumStyles = StyleSheet.create({
-  container:    { gap: 20 },
-  section:      { gap: 10 },
-  sectionTitle: { fontFamily: 'ahn2006-B', fontSize: 20, color: COLORS.green },
-  taskRow:      { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  taskCheck:    { fontFamily: 'Paperlogy-5Medium', fontSize: 16, width: 20, textAlign: 'center' },
-  taskDone:     { color: COLORS.green },
-  taskSkip:     { color: COLORS.textTertiary },
-  taskLabel:    { fontFamily: 'Paperlogy-5Medium', fontSize: 14, color: COLORS.textPrimary },
-  question:     { fontFamily: 'Paperlogy-5Medium', fontSize: 13, color: COLORS.textSecondary, lineHeight: 20 },
-  answerBox:    { backgroundColor: COLORS.cardBg, borderRadius: 12, borderWidth: 1.5,
-                  borderColor: COLORS.outline, padding: 12 },
-  answer:       { fontFamily: 'Paperlogy-4Regular', fontSize: 14, color: COLORS.textPrimary, lineHeight: 22 },
-  skipped:      { fontFamily: 'Paperlogy-4Regular', fontSize: 13, color: COLORS.textTertiary },
-  answerImage:  { width: '100%', height: 200, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.outline },
-  plantPhoto:   { width: '100%', height: 220, borderRadius: 16, borderWidth: 1.5, borderColor: COLORS.outline },
-});
 
 // ─── 캘린더 그리드 ────────────────────────────────────────────────
 function CalendarGrid({ year, month, today, recordDays, onDayPress }: {
@@ -359,23 +262,67 @@ function CalendarGrid({ year, month, today, recordDays, onDayPress }: {
   onDayPress: (day: number) => void;
 }) {
   const grid = buildMonthGrid(year, month);
+  const rows = grid.length / 7;
   const isCurrentMonth = year === today.getFullYear() && month === today.getMonth();
 
+  // 물주기 완료한 날 (💧 뱃지) — 기록 완료 전이라도 task 완료 즉시 표시하기 위해 growthStore도 확인
+  const [waterDays, setWaterDays] = useState<number[]>([]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const set = new Set<number>();
+      const monthPrefix = getDateStringForMonthDay(year, month, 1).slice(0, 7);
+      try {
+        const gs = await loadGrowthState();
+        gs?.completedTasks.forEach(t => {
+          if (t.taskId === 'water' && t.completedAt.startsWith(monthPrefix)) {
+            set.add(parseInt(t.completedAt.split('-')[2], 10));
+          }
+        });
+      } catch {}
+      await Promise.all(recordDays.map(async day => {
+        const rec = await storage.getDailyRecord(getDateStringForMonthDay(year, month, day));
+        if (rec && (rec.waterDone || rec.completedTaskIds?.includes('water'))) set.add(day);
+      }));
+      if (alive) setWaterDays([...set]);
+    })();
+    return () => { alive = false; };
+  }, [year, month, recordDays]);
+
+  const hasRec = (d: number) => recordDays.includes(d);
+  // 3일 이상 연속 기록된 구간: 양 끝은 원, 사이 날짜는 띠로 표시
+  const runInfo = (d: number): { band: boolean; middle: boolean; left: boolean; right: boolean } => {
+    const none = { band: false, middle: false, left: false, right: false };
+    if (!hasRec(d)) return none;
+    let start = d; while (hasRec(start - 1)) start -= 1;
+    let end = d;   while (hasRec(end + 1))   end += 1;
+    if (end - start + 1 < 3) return none;
+    return { band: true, middle: d > start && d < end, left: d > start, right: d < end };
+  };
+
   return (
-    <View>
-      <View style={styles.weekRow}>
+    <View style={styles.gridWrap}>
+      <View style={styles.weekHeaderRow}>
         {DAY_HEADERS.map((d, i) => (
           <View key={i} style={styles.dayCell}>
-            <Text style={styles.dayHeader}>{d}</Text>
+            <Text style={[styles.dayHeader, (i === 0 || i === 6) && styles.dayHeaderWeekend]}>{d}</Text>
           </View>
         ))}
       </View>
-      {Array.from({ length: 6 }).map((_, row) => (
+
+      {Array.from({ length: rows }).map((_, row) => (
         <View key={row} style={styles.weekRow}>
           {grid.slice(row * 7, row * 7 + 7).map((entry, col) => {
-            const isToday    = isCurrentMonth && entry.type === 'cur' && entry.day === today.getDate();
-            const hasRecord  = entry.type === 'cur' && recordDays.includes(entry.day);
-            const pressable  = entry.type === 'cur' && hasRecord;
+            const cur       = entry.type === 'cur';
+            const isToday   = isCurrentMonth && cur && entry.day === today.getDate();
+            const record    = cur && hasRec(entry.day);
+            const run       = cur ? runInfo(entry.day) : runInfo(-99);
+            const middle    = run.middle;
+            const water     = cur && waterDays.includes(entry.day);
+            const left      = run.left && col > 0;     // 주 경계에서는 띠를 끊음
+            const right     = run.right && col < 6;
+            const pressable = cur && record;
+
             return (
               <TouchableOpacity
                 key={col}
@@ -384,22 +331,34 @@ function CalendarGrid({ year, month, today, recordDays, onDayPress }: {
                 activeOpacity={pressable ? 0.7 : 1}
                 disabled={!pressable}
               >
-                <View style={styles.dayCellNumber}>
-                  {isToday ? (
-                    <Grad colors={['#f3f4f1', '#b5ff22']} style={styles.todayCell}>
-                      <Text style={styles.todayText}>{entry.day}</Text>
-                    </Grad>
-                  ) : (
-                    <Text style={[
-                      styles.dateText,
-                      entry.type !== 'cur' && styles.prevNextText,
-                      hasRecord && styles.recordText
-                    ]}>
-                      {entry.day}
-                    </Text>
-                  )}
+                {/* 연속 기록 띠 */}
+                {(left || right) && (
+                  <View style={styles.bandRow} pointerEvents="none">
+                    <View style={[styles.bandHalf, left && styles.bandOn]} />
+                    <View style={[styles.bandHalf, right && styles.bandOn]} />
+                  </View>
+                )}
+
+                {/* 오늘: 기록 전 회색 → 기록 완료 시 라임 */}
+                <View style={[
+                  styles.dateCircle,
+                  record && !middle && styles.dateCircleRecord,
+                  isToday && !record && styles.dateCircleToday,
+                ]}>
+                  <Text style={[
+                    styles.dateText,
+                    !cur && styles.prevNextText,
+                    isToday && !record && styles.todayText,
+                  ]}>
+                    {entry.day}
+                  </Text>
                 </View>
-                {hasRecord && <HeartImage width={12} height={12} />}
+
+                {water && (
+                  <View style={styles.waterBadge} pointerEvents="none">
+                    <ActionIcon kind="water" height={20.05} color={COLORS.waterBadge} />
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -410,196 +369,209 @@ function CalendarGrid({ year, month, today, recordDays, onDayPress }: {
 }
 
 // ─── 앨범 뷰 ──────────────────────────────────────────────────────
-function AlbumList({ year, month, recordDays, onDayPress }: {
-  year: number; month: number; recordDays: number[];
-  onDayPress: (day: number) => void;
+type AlbumMonth = { year: number; month: number; items: { day: number; uri: string }[] };
+
+function AlbumList({ today, onDayPress }: {
+  today: Date; onDayPress: (y: number, m: number, d: number) => void;
 }) {
-  const [photoMap, setPhotoMap] = useState<Record<string, string>>({});
-  const [loaded, setLoaded] = useState(false);
+  const [months, setMonths] = useState<AlbumMonth[] | null>(null);
 
   useEffect(() => {
-    setLoaded(false);
+    let alive = true;
     (async () => {
-      const map: Record<string, string> = {};
-      await Promise.all(recordDays.map(async day => {
-        const dateKey = getDateStringForMonthDay(year, month, day);
-        const record = await storage.getDailyRecord(dateKey);
-        if (record?.plantPhotoUri) {
-          map[dateKey] = record.plantPhotoUri;
-        } else {
-          const photos = await storage.getPlantPhotos(dateKey);
-          if (photos[0]) map[dateKey] = photos[0];
-        }
-      }));
-      setPhotoMap(map);
-      setLoaded(true);
+      // 첫 기록 월 ~ 이번 달까지 최신순
+      const first = await storage.getFirstRecordDate();
+      const start = first ? new Date(first + 'T00:00:00') : today;
+      const list: AlbumMonth[] = [];
+      let y = today.getFullYear();
+      let m = today.getMonth();
+      const startKey = start.getFullYear() * 12 + start.getMonth();
+      while (y * 12 + m >= startKey) {
+        const days = (await storage.getRecordedDaysForMonth(y, m)).sort((a, b) => b - a);
+        const items: { day: number; uri: string }[] = [];
+        await Promise.all(days.map(async day => {
+          const dateKey = getDateStringForMonthDay(y, m, day);
+          const record = await storage.getDailyRecord(dateKey);
+          let uri = record?.plantPhotoUri;
+          if (!uri) {
+            const photos = await storage.getPlantPhotos(dateKey);
+            uri = photos[0];
+          }
+          if (uri) items.push({ day, uri });
+        }));
+        items.sort((a, b) => b.day - a.day);
+        if (items.length > 0) list.push({ year: y, month: m, items });
+        m -= 1;
+        if (m < 0) { m = 11; y -= 1; }
+      }
+      if (alive) setMonths(list);
     })();
-  }, [year, month, recordDays]);
+    return () => { alive = false; };
+  }, [today]);
 
-  // 사진이 실제로 있는 날만 추림
-  const photoDays = loaded
-    ? [...recordDays]
-        .sort((a, b) => a - b)
-        .filter(day => !!photoMap[getDateStringForMonthDay(year, month, day)])
-    : [];
+  if (months === null) return null;
 
-  if (loaded && photoDays.length === 0) {
+  if (months.length === 0) {
     return (
       <View style={styles.emptyAlbum}>
-        <EmojiText style={styles.emptyText}>이번 달 사진 기록이 없어요 🌱</EmojiText>
+        <Text style={styles.emptyText}>아직 사진 기록이 없어요</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.albumList}>
-      {photoDays.map(day => {
-        const label    = `${SHORT_MONTHS[month]} ${day}, ${year}`;
-        const dateKey  = getDateStringForMonthDay(year, month, day);
-        const photoUri = photoMap[dateKey];
-        return (
-          <TouchableOpacity
-            key={dateKey}
-            style={styles.albumEntry}
-            onPress={() => onDayPress(day)}
-            activeOpacity={0.75}
-          >
-            <Text style={styles.albumDate}>{label}</Text>
-            <Image source={{ uri: photoUri }} style={styles.albumPhoto} resizeMode="cover" />
-          </TouchableOpacity>
-        );
-      })}
+    <View style={styles.albumWrap}>
+      {months.map(({ year, month, items }) => (
+        <View key={`${year}-${month}`} style={styles.albumSection}>
+          <Text style={styles.albumMonth}>{year}년 {month + 1}월</Text>
+          <View style={styles.albumGrid}>
+            {items.map(({ day, uri }) => (
+              <TouchableOpacity
+                key={day}
+                activeOpacity={0.8}
+                onPress={() => onDayPress(year, month, day)}
+              >
+                <Image source={{ uri }} style={styles.albumPhoto} resizeMode="cover" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      ))}
     </View>
   );
 }
 
-// ─── 스타일 ───────────────────────────────────────────────────────
+// ─── 스타일 (수치는 Figma 402x874 프레임 기준) ─────────────────────
+const CELL_H = 69.5;
+
 const styles = StyleSheet.create({
-  safe:          { flex: 1, backgroundColor: COLORS.bg },
+  safe:          { flex: 1, backgroundColor: COLORS.headerBg },
+  body:          { flex: 1, backgroundColor: COLORS.bg },
   scroll:        { flex: 1 },
   scrollContent: { paddingBottom: 24 },
 
-  // 탭 스위처
+  // 탭 (밑줄): 62x45, 간격 50, 상하 패딩 30
   tabRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginHorizontal: 24,
-    marginTop: 16,
-    marginBottom: 12,
-    height: 54,
+    justifyContent: 'center',
+    gap: 50,
+    paddingTop: 30,
+    paddingBottom: 30,
   },
-  tabWrapper: { flex: 1 },
-  tabActive: {
-    flex: 1,
-    borderRadius: 9999,
-    borderWidth: 1.5,
-    borderColor: COLORS.outline,
+  tabRowAlbum: { paddingBottom: 10 },   // 앨범 프레임: 탭 영역 85 (월 라벨 y=181)
+  tab: { width: 62, height: 45, alignItems: 'center' },
+  tabUnderline: {
+    position: 'absolute', left: 0, right: 0, bottom: -0.75,
+    height: 1.5, backgroundColor: COLORS.pine,
+  },
+  tabText: {
+    fontFamily: FONTS.bold,
+    fontSize: 22,
+    lineHeight: 45,
+    color: COLORS.tabTextOff,
+    width: 80,
+    textAlign: 'center',
+  },
+  tabTextActive: { color: COLORS.pine },
+
+  // 월 헤더: 화살표 15x15 | 간격 20 | 제목 22px(최소 폭 111) | 간격 19 | 화살표 15x15
+  // 두 자리 월에서도 줄바꿈 없이 제목이 좌우로 늘어나도록 폭 고정 대신 minWidth
+  monthRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 20,
+    marginTop: 27,        // 탭 영역 하단(174) → 제목 상단(204, 줄높이 20 → 26 기준 201)
+    height: 26,
   },
-  tabInactive: {
-    flex: 1,
-    borderRadius: 9999,
-    borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    backgroundColor: COLORS.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabActiveText:   { fontFamily: 'ahn2006-B', fontSize: 18, color: COLORS.outline },
-  tabInactiveText: { fontFamily: 'ahn2006-M', fontSize: 18, color: 'rgba(71,84,103,0.8)' },
-
-  // 카드
-  card: {
-    marginHorizontal: 16,
-    backgroundColor: COLORS.bg,
-    borderRadius: 32,
-    borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    paddingHorizontal: 21,
-    paddingVertical: 21,
-    shadowColor: 'rgba(90,158,58,0.06)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
+  chevronBox: { width: 15, height: 15, alignItems: 'center', justifyContent: 'center' },
+  monthTitle: {
+    fontFamily: FONTS.bold,
+    fontSize: 22,
+    lineHeight: 26,
+    color: COLORS.pine,
+    minWidth: 111,
+    flexShrink: 0,
+    textAlign: 'center',
   },
 
-  // 월 헤더
-  monthRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  monthTitle: { fontFamily: 'ahn2006-B', fontSize: 25, color: COLORS.green },
-  monthNav:  { flexDirection: 'row', gap: 12 },
-  navArrow:  { fontFamily: 'ahn2006-B', fontSize: 20, color: COLORS.textPrimary },
+  // 요일 / 날짜
+  gridWrap:      { marginTop: 33, paddingHorizontal: 16 },
+  weekHeaderRow: { flexDirection: 'row', marginBottom: 36 },
+  weekRow:       { flexDirection: 'row', height: CELL_H },
+  dayCell:       { flex: 1, alignItems: 'center', justifyContent: 'flex-start' },
+  dayHeader:     { fontFamily: FONTS.bold, fontSize: 17, lineHeight: 22, paddingVertical: 8, color: '#191C1B' },
+  dayHeaderWeekend: { color: COLORS.weekend },
 
-  // 요일 헤더
-  weekRow:   { flexDirection: 'row', marginBottom: 4 },
-  dayCell:   { flex: 1, alignItems: 'center', paddingVertical: 4, gap: 3 },
-  dayHeader: { fontFamily: 'ahn2006-B', fontSize: 20, color: COLORS.green },
-
-  // 날짜 숫자 고정 높이 래퍼 (오늘 박스와 일반 텍스트의 y좌표 통일)
-  dayCellNumber: { height: 32, alignItems: 'center', justifyContent: 'center' },
-
-  // 날짜 셀
-  dateText:    { fontFamily: 'ahn2006-M', fontSize: 20, color: COLORS.textPrimary, lineHeight: 22 },
-  prevNextText: { color: COLORS.prevMonthText },
-  recordText:  { color: COLORS.green },
-
-  // 오늘 셀
-  todayCell: {
-    width: 32, height: 32, borderRadius: 12,
-    borderWidth: 1.5, borderColor: COLORS.outline,
+  dateCircle: {
+    width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
   },
-  todayText: { fontFamily: 'ahn2006-B', fontSize: 20, color: COLORS.outline },
+  dateCircleRecord: { backgroundColor: COLORS.lime },
+  dateCircleToday:  { backgroundColor: COLORS.line },
+  dateText:     { fontFamily: FONTS.bold, fontSize: 16, lineHeight: 22, color: '#191C1B' },
+  prevNextText: { color: COLORS.prevMonthText },
+  todayText:    { color: '#FFFFFF' },
 
-  // 기록 점
-  recordDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: COLORS.calendarDot },
+  // 연속 기록 띠: 시작 원 중심 ~ 끝 원 중심
+  bandRow:  { position: 'absolute', top: 0, left: 0, right: 0, height: 40, flexDirection: 'row' },
+  bandHalf: { flex: 1 },
+  bandOn:   { backgroundColor: COLORS.limeLight },
 
-  // 앨범
-  albumList:          { gap: 20 },
-  albumEntry:         { gap: 8 },
-  albumDate:          { fontFamily: 'Paperlogy-5Medium', fontSize: 15, color: COLORS.green },
-  albumPhoto:         { width: 180, height: 180, borderRadius: 12, backgroundColor: '#E0E0E0',
-                        borderWidth: 1, borderColor: COLORS.outline, alignItems: 'center', justifyContent: 'center' },
-  albumPhotoEmpty:       { backgroundColor: '#E0E0E0' },
-  albumPhotoPlaceholder: { fontSize: 40 },
-  emptyAlbum:         { paddingVertical: 32, alignItems: 'center' },
-  emptyText:          { fontFamily: 'Paperlogy-5Medium', fontSize: 15, color: COLORS.textTertiary },
-  memoryList:         { gap: 12 },
-  memoryEntry:        { gap: 8, padding: 16, borderRadius: 16, borderWidth: 1.5, borderColor: COLORS.outline, backgroundColor: COLORS.cardBg },
-  memoryDate:         { fontFamily: 'ahn2006-B', fontSize: 15, color: COLORS.green },
-  memorySummary:      { fontFamily: 'Paperlogy-4Regular', fontSize: 15, color: COLORS.textPrimary, lineHeight: 23 },
-  memoryEmpty:        { alignItems: 'center', paddingVertical: 44, gap: 10 },
-  memoryEmptyTitle:   { fontFamily: 'ahn2006-B', fontSize: 19, color: COLORS.textPrimary },
+  // 물방울 뱃지: 날짜 원 우상단 (원 위쪽 10px, 원 오른쪽 끝에 맞춤)
+  waterBadge: { position: 'absolute', top: -10, left: '50%', marginLeft: 4, zIndex: 2 },
 
-  // 모달
+  // 앨범: 좌우 46, 사진 150x150 간격 10
+  albumWrap:    { paddingHorizontal: 46, paddingTop: 27, gap: 27 },
+  albumSection: { gap: 10 },
+  albumMonth:   { fontFamily: FONTS.extraBold, fontSize: 15, lineHeight: 20, color: COLORS.green },
+  albumGrid:    { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  albumPhoto: {
+    width: 150, height: 150, borderRadius: 4,
+    backgroundColor: '#E0E0E0', borderWidth: 1, borderColor: COLORS.line,
+  },
+  emptyAlbum: { paddingVertical: 60, alignItems: 'center' },
+  emptyText:  { fontFamily: FONTS.medium, fontSize: 15, color: COLORS.textTertiary },
+
+  // 날짜별 기록 카드: 362x480 고정, 내부는 절대 좌표
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  modalContainer: {
+  recordCard: {
+    width: 362,
+    height: 480,
     backgroundColor: COLORS.bg,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    borderBottomWidth: 0,
-    minHeight: 200,
-    maxHeight: '75%',
-    paddingBottom: 32,
-    flexShrink: 1,
+    borderRadius: 10,
   },
-  modalHeader: {
+  recordTitle: {
+    position: 'absolute', top: 51, left: 0, right: 0,
+    textAlign: 'center',
+    fontFamily: FONTS.bold, fontSize: 20, lineHeight: 20,
+    color: COLORS.outline,
+  },
+  recordImageArea: { position: 'absolute', top: 94, left: 51, width: 260, height: 180 },
+  recordPhoto: {
+    width: 260, height: 180, borderRadius: 5,
+    borderWidth: 1, borderColor: COLORS.line, backgroundColor: '#E0E0E0',
+  },
+  // 캐릭터 101×150을 사진 영역(260×180) 중앙에 배치
+  recordPlant: { position: 'absolute', left: 79.5, top: 15, width: 101, height: 150 },
+  recordText: {
+    position: 'absolute', top: 299, left: 51, width: 260, height: 80,
+    fontFamily: FONTS.bold, fontSize: 13, lineHeight: 20,
+    color: '#191C1B',
+  },
+  recordFooter: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, height: 63,
+    backgroundColor: COLORS.limeLight,
+    borderBottomLeftRadius: 10, borderBottomRightRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderBottomWidth: 1.5,
-    borderBottomColor: COLORS.outline,
+    justifyContent: 'flex-end',
+    gap: 9,
+    paddingRight: 23,
   },
-  modalTitle: { fontFamily: 'ahn2006-B', fontSize: 25, color: COLORS.textPrimary, marginTop: 5 },
-  modalClose: { fontFamily: 'ahn2006-B', fontSize: 16, color: COLORS.textTertiary },
-  modalScroll: { flexGrow: 1, flexShrink: 1 },
-  modalScrollContent: { padding: 16, gap: 4, paddingBottom: 8 },
 });

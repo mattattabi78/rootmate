@@ -39,15 +39,15 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.btnDisabledBg,
+    backgroundColor: COLORS.tabTextOff,
   },
   dotActive: {
     width: 20,
-    backgroundColor: COLORS.green,
+    backgroundColor: COLORS.pine,
   },
   dotDone: {
     width: 8,
-    backgroundColor: COLORS.green,
+    backgroundColor: COLORS.pine,
     opacity: 0.4,
   },
 });

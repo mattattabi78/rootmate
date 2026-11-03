@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
-  Dimensions,
   Image,
   Modal,
+  Switch,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,14 +14,15 @@ import {
 import { PlantFacePosition } from '../services/ai';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
-import { COLORS } from '../constants';
+import { COLORS, FONTS } from '../constants';
 import { storage } from '../store/storage';
 import TopAppBar from '../components/common/TopAppBar';
 import BottomNavBar from '../components/common/BottomNavBar';
 import PlantCharacter from '../components/common/PlantCharacter';
+import ActionIconButton from '../components/common/ActionIconButton';
 import {
   PlantType, GrowthStage, Expression,
-  PLANT_EXPRESSIONS, growthStageToNumber, getExpressionImage,
+  PLANT_EXPRESSIONS, getExpressionImage,
 } from '../constants/character';
 import {
   PlantSituation, SITUATION_LABELS, ALL_SITUATIONS,
@@ -39,23 +40,12 @@ import { isSupportedTask, PLANT_TASKS, getRandomNotification } from '../constant
 import { getActiveTaskIds } from '../constants/growthStages';
 import * as Notifications from 'expo-notifications';
 
-let LinearGradient: React.ComponentType<any> | null = null;
-try { LinearGradient = require('expo-linear-gradient').LinearGradient; } catch {}
-
-function Grad({ colors, style, children }: { colors: string[]; style?: any; children?: React.ReactNode }) {
-  if (LinearGradient) return <LinearGradient colors={colors} style={style}>{children}</LinearGradient>;
-  return <View style={[style, { backgroundColor: colors[colors.length - 1] }]}>{children}</View>;
-}
-
-const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const DAY_KOR = ['일','월','화','수','목','금','토'];
 function formatDate(d: Date) {
-  return `${MONTHS[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')}, ${d.getFullYear()}`;
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}.${mm}.${dd} (${DAY_KOR[d.getDay()]})`;
 }
-
-import BubbleImage from '../assets/images/chat-bubble.svg';
-import ChatImage from '../assets/images/chat-icon.svg';
-import HeartImage from '../assets/images/heart.svg';
-
 
 const EXPR_LABEL: Record<Expression, string> = {
   default: '기본', tear: '눈물', sparkle: '반짝', sad: '시무룩',
@@ -66,9 +56,7 @@ const EXPR_LABEL: Record<Expression, string> = {
 export default function HomeScreen() {
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [nickname, setNickname]           = useState('');
-  const [plantNickname, setPlantNickname] = useState('');
   const [plantType, setPlantType]         = useState<PlantType>('tomato');
-  const [plantStage, setPlantStage]       = useState<GrowthStage>(1);
   const [plantedAt, setPlantedAt]         = useState(new Date().toISOString());
   const [streak, setStreak]               = useState(0);
   const [todayDone, setTodayDone]         = useState(false);
@@ -79,6 +67,7 @@ export default function HomeScreen() {
   const [generatedFacePos, setGeneratedFacePos] = useState<PlantFacePosition | null>(null);
 
   const [devMenuVisible, setDevMenuVisible] = useState(false);
+  const [memoryEnabled, setMemoryEnabled]   = useState(true);   // 대화 기억 (개발자 메뉴로 이전)
   const [charDevMode, setCharDevMode]       = useState(false);
   const [devStage, setDevStage]             = useState<GrowthStage>(1);
   const [devExpr, setDevExpr]               = useState<Expression>('default');
@@ -112,14 +101,11 @@ export default function HomeScreen() {
           storage.getLastRecordDate(),
         ]);
         setNickname(nick ?? '');
-        setPlantNickname(plantData?.nickname ?? '');
         if (plantData?.id) setPlantType(plantData.id as PlantType);
-        if (plantData?.growthStage) setPlantStage(growthStageToNumber(plantData.growthStage));
         if (plantData?.adoptedAt) setPlantedAt(plantData.adoptedAt);
         setStreak(streakCount);
         setTodayDone(record !== null);
         setLastRecordDate(lastRec);
-        if (!charDevMode) setDevStage(growthStageToNumber(plantData?.growthStage ?? 'seed'));
         // 저장된 생성 이미지 복원
         if (savedPlant) {
           setGeneratedPlantUri(savedPlant.uri);
@@ -149,15 +135,6 @@ export default function HomeScreen() {
     });
   }, []);
 
-  const greeting = nickname ? `${nickname},` : '안녕하세요,';
-
-  const josa = (word: string, pair: [string, string]) => {
-    if (!word) return pair[1];
-    const code = word.charCodeAt(word.length - 1);
-    const hasConsonant = code >= 0xAC00 && code <= 0xD7A3 && (code - 0xAC00) % 28 !== 0;
-    return hasConsonant ? pair[0] : pair[1];
-  };
-
   // 마지막 기록일로부터 며칠이 지났는지 (0 = 오늘, 1 = 어제, 7+ = 오랜만 복귀)
   const daysNeglected = (() => {
     if (!lastRecordDate) return 0;
@@ -168,19 +145,17 @@ export default function HomeScreen() {
 
   const headingMain = pickSubHeading(plantType, streak, daysNeglected);
 
-  const sub = (() => {
-    if (daysNeglected >= 7 && plantNickname) {
-      return `${plantNickname}${josa(plantNickname, ['이', '가'])} 방치된지 ${daysNeglected}일 째...`;
-    }
-    if (nickname && plantNickname) {
-      return `${nickname}${josa(nickname, ['과', '와'])} ${plantNickname}${josa(plantNickname, ['이', '가'])} ${streak > 0 ? streak + '일 연속 관리 중' : '함께 시작해요'}`;
-    }
-    return streak > 0 ? `${streak}일 연속 관리 중` : '오늘 첫 관리를 시작해봐요';
-  })();
-
   const goToChat = () => router.push('/chat' as any);
 
-  const openMemorySettings = () => router.push('/settings' as any);
+  // 오늘 해야 하고 아직 완료하지 않은 task 인지
+  const isTaskPending = (taskId: string) =>
+    todayTasks.some(t => t.id === taskId) && !growthCompletedIds.includes(taskId);
+
+  // 대화 기억 on/off — 끄면 저장된 장기 기억 요약도 삭제됨
+  const toggleMemory = async (enabled: boolean) => {
+    await storage.setMemoryEnabled(enabled);
+    setMemoryEnabled(enabled);
+  };
 
   // 개발 모드: 단계/표정/상황 선택
   const handleDevStage = (s: GrowthStage) => setDevStage(s);
@@ -191,7 +166,8 @@ export default function HomeScreen() {
   };
 
   // 표시에 사용할 stage / expression
-  const displayStage = charDevMode ? devStage : plantStage;
+  // 대체(기본) 캐릭터 이미지는 성장 상태의 현재 단계를 따라감 (AI 캐릭터가 없을 때 표시)
+  const displayStage = (charDevMode ? devStage : growthCurrentStage) as GrowthStage;
   const displayExpr  = charDevMode ? devExpr  : autoExpr;
 
   const handleAdvanceDay = async () => {
@@ -273,140 +249,68 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <TopAppBar
-        rightAction={
-          <View style={styles.headerActions}>
-            <TouchableOpacity onPress={openMemorySettings} hitSlop={8} style={styles.memoryButton}>
-              <Text style={styles.memoryButtonText}>설정</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={goToChat} hitSlop={10}>
-              <ChatImage width={styles.chatIcon.width} height={styles.chatIcon.height} />
-            </TouchableOpacity>
-          </View>
-        }
-      />
+      <TopAppBar />
 
+      <View style={styles.body}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* 날짜 + 인사 헤딩 */}
-        <View style={styles.headerSection}>
-          <View style={styles.dateRow}>
-            <TouchableOpacity onLongPress={() => setDevMenuVisible(true)} delayLongPress={1500}>
-              <Text style={styles.date}>{formatDate(today)}</Text>
-            </TouchableOpacity>
-            {streak > 0 && (
-              <View style={styles.streakRow}>
-                <HeartImage width={styles.heartIcon.width} height={styles.heartIcon.height} />
-                <Text style={[styles.streakBadge, !todayDone && styles.streakBadgeInactive]}>
-                  x {streak}
-                </Text>
-              </View>
-            )}
-          </View>
-          <Text style={styles.heading}>{greeting}{'\n'}{headingMain}</Text>
-          <Text style={styles.subHeading}>{sub}</Text>
+        {/* 날짜 (길게 누르면 개발자 메뉴) */}
+        <View style={styles.dateRow}>
+          <TouchableOpacity onLongPress={() => { storage.isMemoryEnabled().then(setMemoryEnabled); setDevMenuVisible(true); }} delayLongPress={1500} activeOpacity={1}>
+            <Text style={styles.date}>{formatDate(today)}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* 식물 캐릭터 */}
-        <View style={styles.plantZone} pointerEvents="box-none">
-          <View style={styles.plantCharWrap} pointerEvents="none">
-            {generatedPlantUri ? (
-              // 합성 이미지(식물+화분) + 감지된 화분 위치에 표정 오버레이
-              <View style={{ width: 220, height: 220 }}>
+        <View style={styles.plantZone} pointerEvents="none">
+          {generatedPlantUri ? (
+            // 합성 이미지(식물+화분) + 감지된 화분 위치에 표정 오버레이
+            <View style={{ width: 220, height: 220 }}>
+              <Image
+                source={{ uri: generatedPlantUri }}
+                style={{ width: 220, height: 220 }}
+                resizeMode="contain"
+              />
+              {generatedFacePos && (
                 <Image
-                  source={{ uri: generatedPlantUri }}
-                  style={{ width: 220, height: 220 }}
+                  source={getExpressionImage(plantType, displayExpr)}
+                  style={{
+                    position: 'absolute',
+                    width: 110, height: 110,
+                    left: (generatedFacePos.x / 100) * 220 - 55,
+                    top: (generatedFacePos.y / 100) * 220 - 55,
+                  }}
                   resizeMode="contain"
                 />
-                {generatedFacePos && (
-                  <Image
-                    source={getExpressionImage(plantType, displayExpr)}
-                    style={{
-                      position: 'absolute',
-                      width: 110, height: 110,
-                      left: (generatedFacePos.x / 100) * 220 - 55,
-                      top: (generatedFacePos.y / 100) * 220 - 55,
-                    }}
-                    resizeMode="contain"
-                  />
-                )}
-              </View>
-            ) : (
-              <PlantCharacter
-                plantType={plantType}
-                stage={displayStage}
-                expression={displayExpr}
-                size="large"
-              />
-            )}
-          </View>
-          {todayTasks.some(t => !growthCompletedIds.includes(t.id)) && (
-            <TouchableOpacity
-              style={(() => {
-                const screenW = Dimensions.get('window').width;
-                if (generatedPlantUri) {
-                  // 220px 합성 이미지 오른쪽 바로 옆
-                  return {
-                    ...styles.messageBubble,
-                    left: Math.min(screenW / 2 + 73, screenW - 52),
-                    right: undefined,
-                    bottom: 80,
-                  };
-                }
-                // 기본 PlantCharacter 옆
-                return { ...styles.messageBubble, left: Math.min(screenW / 2 + 63, screenW - 52), right: undefined, bottom: 74 };
-              })()}
-              activeOpacity={0.8}
-              onPress={goToChat}
-            >
-              <BubbleImage width={styles.bubbleIcon.width} height={styles.bubbleIcon.height} />
-            </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <PlantCharacter
+              plantType={plantType}
+              stage={displayStage}
+              expression={displayExpr}
+              size="large"
+            />
           )}
         </View>
 
-        {/* 오늘의 Tasks */}
-        <View style={styles.tasksSection}>
-          <Text style={styles.sectionTitle}>
-            {todayDone ? '오늘의 Tasks ✓' : '오늘의 TaskS'}
-          </Text>
-          <View style={styles.taskList}>
-            {todayTasks.length === 0 ? (
-              <View style={styles.taskEmptyRow}>
-                <Text style={styles.taskEmpty}>오늘 해야 할 task가 없어요 </Text>
-                <HeartImage width={styles.heartIcon.width} height={styles.heartIcon.height} />
-              </View>
-            ) : todayTasks.map(task => {
-              const isDone = growthCompletedIds.includes(task.id);
-              return (
-                <TouchableOpacity key={task.id} onPress={goToChat} activeOpacity={0.85}>
-                  <Grad colors={['#f3f4f1', '#b5ff22']} style={styles.taskCard}>
-                    <View style={styles.taskInfo}>
-                      <Text style={[styles.taskTitle, isDone && styles.taskTitleDone]}>
-                        {task.label}
-                      </Text>
-                      <Text style={styles.taskDesc} numberOfLines={1}>
-                        {task.description}
-                      </Text>
-                    </View>
-                    {isDone ? (
-                      <Grad colors={['#f3f4f1', '#b5ff22']} style={styles.actionBtn}>
-                        <Text style={styles.actionCheck}>✓</Text>
-                      </Grad>
-                    ) : (
-                      <Grad colors={['#f3f4f1', '#ff6565']} style={styles.actionBtn}>
-                        <Text style={styles.actionX}>✕</Text>
-                      </Grad>
-                    )}
-                  </Grad>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+        {/* 캐릭터 대사 */}
+        <Text style={styles.dialogue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+          {'\u201C'}{headingMain}{'\u201D'}
+        </Text>
+
+        {/* 액션 버튼: 물주기 / 햇볕에 두기 / 식물 사진 찍기(기록) / 식물 관찰 */}
+        <View style={styles.actionRow}>
+          <ActionIconButton kind="water"  active={isTaskPending('water')}    onPress={goToChat} />
+          <ActionIconButton kind="sun"    active={isTaskPending('sunlight')} onPress={goToChat} />
+          <ActionIconButton kind="camera" active={isTaskPending('photo')}    onPress={goToChat} />
+          <ActionIconButton kind="search" active={isTaskPending('observe')}  onPress={goToChat} />
         </View>
       </ScrollView>
+      </View>
 
       <BottomNavBar activeTab="home" />
 
@@ -421,14 +325,16 @@ export default function HomeScreen() {
                 <ScrollView showsVerticalScrollIndicator={false} style={styles.devScroll}>
 
                 {/* 리셋 섹션 */}
-                <TouchableOpacity style={styles.devBtn} onPress={handleClearToday}>
-                  <Text style={styles.devBtnText}>오늘 기록만 삭제</Text>
-                  <Text style={styles.devBtnSub}>채팅 흐름 재테스트</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.devBtn, styles.devBtnDanger]} onPress={handleResetAll}>
-                  <Text style={[styles.devBtnText, styles.devBtnDangerText]}>전체 초기화</Text>
-                  <Text style={styles.devBtnSub}>온보딩부터 다시 시작</Text>
-                </TouchableOpacity>
+                <View style={styles.devRow}>
+                  <TouchableOpacity style={[styles.devBtn, styles.devBtnHalf]} onPress={handleClearToday}>
+                    <Text style={styles.devBtnText}>오늘 기록만 삭제</Text>
+                    <Text style={styles.devBtnSub}>채팅 흐름 재테스트</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.devBtn, styles.devBtnHalf, styles.devBtnDanger]} onPress={handleResetAll}>
+                    <Text style={[styles.devBtnText, styles.devBtnDangerText]}>전체 초기화</Text>
+                    <Text style={styles.devBtnSub}>온보딩부터 다시 시작</Text>
+                  </TouchableOpacity>
+                </View>
 
                 {/* 알림 테스트 */}
                 <View style={styles.devDivider} />
@@ -444,7 +350,7 @@ export default function HomeScreen() {
                   <EmojiText style={styles.devSectionTitle}>🌱 캐릭터 개발</EmojiText>
                   <TouchableOpacity
                     style={[styles.devToggleChip, charDevMode && styles.devToggleChipOn]}
-                    onPress={() => setCharDevMode(v => !v)}
+                    onPress={() => { if (!charDevMode) setDevStage(growthCurrentStage as GrowthStage); setCharDevMode(!charDevMode); }}
                   >
                     <Text style={[styles.devToggleText, charDevMode && styles.devToggleTextOn]}>
                       {charDevMode ? 'ON' : 'OFF'}
@@ -463,8 +369,8 @@ export default function HomeScreen() {
                     {/* 단계 선택 */}
                     <Text style={styles.devCharLabel}>단계</Text>
                     <View style={styles.devChipWrap}>
-                      {([1,2,3,4,5,6,7,8] as GrowthStage[]).map(s => {
-                        const disabled = plantType === 'tulip' && s > 6;
+                      {([1,2,3,4,5,6,7,8,9] as GrowthStage[]).map(s => {
+                        const disabled = s > getMaxStage(plantType);
                         return (
                           <TouchableOpacity
                             key={s}
@@ -512,6 +418,22 @@ export default function HomeScreen() {
                   </>
                 )}
 
+                {/* 대화 기억 (설정 화면에서 이전) */}
+                <View style={styles.devDivider} />
+                <View style={styles.devCharHeader}>
+                  <EmojiText style={styles.devSectionTitle}>💬 대화 기억</EmojiText>
+                  <Switch
+                    value={memoryEnabled}
+                    onValueChange={toggleMemory}
+                    trackColor={{ false: '#C5C7C0', true: COLORS.lime }}
+                    thumbColor={COLORS.outline}
+                    accessibilityLabel="대화 기억"
+                  />
+                </View>
+                <Text style={styles.devCharInfo}>
+                  켜면 대화 요약을 저장해 다음 대화에 참고해요. 끄면 저장된 장기 기억 요약도 삭제돼요.
+                </Text>
+
                 {/* 날짜 시뮬레이션 섹션 */}
                 <View style={styles.devDivider} />
                 <EmojiText style={styles.devSectionTitle}>📅 날짜 시뮬레이션</EmojiText>
@@ -519,7 +441,7 @@ export default function HomeScreen() {
                   현재 (시뮬): {todayStr}
                   {getDevDateOffsetDays() > 0 ? ` (+${getDevDateOffsetDays()}일)` : ' (실제 날짜)'}
                 </Text>
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 6 }}>
                   <TouchableOpacity style={[styles.devBtn, { flex: 1 }]} onPress={handleAdvanceDay}>
                     <Text style={styles.devBtnText}>다음 날 →</Text>
                     <Text style={styles.devBtnSub}>+1일 이동</Text>
@@ -541,7 +463,7 @@ export default function HomeScreen() {
                   현재 설정: {devChatRounds}라운드
                   {'\n'}AI 질문에 여러 번 답변할 수 있습니다
                 </Text>
-                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center', marginTop: 10 }}>
                   <TouchableOpacity
                     style={[styles.devBtn, { flex: 0.5 }]}
                     onPress={() => {
@@ -553,7 +475,7 @@ export default function HomeScreen() {
                     <Text style={styles.devBtnText}>−</Text>
                   </TouchableOpacity>
                   <View style={{flex: 1, alignItems: 'center', paddingVertical: 8}}>
-                    <Text style={{fontFamily: 'Paperlogy-5Medium', fontSize: 18, color: COLORS.textPrimary}}>
+                    <Text style={{fontFamily: FONTS.bold, fontSize: 18, color: COLORS.outline}}>
                       {devChatRounds}
                     </Text>
                   </View>
@@ -617,102 +539,77 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe:    { flex: 1, backgroundColor: COLORS.bg },
+  safe:    { flex: 1, backgroundColor: COLORS.headerBg },   // 상태바 영역까지 라임 헤더 색
+  body:    { flex: 1, backgroundColor: COLORS.bg },
   scroll:  { flex: 1 },
-  content: { paddingBottom: 24 },
+  content: { flexGrow: 1, alignItems: 'center', paddingTop: 92, paddingBottom: 24 },   // 날짜 top 161
 
-  headerSection: { paddingHorizontal: 16, paddingTop: 6, gap: 5 },
-  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  date: { fontFamily: 'ahn2006-B', fontSize: 20, color: COLORS.green, marginTop: 10 },
-  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 },
-  heartIcon: { width: 22, height: 22 },
-  streakBadge: { fontFamily: 'ahn2006-B', fontSize: 20, color: COLORS.green },
-  streakBadgeInactive: { color: COLORS.textTertiary },
-  taskEmptyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
-  heading: { fontFamily: 'ahn2006-B', fontSize: 40, color: COLORS.textPrimary, lineHeight: 55, marginTop: 5 },
-  subHeading: { fontFamily: 'ahn2006-M', fontSize: 20, color: COLORS.green, marginTop: 10, lineHeight: 28 },
+  dateRow: { width: '100%', alignItems: 'center', justifyContent: 'center' },
+  date: { fontFamily: FONTS.extraBold, fontSize: 15, lineHeight: 20, color: COLORS.green },
 
-  plantZone: { height: 280, position: 'relative' },
-  generatedPlantWrap: { width: 220, height: 220 }, // fallback (genImageSize 없을 때)
-  generatedPlantExpr:  { position: 'absolute', width: 145, height: 145, bottom: 28, left: 38 },
-  aiTransferBtn: {
-    position: 'absolute', bottom: 10, left: 16,
-    width: 36, height: 36, borderRadius: 18,
-    borderWidth: 1.5, borderColor: COLORS.outline,
-    backgroundColor: COLORS.cardBg,
-    alignItems: 'center', justifyContent: 'center',
+  // 캐릭터 영역 230x340 (top 232 = 날짜 하단 181 + 51)
+  plantZone: { height: 340, marginTop: 51, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
+
+  // 대사: 폭 254, 줄높이 40 (캐릭터 하단 572 + 25)
+  dialogue: {
+    fontFamily: FONTS.bold, fontSize: 20, lineHeight: 40, height: 40, alignSelf: 'stretch', paddingHorizontal: 24,
+    color: COLORS.forest, textAlign: 'center', marginTop: 25,
   },
-  aiTransferBtnText: { fontSize: 18 },
-  plantCharWrap: { position: 'absolute', bottom: 8, left: 0, right: 0, alignItems: 'center' },
-  messageBubble: { position: 'absolute', bottom: 64, right: 100, width: 44, height: 44 },
-  bubbleIcon: { width: 44, height: 44 },
-  chatIcon: { width: 22, height: 32 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  memoryButton: { paddingVertical: 4 },
-  memoryButtonText: { fontFamily: 'ahn2006-M', fontSize: 13, color: COLORS.green },
 
-  tasksSection: { paddingHorizontal: 16, paddingBottom: 8, gap: 12 },
-  sectionTitle: { fontFamily: 'ahn2006-B', fontSize: 23, color: COLORS.green, marginTop: 20, lineHeight: 32 },
-  taskList: { gap: 10, paddingBottom: 16 },
-  taskCard: {
-    height: 80, borderRadius: 32, borderWidth: 1.5, borderColor: COLORS.outline,
-    paddingHorizontal: 17, paddingVertical: 17,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  taskInfo:      { flex: 1, paddingRight: 8 },
-  taskTitle:     { fontFamily: 'ahn2006-B', fontSize: 20, color: COLORS.textPrimary, lineHeight: 30 },
-  taskTitleDone: { color: COLORS.textTertiary, textDecorationLine: 'line-through' },
-  taskDesc:      { fontFamily: 'Paperlogy-5Medium', fontSize: 13, color: COLORS.green, lineHeight: 20 },
-  taskEmpty:     { fontFamily: 'ahn2006-M', fontSize: 16, color: COLORS.textTertiary, paddingVertical: 16, textAlign: 'center' },
-  actionBtn: {
-    width: 32, height: 32, borderRadius: 16, borderWidth: 1.5,
-    borderColor: COLORS.outline, alignItems: 'center', justifyContent: 'center',
-  },
-  actionX:     { fontFamily: 'ahn2006-B', fontSize: 20, color: COLORS.outline },
-  actionCheck: { fontFamily: 'ahn2006-B', fontSize: 20, color: COLORS.outline },
+  // 액션 버튼 45x45, 간격 ~13.6 (top 688 = 대사 하단 637 + 51)
+  actionRow: { flexDirection: 'row', justifyContent: 'center', gap: 13.6, marginTop: 51 },
 
-  // ─── 개발자 메뉴 modal ───────────────────────────────────────────
+  // ─── 개발자 메뉴 modal (새 디자인: 반경 10, #303a1e 테두리, SUITE, 라임 강조) ──
   devOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   devSheet: {
-    backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 20, gap: 8, maxHeight: '85%',
+    backgroundColor: COLORS.bg, borderTopLeftRadius: 10, borderTopRightRadius: 10,
+    borderWidth: 1.5, borderBottomWidth: 0, borderColor: '#303a1e',
+    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, gap: 14, maxHeight: '85%',
   },
-  devTitle: { fontFamily: 'Paperlogy-5Medium', fontSize: 15, color: COLORS.textTertiary, marginBottom: 4 },
+  devTitle: {
+    fontFamily: FONTS.extraBold, fontSize: 17, lineHeight: 24, color: COLORS.outline,
+    paddingBottom: 4,
+  },
 
   devBtn: {
-    backgroundColor: COLORS.bg, borderRadius: 14, borderWidth: 1.5,
-    borderColor: COLORS.outline, paddingHorizontal: 16, paddingVertical: 12, gap: 2,
+    backgroundColor: COLORS.bg, borderRadius: 10, borderWidth: 1.5,
+    borderColor: '#303a1e', paddingHorizontal: 16, paddingVertical: 16, gap: 5,
   },
-  devBtnDanger:     { borderColor: '#ff6565', backgroundColor: '#fff5f5' },
-  devBtnText:       { fontFamily: 'Paperlogy-5Medium', fontSize: 15, color: COLORS.textPrimary },
+  devRow: { flexDirection: 'row', gap: 12, marginBottom: 6 },
+  devBtnHalf: { flex: 1 },
+  devBtnDanger:     { borderColor: '#d93025', backgroundColor: '#fff5f5' },
+  devBtnText:       { fontFamily: FONTS.bold, fontSize: 15, lineHeight: 21, color: COLORS.outline },
   devBtnDangerText: { color: '#d93025' },
-  devBtnSub:        { fontFamily: 'Paperlogy-5Medium', fontSize: 13, color: COLORS.textTertiary },
+  devBtnSub:        { fontFamily: FONTS.medium, fontSize: 12, lineHeight: 17, color: COLORS.textSecondary },
 
-  devDivider:   { height: 1, backgroundColor: COLORS.outline, marginVertical: 4 },
+  devDivider:   { height: 0, marginVertical: 12 },   // 구분선 없이 간격만 유지
   devCharHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  devSectionTitle: { fontFamily: 'Paperlogy-5Medium', fontSize: 15, color: COLORS.textPrimary },
+  devSectionTitle: { fontFamily: FONTS.extraBold, fontSize: 15, lineHeight: 22, color: COLORS.pine },
   devToggleChip: {
-    paddingHorizontal: 14, paddingVertical: 5, borderRadius: 9999,
-    borderWidth: 1.5, borderColor: COLORS.outline, backgroundColor: COLORS.bg,
+    paddingHorizontal: 18, paddingVertical: 9, borderRadius: 10,
+    borderWidth: 1.5, borderColor: '#303a1e', backgroundColor: COLORS.bg,
   },
-  devToggleChipOn:  { backgroundColor: COLORS.lime, borderColor: COLORS.outline },
-  devToggleText:    { fontFamily: 'Paperlogy-5Medium', fontSize: 13, color: COLORS.textTertiary },
+  devToggleChipOn:  { backgroundColor: COLORS.lime, borderColor: '#303a1e' },
+  devToggleText:    { fontFamily: FONTS.bold, fontSize: 13, color: COLORS.textSecondary },
   devToggleTextOn:  { color: COLORS.outline },
 
-  devCharInfo: { fontFamily: 'Paperlogy-5Medium', fontSize: 13, color: COLORS.textTertiary, marginBottom: 2 },
-  devCharLabel: { fontFamily: 'ahn2006-B', fontSize: 13, color: COLORS.textPrimary, marginTop: 4 },
-  devChipRow:  { flexDirection: 'row', paddingVertical: 4, gap: 6 },
-  devChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingVertical: 4 },
+  devCharInfo: { fontFamily: FONTS.medium, fontSize: 13, lineHeight: 19, color: COLORS.textSecondary, marginBottom: 2 },
+  devCharLabel: { fontFamily: FONTS.extraBold, fontSize: 13, lineHeight: 18, color: COLORS.outline, marginTop: 10 },
+  devChipRow:  { flexDirection: 'row', paddingVertical: 6, gap: 10 },
+  devChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingVertical: 6 },
   devChip: {
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 9999,
-    borderWidth: 1.5, borderColor: COLORS.outline, backgroundColor: COLORS.bg,
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.bg,
   },
-  devChipActive:    { backgroundColor: COLORS.lime, borderColor: COLORS.outline },
+  devChipActive:    { backgroundColor: COLORS.lime, borderColor: '#303a1e' },
   devChipDisabled:  { opacity: 0.3 },
-  devChipText:      { fontFamily: 'Paperlogy-5Medium', fontSize: 13, color: COLORS.textPrimary },
-  devChipTextActive: { fontFamily: 'Paperlogy-5Medium', fontSize: 13, color: COLORS.outline },
+  devChipText:      { fontFamily: FONTS.semiBold, fontSize: 13, lineHeight: 18, color: COLORS.textPrimary },
+  devChipTextActive: { fontFamily: FONTS.bold, fontSize: 13, lineHeight: 18, color: COLORS.outline },
 
   devScroll: { flexShrink: 1 },
-  devCancelBtn: { alignItems: 'center', paddingVertical: 12, marginTop: 4 },
-  devCancelText: { fontFamily: 'Paperlogy-5Medium', fontSize: 15, color: COLORS.textTertiary },
+  devCancelBtn: {
+    alignItems: 'center', paddingVertical: 16, marginTop: 12,
+    borderRadius: 10, borderWidth: 1.5, borderColor: '#303a1e', backgroundColor: COLORS.lime,
+  },
+  devCancelText: { fontFamily: FONTS.bold, fontSize: 15, color: COLORS.outline },
 });

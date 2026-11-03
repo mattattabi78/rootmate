@@ -12,7 +12,6 @@ import { router } from 'expo-router';
 import { COLORS } from '../../constants';
 import { storage } from '../../store/storage';
 import Button from '../../components/common/Button';
-import EmojiText from '../../components/common/EmojiText';
 
 export default function OnboardingComplete() {
   const [plantNickname, setPlantNickname] = useState('');
@@ -49,14 +48,14 @@ export default function OnboardingComplete() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.content}>
-        {/* 화분 등장 애니메이션 */}
+        {/* 선택한 식물의 기본 일러스트 등장 애니메이션 */}
         <Animated.View
           style={[
-            styles.potWrap,
+            styles.plantWrap,
             { transform: [{ scale: scaleAnim }], opacity: opacityAnim },
           ]}
         >
-          <EmojiText style={styles.potEmoji}>🪴</EmojiText>
+          <PlantCharacter plantType={plantType} stage={1} expression="default" size="medium" />
         </Animated.View>
 
         {/* 메시지 */}
@@ -89,36 +88,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     gap: 24,
   },
-  potWrap: {
-    width: 160,
-    height: 160,
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 80,
+  plantWrap: {
+    height: 240,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: COLORS.outline,
+    overflow: 'visible',
   },
-  potEmoji: { fontSize: 72 },
   title: {
-    fontFamily: 'ahn2006-B',
+    fontFamily: 'SUITE-ExtraBold',
     fontSize: 28,
     color: COLORS.textPrimary,
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
-    fontFamily: 'Paperlogy-5Medium',
+    fontFamily: 'SUITE-Medium',
     fontSize: 15,
-    color: COLORS.green,
+    color: COLORS.pine,
     textAlign: 'center',
     marginTop: 10,
     marginBottom: 10,
   },
   body: {
-    fontFamily: 'Paperlogy-5Medium',
+    fontFamily: 'SUITE-Medium',
     fontSize: 15,
-    color: COLORS.textTertiary,
+    color: COLORS.pine,
     textAlign: 'center',
   },
   footer: { paddingHorizontal: 24, paddingBottom: 32 },

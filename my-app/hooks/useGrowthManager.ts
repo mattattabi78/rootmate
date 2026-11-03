@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PlantType } from '../constants/character';
-import { isSupportedTask, isTaskDue, isObservationDue, PlantTask, PLANT_TASKS } from '../constants/plants';
+import { isSupportedTask, isTaskDueFor, isObservationDue, PlantTask, PLANT_TASKS } from '../constants/plants';
 import {
   AUTO_ADVANCE_MESSAGES,
   getNextStageConfig, getActiveTaskIds, getMaxStage,
@@ -31,7 +31,7 @@ function computeTodayTasks(state: GrowthState, completedTodayIds: string[]): Pla
   const activeIds = getActiveTaskIds(plantType, currentStage);
   const allTasks  = PLANT_TASKS[plantType] ?? [];
   const kstDow = getKstDayOfWeek();
-  const observationDue = isObservationDue(plantType, state.plantedAt, completedTasks);
+  const observationDue = isObservationDue(plantType, state.plantedAt, completedTasks, undefined, currentStage);
   const observationDay = observationDue || completedTodayIds.includes('observe');
 
   return allTasks.filter(task => {
@@ -45,7 +45,7 @@ function computeTodayTasks(state: GrowthState, completedTodayIds: string[]): Pla
 
     if (
       (task.id === 'water' || task.id === 'sunlight' || task.id === 'observe') &&
-      !isTaskDue(task, state.plantedAt, completedTasks)
+      !isTaskDueFor(plantType, currentStage, task, state.plantedAt, completedTasks)
     ) return false;
 
     // 1회성: 한 번이라도 완료했으면 제외

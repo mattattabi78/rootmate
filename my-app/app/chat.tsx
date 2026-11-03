@@ -13,10 +13,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS } from '../constants';
-import { PlantType, GrowthStage, Expression, growthStageToNumber, getExpressionImage } from '../constants/character';
+import { COLORS, FONTS } from '../constants';
+import { PlantType, GrowthStage, Expression, getExpressionImage } from '../constants/character';
 import PlantCharacter from '../components/common/PlantCharacter';
 import { getTodayQuestion, getLongBreakQuestion } from '../services/api/questionPool';
 import { usePlantExpression } from '../hooks/usePlantExpression';
@@ -27,8 +28,8 @@ import {
 } from '../store/growthStore';
 import { getNextStageConfig, AUTO_ADVANCE_MESSAGES, STAGE_CONFIRM_MESSAGES, getActiveTaskIds } from '../constants/growthStages';
 import { storage, DailyRecord, MemorySummary } from '../store/storage';
-import { isSupportedTask, isTaskDue, isObservationDue, PlantTask, PLANT_TASKS } from '../constants/plants';
-import { getPlantMessages } from '../constants/chatMessages';
+import { isSupportedTask, isTaskDueFor, isObservationDue, PlantTask, PLANT_TASKS } from '../constants/plants';
+import { getPlantMessages, getTaskChoices } from '../constants/chatMessages';
 import { generateQuestion, generatePlantResponse, summarizePlantConversation, updatePlantCharacterWithCustomPot, PlantFacePosition } from '../services/ai';
 import { reconstructDayChat } from '../utils/chatHistory';
 import * as ImagePicker from 'expo-image-picker';
@@ -40,7 +41,7 @@ import EmojiText from '../components/common/EmojiText';
 import { getLocalDateString } from '../utils/date';
 import { getKstDayOfWeek, getDevAdjustedDate, getDevChatRounds } from '../utils/devOverrides';
 import { scheduleTaskReminder, cancelEveningNotification } from '../utils/notifications';
-import { getGuideItems, GUIDE_TITLE, GUIDE_SUBTITLE, GUIDE_BTN_LABEL } from '../constants/imageGuide';
+import { getGuideItems, GUIDE_TITLE, GUIDE_SUBTITLE, GUIDE_BTN_LABEL, GUIDE_CAMERA_LABEL, GUIDE_EXAMPLE_OPEN } from '../constants/imageGuide';
 import { persistImageUri } from '../utils/persistImage';
 
 // ─── 그라디언트 ───────────────────────────────────────────────────
@@ -55,7 +56,10 @@ function Grad({ colors, style, children }: { colors: string[]; style?: any; chil
 }
 
 // ─── 에셋 ─────────────────────────────────────────────────────────
-import BackImg from '../assets/images/back-button.svg';
+import TopAppBar from '../components/common/TopAppBar';
+import Button from '../components/common/Button';
+import { PlusPixelIcon, ArrowRightPixelIcon, CheckboxPixelIcon } from '../components/common/PixelIcons';
+import Wallpaper, { WALLPAPER_COLOR } from '../components/common/Wallpaper';
 
 // ─── 타입 ─────────────────────────────────────────────────────────
 interface Message {
@@ -85,8 +89,11 @@ function formatDate(d: Date) {
 let msgId = Date.now();
 function newId() { return String(++msgId); }
 
+const choicesFor = getTaskChoices;
+
 // ─── 화면 ─────────────────────────────────────────────────────────
 export default function ChatScreen() {
+  const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>('loading');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -102,6 +109,8 @@ export default function ChatScreen() {
   const [tasks, setTasks]               = useState<PlantTask[]>([]);
   const [taskIdx, setTaskIdx]           = useState(0);
   const [chatDoneTaskIds, setChatDoneTaskIds] = useState<string[]>([]);
+  // '흙이 촉촉해' 등 오늘은 안 해도 되는 이유를 고른 task (물주기는 water_moist로 기록해 다음 날 재확인)
+  const [chatAltTaskIds, setChatAltTaskIds] = useState<string[]>([]);
   const [canEndConversation, setCanEndConversation] = useState(false);
   const [plantStage, setPlantStage]   = useState<GrowthStage>(1);
   const [plantPhotoUri, setPlantPhotoUri] = useState<string | undefined>();
@@ -114,7 +123,15 @@ export default function ChatScreen() {
   const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
+  const [showPhotoFailed, setShowPhotoFailed] = useState(false);   // 캐릭터 생성 실패·식물 미인식 안내
+  const [showGuideExample, setShowGuideExample] = useState(false);   // 가이드 사진 예시 펼치기
   const scrollRef = useRef<ScrollView>(null);
+  // 콘텐츠(메시지·완료 카드)나 뷰포트(하단 패널 높이)가 바뀔 때마다 맨 아래로
+  const scrollToBottom = () => scrollRef.current?.scrollToEnd({ animated: true });
+  useEffect(() => {
+    const t = setTimeout(scrollToBottom, 150);
+    return () => clearTimeout(t);
+  }, [phase, messages.length]);
 
   // 채팅 라운드 관련 state
   const [currentRound, setCurrentRound] = useState(0);
@@ -137,7 +154,7 @@ export default function ChatScreen() {
     plantedAt: string,
   ): PlantTask[] => {
     const activeIds = getActiveTaskIds(pType, stage);
-    const observationDue = isObservationDue(pType, plantedAt, completedTasks, todayStr);
+    const observationDue = isObservationDue(pType, plantedAt, completedTasks, todayStr, stage);
     const observationDay = observationDue || alreadyDoneToday.includes('observe');
     return (PLANT_TASKS[pType] ?? []).filter(t => {
       if (!isSupportedTask(t.id)) return false;
@@ -149,7 +166,7 @@ export default function ChatScreen() {
       if (t.daysOfWeek && !t.daysOfWeek.includes(kstDow)) return false;
       if (
         (t.id === 'water' || t.id === 'sunlight' || t.id === 'observe') &&
-        !isTaskDue(t, plantedAt, completedTasks, todayStr)
+        !isTaskDueFor(pType, stage, t, plantedAt, completedTasks, todayStr)
       ) return false;
       return true;
     });
@@ -200,7 +217,7 @@ export default function ChatScreen() {
         setMessages(prev => [...prev, { id: newId(), from: 'plant', text: m.photoAsk }]);
         setPhase('photo_capture');
       } else {
-        setMessages(prev => [...prev, { id: newId(), from: 'plant', text: m.taskAsk(task.label) }]);
+        setMessages(prev => [...prev, { id: newId(), from: 'plant', text: m.taskAsk(task.id, task.label) }]);
         setPhase('task_check');
       }
     }
@@ -227,11 +244,11 @@ export default function ChatScreen() {
       setPlantNickname(pNick);
       plantTypeRef.current = pType;
       setPlantType(pType);
-      if (plantData?.growthStage) setPlantStage(growthStageToNumber(plantData.growthStage));
       memorySummariesRef.current = await storage.getRecentMemorySummaries();
 
       // 성장 상태 먼저 확인 (task 필터링에 필요)
       const growthState = await getOrInitGrowthState(pType, pAt);
+      setPlantStage(growthState.currentStage as GrowthStage);   // 아바타의 대체 이미지는 현재 단계를 따라감
 
       // 오늘 완료 기록 확인
       const existingRecord = await storage.getDailyRecord(todayStr);
@@ -308,6 +325,7 @@ export default function ChatScreen() {
           setTasks(draftTasks);
           setTaskIdx(draftTaskIdx);
           setChatDoneTaskIds(draft.chatDoneTaskIds ?? []);
+          setChatAltTaskIds(draft.chatAltTaskIds ?? []);
           setCanEndConversation(!!draft.canEndConversation);
           setTodayQuestion(draft.todayQuestion ?? '');
           setPhase(skippedTask ? 'task_check' : 'answering');
@@ -316,6 +334,7 @@ export default function ChatScreen() {
           setTasks(draftTasks);
           setTaskIdx(draftTaskIdx);
           setChatDoneTaskIds(draft.chatDoneTaskIds ?? []);
+          setChatAltTaskIds(draft.chatAltTaskIds ?? []);
           setCanEndConversation(!!draft.canEndConversation);
           setTodayQuestion(draft.todayQuestion ?? '');
           setPhase(draft.phase ?? 'task_check');
@@ -351,6 +370,7 @@ export default function ChatScreen() {
             const days = await getDaysSinceStageEntry(growthState.currentStage);
             if (days >= (nextCfg.daysRequired ?? 0)) {
               await recordStageEntry(nextCfg.stage);
+              setPlantStage(nextCfg.stage as GrowthStage);
               growthMsg = AUTO_ADVANCE_MESSAGES[pType]?.[nextCfg.stage] ?? null;
             }
           } else if (nextCfg.triggerCondition === 'USER_CONFIRMED') {
@@ -396,23 +416,23 @@ export default function ChatScreen() {
   useEffect(() => {
     if (phase === 'loading' || phase === 'already_done' || phase === 'done' || messages.length === 0) return;
     storage.saveChatDraft(todayStr, {
-      messages, phase, tasks, taskIdx, chatDoneTaskIds, todayQuestion,
+      messages, phase, tasks, taskIdx, chatDoneTaskIds, chatAltTaskIds, todayQuestion,
       canEndConversation,
       observationChat: observationChatRef.current,
     });
-  }, [messages, phase, canEndConversation]);
+  }, [messages, phase, canEndConversation, chatAltTaskIds]);
 
   // ── 성장 단계 확인 답변 ─────────────────────────────────────────
   const handleGrowthConfirm = async (confirmed: boolean) => {
     setPhase('loading');
-    const userText  = confirmed ? '네, 됐어요! 🌱' : '아직이요';
-    const plantText = confirmed
-      ? STAGE_CONFIRM_MESSAGES[plantType].confirmed
-      : STAGE_CONFIRM_MESSAGES[plantType].notConfirmed;
+    const userText  = confirmed ? '네, 됐어요!' : '아직이요';
+    let plantText = STAGE_CONFIRM_MESSAGES[plantType].notConfirmed;
     if (confirmed) {
       const state = await getOrInitGrowthState(plantType, new Date().toISOString());
       const nextCfg = getNextStageConfig(plantType, state.currentStage);
-      if (nextCfg) await recordStageEntry(nextCfg.stage);
+      if (nextCfg) { await recordStageEntry(nextCfg.stage); setPlantStage(nextCfg.stage as GrowthStage); }
+      // 단계별 전용 문구가 있으면 우선 사용 (예: 큰 화분 안내)
+      plantText = nextCfg?.confirmedMessage ?? STAGE_CONFIRM_MESSAGES[plantType].confirmed;
       setTemporaryExpression('sparkle', 3000);
     }
     await setPendingConfirmQuestion(undefined);
@@ -430,7 +450,7 @@ export default function ChatScreen() {
     const task = tasks[taskIdx];
     setPhase('loading');
     if (done) {
-      const doneText = task.id === 'water' ? '완료했어요 ✅' : '완료했어요 ✓';
+      const doneText = choicesFor(task.id).done;
       const newDone  = [...chatDoneTaskIds, task.id];
       setChatDoneTaskIds(newDone);
       recordTaskCompletion(task.id);
@@ -442,7 +462,7 @@ export default function ChatScreen() {
         setTimeout(() => startTaskAt(next, tasks, todayQuestion), 500);
       }, 500);
     } else {
-      const skipText = task.id === 'water' ? '물 주지 못했어…' : '아직이요';
+      const skipText = choicesFor(task.id).skip;
       setMessages(prev => [...prev, { id: newId(), from: 'user', text: skipText }]);
       const reminderMsg = m.taskSkip(task.label);
       setTimeout(() => {
@@ -452,14 +472,20 @@ export default function ChatScreen() {
     }
   };
 
-  // ── 흙 촉촉 선택 (물주기 불필요) ───────────────────────────────
-  const handleWaterMoist = () => {
+  // ── 대체 선택 (흙이 촉촉함 / 날씨가 흐림 → 오늘은 하지 않아도 되는 경우, 완료로 기록) ──
+  const handleTaskAlt = () => {
     const m = getPlantMessages(plantTypeRef.current);
+    const task = tasks[taskIdx];
+    const alt = choicesFor(task.id).alt;
+    if (!alt) return;
     setPhase('loading');
-    recordTaskCompletion('water');
-    setMessages(prev => [...prev, { id: newId(), from: 'user', text: '흙이 아직 촉촉해요 💧' }]);
+    // 물주기는 '물 준 날'이 아니므로 water_moist로 기록 → 다음 날 다시 확인. 그 외(햇빛 등)는 완료로 기록
+    recordTaskCompletion(task.id === 'water' ? 'water_moist' : task.id);
+    setChatAltTaskIds(prev => [...prev, task.id]);
+    setMessages(prev => [...prev, { id: newId(), from: 'user', text: alt }]);
     setTimeout(() => {
-      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: m.waterMoist() }]);
+      const plantText = task.id === 'water' ? m.waterMoist() : m.sunlightCloudy();
+      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: plantText }]);
       const next = taskIdx + 1;
       setTaskIdx(next);
       setTimeout(() => startTaskAt(next, tasks, todayQuestion), 500);
@@ -469,7 +495,7 @@ export default function ChatScreen() {
   // ── 알림 선택 (모든 미완료 task 공용) ──────────────────────────
   const handleReminderChoice = (remind: boolean) => {
     const m = getPlantMessages(plantTypeRef.current);
-    const userText  = remind ? '알림 받을게요 ⏰' : '괜찮아요';
+    const userText  = remind ? '알림 받을게요' : '괜찮아요';
     const plantText = remind ? m.reminderYes() : m.reminderNo();
     if (remind) {
       const skippedTask = tasks[taskIdx];
@@ -553,6 +579,10 @@ export default function ChatScreen() {
     await openGallery(true);
   };
 
+  const openPlantCamera = async () => {
+    await openCamera(true);
+  };
+
   const handlePlusButton = () => setShowImagePicker(v => !v);
 
   // 식물 사진 변환 파이프라인
@@ -576,13 +606,14 @@ export default function ChatScreen() {
         setPreviewPlantUri(previewUri);
         setPreviewFacePos(result.facePosition);
       } else {
-        // 식물 미인식 → 기본 화분 이미지로 대체
-        setPreviewPlantUri(potBase64);
-        setPreviewFacePos({ x: 50, y: 72, pot_width: 60 });
+        // 식물 미인식 → 가이드를 참고해 다시 찍거나 다음에 찍도록 안내 (기존 캐릭터 유지)
+        setPendingPhotoUri(null);
+        setShowPhotoFailed(true);
       }
     } catch (e) {
-      Alert.alert('변환 실패', '다시 시도해주세요.');
+      // 생성 실패 → 같은 안내 (기존 캐릭터 유지)
       setPendingPhotoUri(null);
+      setShowPhotoFailed(true);
     } finally {
       setIsTransforming(false);
     }
@@ -755,13 +786,6 @@ export default function ChatScreen() {
     }
   };
 
-  const handleEndConversation = async () => {
-    if (phase !== 'answering' || !canEndConversation) return;
-    setPhase('loading');
-    await saveRecord('');
-    setPhase('done');
-  };
-
   // ── 기록 저장 + 연속 관리일 업데이트 ────────────────────────────
   const saveRecord = async (answer: string, answerImageUri?: string, aiReply?: string) => {
     const transcript = messages
@@ -784,6 +808,7 @@ export default function ChatScreen() {
       date: todayStr,
       waterDone: chatDoneTaskIds.includes('water'),
       completedTaskIds: chatDoneTaskIds,
+      altTaskIds: chatAltTaskIds,
       recordDone: false,
       question: todayQuestion,
       answer,
@@ -836,294 +861,319 @@ export default function ChatScreen() {
 
   // ── 렌더 ─────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      {/* 헤더 — TopAppBar와 동일한 스타일, 좌측에 뒤로가기 추가 */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/' as any)}
-            hitSlop={12}
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <TopAppBar showBack showBadge={false} />
+
+      <View style={styles.body}>
+        {/* 배경: 키치 체크 월페이퍼 */}
+        <Wallpaper />
+
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
+          {/* 채팅 영역 */}
+          <ScrollView
+            ref={scrollRef}
+            onContentSizeChange={scrollToBottom}
+            onLayout={scrollToBottom}
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
           >
-            <BackImg width={styles.backIcon.width} height={styles.backIcon.height} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>RootMate</Text>
-        </View>
+            {/* 날짜 — 채팅 상단 중앙 */}
+            <Text style={styles.chatDate}>{formatDate(today)}</Text>
+
+            {messages.map((msg, idx) => (
+              <MessageBubble
+                key={idx}
+                message={msg}
+                isGrouped={idx > 0 && messages[idx - 1].from === msg.from}
+                plantNickname={plantNickname}
+                plantType={plantType}
+                plantStage={plantStage}
+                plantExpression={plantExpression}
+                generatedPlantUri={generatedPlantUri}
+                generatedFacePos={generatedFacePos}
+                onGenImgError={() => {
+                  setGeneratedPlantUri(null);
+                  setGeneratedFacePos(null);
+                }}
+              />
+            ))}
+            {phase === 'already_done' && (
+              <View style={styles.doneCard}>
+                <EmojiText style={styles.doneText}>오늘 기록이 완료됐어요</EmojiText>
+                <TouchableOpacity onPress={() => router.replace('/' as any)} style={styles.doneBtn}>
+                  <Text style={styles.doneBtnText}>홈으로 돌아가기</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {phase === 'reminder_done' && (
+              <View style={styles.doneCard}>
+                <TouchableOpacity onPress={() => router.replace('/' as any)} style={styles.doneBtn}>
+                  <Text style={styles.doneBtnText}>홈으로 돌아가기</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {phase === 'done' && (
+              <View style={styles.doneCard}>
+                <TouchableOpacity
+                  onPress={async () => {
+                    const lastShown = await storage.getLastStreakShownDate();
+                    if (lastShown === todayStr) {
+                      router.replace('/' as any);
+                    } else {
+                      await storage.setLastStreakShownDate(todayStr);
+                      router.replace('/streak' as any);
+                    }
+                  }}
+                  style={styles.doneBtn}
+                >
+                  <Text style={styles.doneBtnText}>홈으로 가기</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
+
+          {/* 인라인 이미지 선택창 */}
+          {phase === 'answering' && showImagePicker && (
+            <View style={styles.imagePickerBar}>
+              <TouchableOpacity
+                style={styles.imagePickerBtn}
+                onPress={async () => {
+                  setShowImagePicker(false);
+                  await openCamera(false);
+                }}
+              >
+                <Text style={styles.imagePickerBtnText}>카메라</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.imagePickerBtn}
+                onPress={async () => {
+                  setShowImagePicker(false);
+                  await openGallery(false);
+                }}
+              >
+                <Text style={styles.imagePickerBtnText}>갤러리</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* 하단 패널: 선택지 + 입력 행 (Figma: 흰 배경, 상단 2px 선) */}
+          <View style={[styles.bottomPanel, { paddingBottom: 16 + insets.bottom }]}>
+            {phase === 'stage_confirm' && (
+              <View style={styles.choiceContainer}>
+                <ChoiceBtn onPress={() => handleGrowthConfirm(true)}>네, 됐어요!</ChoiceBtn>
+                <ChoiceBtn onPress={() => handleGrowthConfirm(false)}>나중에 줄게!</ChoiceBtn>
+              </View>
+            )}
+
+            {phase === 'task_check' && tasks[taskIdx] && (
+              <View style={styles.choiceContainer}>
+                <ChoiceBtn onPress={() => handleTaskChoice(true)}>{choicesFor(tasks[taskIdx].id).done}</ChoiceBtn>
+                {choicesFor(tasks[taskIdx].id).alt && (
+                  <ChoiceBtn onPress={handleTaskAlt}>{choicesFor(tasks[taskIdx].id).alt as string}</ChoiceBtn>
+                )}
+                <ChoiceBtn onPress={() => handleTaskChoice(false)}>{choicesFor(tasks[taskIdx].id).skip}</ChoiceBtn>
+              </View>
+            )}
+
+            {phase === 'water_reminder' && (
+              <View style={styles.choiceContainer}>
+                <ChoiceBtn onPress={() => handleReminderChoice(true)}>알림 받을게요</ChoiceBtn>
+                <ChoiceBtn onPress={() => handleReminderChoice(false)}>괜찮아요</ChoiceBtn>
+              </View>
+            )}
+
+            {phase === 'photo_capture' && (
+              <View style={styles.choiceContainer}>
+                {isTransforming ? (
+                  <View style={styles.transformingWrap}>
+                    <ActivityIndicator size="large" color={COLORS.green} />
+                    <Text style={styles.transformingText}>캐릭터를 만들고 있어요...</Text>
+                    <Text style={styles.transformingSubText}>약 1분정도 소요될 수 있습니다.</Text>
+                  </View>
+                ) : (
+                  <>
+                    <ChoiceBtn onPress={() => { setShowGuideExample(false); setShowGuideModal(true); }}>사진 올리기</ChoiceBtn>
+                    <ChoiceBtn onPress={handlePhotoLater}>나중에 찍을게요</ChoiceBtn>
+                  </>
+                )}
+              </View>
+            )}
+
+            {/* 입력 행: 항상 표시, 답변 단계에서만 입력 가능 */}
+            <View style={[styles.inputRow, hasChoices(phase, tasks[taskIdx]) && styles.inputRowWithChoices]}>
+              <TouchableOpacity
+                onPress={handlePlusButton}
+                disabled={phase !== 'answering'}
+                activeOpacity={0.7}
+              >
+                <Grad colors={['#F3F4F1', '#E2E2E2']} style={styles.addBtn}>
+<PlusPixelIcon color="#000" size={12} />
+                </Grad>
+              </TouchableOpacity>
+              <TextInput
+                style={styles.input}
+                value={inputText}
+                onChangeText={setInputText}
+                editable={phase === 'answering' || phase === 'observing'}
+                placeholder="답장하기"
+                placeholderTextColor={COLORS.tabTextOff}
+                returnKeyType="send"
+                onSubmitEditing={handleSend}
+              />
+              <TouchableOpacity
+                style={styles.sendBtn}
+                onPress={handleSend}
+                disabled={!inputText.trim() || !(phase === 'answering' || phase === 'observing')}
+                activeOpacity={0.7}
+              >
+<ArrowRightPixelIcon color="#1D1B20" size={10} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
-      >
-        {/* 채팅 영역 */}
-        <ScrollView
-          ref={scrollRef}
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* 날짜 — 채팅 상단 중앙 */}
-          <Text style={styles.chatDate}>{formatDate(today)}</Text>
-
-          {messages.map((msg, idx) => (
-            <MessageBubble
-              key={idx}
-              message={msg}
-              plantNickname={plantNickname}
-              plantType={plantType}
-              plantStage={plantStage}
-              plantExpression={plantExpression}
-              generatedPlantUri={generatedPlantUri}
-              generatedFacePos={generatedFacePos}
-              onGenImgError={() => {
-                setGeneratedPlantUri(null);
-                setGeneratedFacePos(null);
-              }}
-            />
-          ))}
-          {phase === 'already_done' && (
-            <View style={styles.doneCard}>
-              <EmojiText style={styles.doneText}>오늘 기록이 완료됐어요 🌱</EmojiText>
-              <TouchableOpacity onPress={() => router.replace('/' as any)} style={styles.doneBtn}>
-                <Text style={styles.doneBtnText}>홈으로 돌아가기</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          {phase === 'reminder_done' && (
-            <View style={styles.doneCard}>
-              <TouchableOpacity onPress={() => router.replace('/' as any)} style={styles.doneBtn}>
-                <Text style={styles.doneBtnText}>홈으로 돌아가기</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          {phase === 'done' && (
-            <View style={styles.doneCard}>
-              <TouchableOpacity
-                onPress={async () => {
-                  const lastShown = await storage.getLastStreakShownDate();
-                  if (lastShown === todayStr) {
-                    router.replace('/' as any);
-                  } else {
-                    await storage.setLastStreakShownDate(todayStr);
-                    router.replace('/streak' as any);
-                  }
-                }}
-                style={styles.doneBtn}
-              >
-                <Text style={styles.doneBtnText}>홈으로 가기</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* 선택 버튼 — 마지막 메시지 아래 30px */}
-          {phase === 'stage_confirm' && (
-            <View style={styles.choiceContainer}>
-              <TouchableOpacity style={[styles.choiceBtn, styles.choiceBtnPrimary]} onPress={() => handleGrowthConfirm(true)}>
-                <EmojiText style={styles.choiceBtnPrimaryText}>네, 됐어요! 🌱</EmojiText>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.choiceBtn, styles.choiceBtnSecondary]} onPress={() => handleGrowthConfirm(false)}>
-                <Text style={styles.choiceBtnSecondaryText}>나중에 줄게!</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {phase === 'task_check' && tasks[taskIdx] && (
-            <View style={styles.choiceContainer}>
-              <TouchableOpacity style={[styles.choiceBtn, styles.choiceBtnPrimary]} onPress={() => handleTaskChoice(true)}>
-                <EmojiText style={styles.choiceBtnPrimaryText}>
-                  {tasks[taskIdx].id === 'water' ? '완료했어요 ✅' : '완료했어요 ✓'}
-                </EmojiText>
-              </TouchableOpacity>
-              {tasks[taskIdx].id === 'water' && (
-                <TouchableOpacity style={[styles.choiceBtn, styles.choiceBtnSecondary]} onPress={handleWaterMoist}>
-                  <EmojiText style={styles.choiceBtnSecondaryText}>흙이 아직 촉촉해요 💧</EmojiText>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={[styles.choiceBtn, styles.choiceBtnSecondary]} onPress={() => handleTaskChoice(false)}>
-                <EmojiText style={styles.choiceBtnSecondaryText}>
-                  {tasks[taskIdx].id === 'water' ? '깜빡했어😢' : '나중에'}
-                </EmojiText>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {phase === 'water_reminder' && (
-            <View style={styles.choiceContainer}>
-              <TouchableOpacity style={[styles.choiceBtn, styles.choiceBtnPrimary]} onPress={() => handleReminderChoice(true)}>
-                <EmojiText style={styles.choiceBtnPrimaryText}>알림 받을게요 ⏰</EmojiText>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.choiceBtn, styles.choiceBtnSecondary]} onPress={() => handleReminderChoice(false)}>
-                <Text style={styles.choiceBtnSecondaryText}>괜찮아요</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {phase === 'photo_capture' && (
-            <View style={styles.choiceContainer}>
-              {isTransforming ? (
-                <View style={styles.transformingWrap}>
-                  <ActivityIndicator size="large" color={COLORS.green} />
-                  <Text style={styles.transformingText}>캐릭터를 만들고 있어요...</Text>
-                  <Text style={styles.transformingSubText}>약 1분정도 소요될 수 있습니다.</Text>
-                </View>
-              ) : (
-                <>
-                  <TouchableOpacity
-                    style={[styles.choiceBtn, styles.choiceBtnPrimary]}
-                    onPress={() => setShowGuideModal(true)}
-                    activeOpacity={0.7}
-                  >
-                    <EmojiText style={styles.choiceBtnPrimaryText}>🖼 갤러리에서 선택</EmojiText>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.choiceBtn, styles.choiceBtnSecondary]}
-                    onPress={handlePhotoLater}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.choiceBtnSecondaryText}>나중에 찍을게요</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          )}
-        </ScrollView>
-
-        {/* 인라인 이미지 선택창 */}
-        {phase === 'answering' && showImagePicker && (
-          <View style={styles.imagePickerBar}>
-            <TouchableOpacity
-              style={styles.imagePickerBtn}
-              onPress={async () => {
-                setShowImagePicker(false);
-                await openCamera(false);
-              }}
-            >
-              <EmojiText style={styles.imagePickerBtnText}>📸 카메라</EmojiText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.imagePickerBtn}
-              onPress={async () => {
-                setShowImagePicker(false);
-                await openGallery(false);
-              }}
-            >
-              <EmojiText style={styles.imagePickerBtnText}>🖼 갤러리</EmojiText>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* 하단 입력창 */}
-        {(phase === 'answering' || phase === 'observing') && (
-          <View style={styles.inputBar}>
-            {phase === 'answering' && (
-              <TouchableOpacity style={styles.addBtn} onPress={handlePlusButton}>
-                <Text style={styles.addBtnText}>+</Text>
-              </TouchableOpacity>
-            )}
-            <TextInput
-              style={styles.input}
-              value={inputText}
-              onChangeText={setInputText}
-              placeholder={phase === 'observing' ? '식물에게 답장하기...' : '답장하기...'}
-              placeholderTextColor={COLORS.textTertiary}
-              returnKeyType="send"
-              onSubmitEditing={handleSend}
-            />
-            <TouchableOpacity
-              style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
-              onPress={handleSend}
-              disabled={!inputText.trim()}
-            >
-              <Text style={styles.sendArrow}>→</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        {phase === 'answering' && canEndConversation && (
-          <TouchableOpacity
-            style={styles.endConversationBtn}
-            onPress={handleEndConversation}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.endConversationText}>대화 마치기</Text>
-          </TouchableOpacity>
-        )}
-      </KeyboardAvoidingView>
-
-      {/* 이미지 업로드 가이드라인 모달 */}
-      <Modal visible={showGuideModal} transparent animationType="slide">
+      {/* 사진 촬영 가이드 (바텀 시트) — 설정 팝업과 같은 스타일: 라임 헤더, 반경 10, #303a1e 테두리 */}
+      <Modal visible={showGuideModal} transparent animationType="slide" onRequestClose={() => setShowGuideModal(false)}>
         <View style={styles.guideOverlay}>
           <View style={styles.guideSheet}>
-            {/* 제목·부제목 */}
-            <View style={styles.guidePadded}>
-              <Text style={styles.guideTitle}>{GUIDE_TITLE}</Text>
-              <Text style={styles.guideSubtitle}>{GUIDE_SUBTITLE}</Text>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>{GUIDE_TITLE}</Text>
+              <TouchableOpacity onPress={() => setShowGuideModal(false)} hitSlop={14}>
+                <Svg width={14} height={14} viewBox="0 0 14 14" fill="none">
+                  <Path d="M2 2L12 12M12 2L2 12" stroke={COLORS.pine} strokeWidth={2} strokeLinecap="round" />
+                </Svg>
+              </TouchableOpacity>
             </View>
 
-            {/* 가이드 이미지 — 전체 너비 */}
-            <Image
-              source={require('../assets/images/guide.png')}
-              style={styles.guideImage}
-              resizeMode="contain"
-            />
+            <ScrollView
+              style={styles.guideScroll}
+              contentContainerStyle={styles.guideBody}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* 안내 문구 + 예시 버튼(글자 너비에 맞춤, 안내 문구 오른쪽) */}
+              <View style={styles.guideTopRow}>
+                <Text style={styles.guideSubtitle}>{GUIDE_SUBTITLE}</Text>
+                <TouchableOpacity
+                  style={styles.exampleBtn}
+                  activeOpacity={0.7}
+                  onPress={() => setShowGuideExample(true)}
+                >
+                  <Text style={styles.exampleBtnText}>{GUIDE_EXAMPLE_OPEN}</Text>
+                </TouchableOpacity>
+              </View>
 
-            {/* 항목·버튼 */}
-            <View style={styles.guidePadded}>
+              {/* 가이드 항목 */}
               <View style={styles.guideList}>
                 {getGuideItems(plantType).map((item, i) => (
                   <View key={i} style={styles.guideItem}>
-                    <EmojiText style={styles.guideEmoji}>{item.emoji}</EmojiText>
+                    <View style={styles.guideIconBox}>
+                      <CheckboxPixelIcon color={GUIDE_ICON_COLOR} size={22} />
+                    </View>
                     <Text style={styles.guideText}>{item.text}</Text>
                   </View>
                 ))}
               </View>
-              <TouchableOpacity
-                style={styles.guideBtn}
-                activeOpacity={0.8}
+            </ScrollView>
+
+            <View style={styles.guideFooter}>
+              <Button
+                label={GUIDE_CAMERA_LABEL}
+                onPress={() => { setShowGuideModal(false); setTimeout(() => openPlantCamera(), 600); }}
+              />
+              <Button
+                label={GUIDE_BTN_LABEL}
+                variant="secondary"
                 onPress={() => { setShowGuideModal(false); setTimeout(() => openPlantGallery(), 600); }}
-              >
-                <Text style={styles.guideBtnText}>{GUIDE_BTN_LABEL}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.guideCancelBtn}
-                onPress={() => setShowGuideModal(false)}
-              >
-                <Text style={styles.guideCancelText}>취소</Text>
-              </TouchableOpacity>
+              />
+            </View>
+          </View>
+
+          {/* 사진 예시 팝업 — 화면 중앙 (같은 Modal 안의 오버레이) */}
+          {showGuideExample && (
+            <View style={styles.exampleOverlay}>
+              <View style={styles.exampleCard}>
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>사진 예시</Text>
+                  <TouchableOpacity onPress={() => setShowGuideExample(false)} hitSlop={14}>
+                    <Svg width={14} height={14} viewBox="0 0 14 14" fill="none">
+                      <Path d="M2 2L12 12M12 2L2 12" stroke={COLORS.pine} strokeWidth={2} strokeLinecap="round" />
+                    </Svg>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.exampleBody}>
+                  <Image
+                    source={require('../assets/images/guide.png')}
+                    style={styles.exampleImage}
+                    resizeMode="contain"
+                  />
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      {/* 캐릭터 생성 실패 · 식물 미인식 안내 (Alert.alert는 웹에서 동작하지 않아 팝업으로 구현) */}
+      <Modal visible={showPhotoFailed} transparent animationType="fade" onRequestClose={() => setShowPhotoFailed(false)}>
+        <View style={styles.previewOverlay}>
+          <View style={styles.previewSheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>사진을 다시 찍어주세요</Text>
+            </View>
+            <View style={styles.previewBody}>
+              <Text style={styles.failedText}>
+                {'식물을 잘 알아보지 못했어요.\n사진 촬영 가이드를 참고해서\n다시 찍어주세요.'}
+              </Text>
+              <Button
+                label="다시 찍기"
+                onPress={() => { setShowPhotoFailed(false); setShowGuideExample(false); setShowGuideModal(true); }}
+              />
+              <Button
+                label="다음에 찍기"
+                variant="secondary"
+                onPress={() => { setShowPhotoFailed(false); handlePhotoLater(); }}
+              />
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* 변환된 캐릭터 프리뷰 모달 */}
+      {/* 변환된 캐릭터 프리뷰 (가운데 팝업) — 같은 스타일의 헤더·버튼 */}
       <Modal visible={!!previewPlantUri} transparent animationType="fade">
         <View style={styles.previewOverlay}>
           <View style={styles.previewSheet}>
-            <Text style={styles.previewTitle}>캐릭터가 생성됐어요!</Text>
-            <View style={{ width: 220, height: 220, marginVertical: 20 }}>
-              <Image
-                source={{ uri: previewPlantUri! }}
-                style={{ width: 220, height: 220 }}
-                resizeMode="contain"
-              />
-              {previewFacePos && (
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>캐릭터가 생성됐어요!</Text>
+            </View>
+            <View style={styles.previewBody}>
+              <View style={{ width: 220, height: 220, alignSelf: 'center' }}>
                 <Image
-                  source={getExpressionImage(plantType, 'sparkle')}
-                  style={{
-                    position: 'absolute',
-                    width: 110, height: 110,
-                    left: (previewFacePos.x / 100) * 220 - 55,
-                    top:  (previewFacePos.y / 100) * 220 - 55,
-                  }}
+                  source={{ uri: previewPlantUri! }}
+                  style={{ width: 220, height: 220 }}
                   resizeMode="contain"
                 />
-              )}
+                {previewFacePos && (
+                  <Image
+                    source={getExpressionImage(plantType, 'sparkle')}
+                    style={{
+                      position: 'absolute',
+                      width: 110, height: 110,
+                      left: (previewFacePos.x / 100) * 220 - 55,
+                      top:  (previewFacePos.y / 100) * 220 - 55,
+                    }}
+                    resizeMode="contain"
+                  />
+                )}
+              </View>
+              <Button label="이 캐릭터 사용하기" onPress={handleConfirmCharacter} />
+              <Button label="다시 찍기" variant="secondary" onPress={handleRetakePhoto} />
             </View>
-            <TouchableOpacity style={styles.previewConfirmBtn} onPress={handleConfirmCharacter} activeOpacity={0.8}>
-              <Text style={styles.previewConfirmText}>이 캐릭터 사용하기</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.previewRetakeBtn} onPress={handleRetakePhoto} activeOpacity={0.8}>
-              <Text style={styles.previewRetakeText}>다시 찍기</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1131,31 +1181,49 @@ export default function ChatScreen() {
   );
 }
 
+// 사진 가이드 항목의 체크박스 아이콘 색 (초록으로 통일)
+const GUIDE_ICON_COLOR = '#38D76D';
+
+// ─── 선택지 버튼 (Figma: 382x54, 회색 그라디언트, 반경 10) ──────────
+function ChoiceBtn({ onPress, children }: { onPress: () => void; children: string }) {
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+      <Grad colors={['#f3f4f1', '#e2e2e2']} style={styles.choiceBtn}>
+        <EmojiText style={styles.choiceBtnText}>{children}</EmojiText>
+      </Grad>
+    </TouchableOpacity>
+  );
+}
+
+function hasChoices(phase: Phase, task?: PlantTask) {
+  return phase === 'stage_confirm' || phase === 'water_reminder' || phase === 'photo_capture'
+    || (phase === 'task_check' && !!task);
+}
+
 // ─── 말풍선 컴포넌트 ──────────────────────────────────────────────
 function MessageBubble({
-  message, plantNickname, plantType, plantStage, plantExpression,
+  message, isGrouped, plantNickname, plantType, plantStage, plantExpression,
   generatedPlantUri, generatedFacePos, onGenImgError,
 }: {
-  message: Message; plantNickname: string; plantType: PlantType;
+  message: Message; isGrouped: boolean; plantNickname: string; plantType: PlantType;
   plantStage: GrowthStage; plantExpression: Expression;
   generatedPlantUri?: string | null;
   generatedFacePos?: { x: number; y: number; pot_width: number } | null;
   onGenImgError?: () => void;
 }) {
   const isPlant = message.from === 'plant';
-  const gradColors = isPlant
-    ? ['#f3f4f1', '#b5ff22']
-    : ['#efefef', '#e2e2e2'];
 
   return (
-    <View style={[styles.bubbleRow, isPlant ? styles.bubbleRowLeft : styles.bubbleRowRight]}>
-      {isPlant && (
+    <View style={[styles.bubbleRow, isPlant ? styles.bubbleRowLeft : styles.bubbleRowRight, isGrouped && styles.bubbleRowGrouped]}>
+      {/* 같은 사람이 연속으로 보낸 메시지는 맨 위 메시지에만 프로필(이미지·이름)을 표시하고, 나머지는 같은 위치에 빈 칸만 둠 */}
+      {isPlant && isGrouped && <View style={styles.avatarSpacer} />}
+      {isPlant && !isGrouped && (
         <View style={styles.avatarWrap}>
           {generatedPlantUri ? (
-            <View style={{ width: 45, height: 45 }}>
+            <View style={{ width: 40, height: 40 }}>
               <Image
                 source={{ uri: generatedPlantUri }}
-                style={{ width: 45, height: 45 }}
+                style={{ width: 40, height: 40 }}
                 resizeMode="cover"
                 onError={onGenImgError}
               />
@@ -1164,9 +1232,9 @@ function MessageBubble({
                   source={getExpressionImage(plantType, plantExpression)}
                   style={{
                     position: 'absolute',
-                    width: 22, height: 22,
-                    left: (generatedFacePos.x / 100) * 45 - 11,
-                    top: (generatedFacePos.y / 100) * 45 - 11,
+                    width: 20, height: 20,
+                    left: (generatedFacePos.x / 100) * 40 - 10,
+                    top: (generatedFacePos.y / 100) * 40 - 10,
                   }}
                   resizeMode="contain"
                 />
@@ -1178,8 +1246,7 @@ function MessageBubble({
                 plantType={plantType}
                 stage={plantStage}
                 expression={plantExpression}
-                size="small"
-                showVase={true}
+                width={37}
               />
             </View>
           )}
@@ -1187,7 +1254,7 @@ function MessageBubble({
       )}
 
       <View style={styles.bubbleColumn}>
-        {isPlant && (
+        {isPlant && !isGrouped && (
           <Text style={styles.bubbleSender}>{plantNickname || '식물'}</Text>
         )}
         {message.imageUri ? (
@@ -1197,12 +1264,9 @@ function MessageBubble({
             resizeMode="cover"
           />
         ) : (
-          <Grad
-            colors={gradColors}
-            style={[styles.bubble, isPlant ? styles.bubblePlant : styles.bubbleUser]}
-          >
-            <EmojiText style={styles.bubbleText}>{message.text}</EmojiText>
-          </Grad>
+          <View style={[styles.bubble, isPlant ? styles.bubblePlant : styles.bubbleUser]}>
+            <EmojiText style={[styles.bubbleText, !isPlant && styles.bubbleTextUser]}>{message.text}</EmojiText>
+          </View>
         )}
       </View>
     </View>
@@ -1211,229 +1275,211 @@ function MessageBubble({
 
 // ─── 스타일 ───────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.bg },
+  safe: { flex: 1, backgroundColor: COLORS.headerBg },   // 상태바 영역까지 라임
+  body: { flex: 1, backgroundColor: WALLPAPER_COLOR },
   flex: { flex: 1 },
 
-  // 헤더 — TopAppBar와 동일한 높이/배경/보더, 좌하단에 뒤로가기 + 타이틀
-  header: {
-    height: 61,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    paddingHorizontal: 20,
-    justifyContent: 'flex-end',
-    paddingBottom: 12,
-    borderBottomWidth: 1.5,
-    borderBottomColor: COLORS.outline,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  backIcon: { width: 12, height: 32 },
-  headerTitle: { fontFamily: 'ahn2006-B', fontSize: 30, color: COLORS.textPrimary },
-
-  // 스크롤
+  // 스크롤: 좌우 16, 날짜 중심 y=117(헤더 아래 38), 말풍선 간격 ~40
   scroll: { flex: 1 },
-  scrollContent: { padding: 16, gap: 14, paddingBottom: 24 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 38, gap: 40, paddingBottom: 24 },
 
   // 날짜 — 채팅 상단 중앙
   chatDate: {
     textAlign: 'center',
-    fontFamily: 'ahn2006-M',
-    fontSize: 20,
+    fontFamily: FONTS.extraBold,
+    fontSize: 15,
+    lineHeight: 20,
     color: COLORS.green,
-    marginBottom: 4,
+    marginBottom: -9,   // 날짜 하단 → 첫 말풍선 31
   },
 
-  // 말풍선 행
-  bubbleRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-  bubbleRowLeft: { alignSelf: 'flex-start', maxWidth: '88%' },
-  bubbleRowRight: { alignSelf: 'flex-end', maxWidth: '75%' },
+  // 말풍선 행: 아바타 40 + 간격 13 + 말풍선(최대 317)
+  bubbleRow: { flexDirection: 'row', gap: 13, alignItems: 'flex-start' },
+  bubbleRowLeft: { alignSelf: 'stretch' },
+  bubbleRowRight: { alignSelf: 'flex-end', maxWidth: 317 },
 
-  bubbleColumn: { flexDirection: 'column', gap: 4, flexShrink: 1 },
+  // 연속 메시지: 위 메시지와의 간격을 40 → 8로 좁힘 (scrollContent gap 40 상쇄)
+  bubbleRowGrouped: { marginTop: -32 },
+  avatarSpacer: { width: 40, height: 40, flexShrink: 0 },
 
-  // 아바타 — small PlantCharacter(100×100)를 50×70으로 클리핑
+  bubbleColumn: { flexDirection: 'column', gap: 10, flexShrink: 1, flexGrow: 1 },
+
+  // 아바타 40x40 — small PlantCharacter(100×100)의 얼굴 부분만 클리핑
   avatarWrap: {
-    width: 45,
-    height: 45,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
+    borderColor: '#2a2a2a',
+    backgroundColor: COLORS.bg,
     overflow: 'hidden',
     flexShrink: 0,
   },
+  // 캐릭터 캔버스를 위로 18px(−48.6%) 올려 화분·얼굴 부분만 보이게 함 (Figma 크롭)
   avatarInner: {
-    marginLeft: -30,
-    marginTop: -35,
+    marginTop: -18,
   },
 
   bubble: {
-    borderRadius: 20,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexShrink: 1,
+    borderColor: '#2a2a2a',
+    backgroundColor: COLORS.bg,
+    paddingHorizontal: 17.5,
+    paddingVertical: 12.25,
+    shadowColor: '#101828',
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
   },
-  bubblePlant: {},
-  bubbleUser: {},
+  bubblePlant: { alignSelf: 'stretch' },
+  bubbleUser: { alignSelf: 'flex-end', paddingHorizontal: 10.5 },
 
-  bubbleSender: { fontFamily: 'ahn2006-M', fontSize: 15, color: COLORS.green },
+  bubbleSender: {
+    fontFamily: FONTS.semiBold, fontSize: 17, lineHeight: 16.5,
+    letterSpacing: -0.275, color: COLORS.forest,
+  },
   bubbleImage: {
     width: 200,
     height: 200,
-    borderRadius: 16,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
+    borderColor: '#2a2a2a',
   },
   bubbleText: {
-    fontFamily: 'ahn2006-M',
-    fontSize: 18,
-    color: COLORS.textPrimary,
-    lineHeight: 25,
+    fontFamily: FONTS.semiBold,
+    fontSize: 15,
+    lineHeight: 23,
+    letterSpacing: -0.275,
+    color: '#424343',
   },
+  bubbleTextUser: { textAlign: 'right' },
 
   // 완료 카드
   doneCard: {
     alignItems: 'center',
     padding: 24,
     gap: 12,
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 20,
+    backgroundColor: COLORS.bg,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    marginTop: 8,
+    borderColor: '#2a2a2a',
   },
-  doneText: { fontFamily: 'ahn2006-M', fontSize: 22, color: COLORS.green },
+  doneText: { fontFamily: FONTS.bold, fontSize: 18, color: COLORS.green },
   doneBtn: {
     marginTop: 4,
     paddingHorizontal: 28,
     paddingVertical: 12,
-    borderRadius: 9999,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    backgroundColor: COLORS.cardBg,
+    borderColor: '#303a1e',
+    backgroundColor: COLORS.lime,
   },
-  doneBtnText: { fontFamily: 'ahn2006-M', fontSize: 20, color: COLORS.textPrimary },
+  doneBtnText: { fontFamily: FONTS.bold, fontSize: 16, color: COLORS.outline },
 
-  // 선택 버튼 컨테이너 (스크롤 내부)
+  // 하단 패널: 흰 배경 + 상단 2px 선
+  bottomPanel: {
+    backgroundColor: COLORS.bg,
+    borderTopWidth: 2,
+    borderTopColor: 'rgba(20,83,45,0.30)',
+  },
+  // 선택지: 좌우 10, 높이 54, 간격 7
   choiceContainer: {
-    marginTop: 30,
-    gap: 10,
-    paddingHorizontal: 4,
-    paddingBottom: 8,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    gap: 7,
   },
   choiceBtn: {
-    height: 64,
-    borderRadius: 9999,
+    height: 54,
+    borderRadius: 10,
     borderWidth: 1.5,
+    borderColor: '#303a1e',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
+    shadowColor: '#101828',
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
   },
-  choiceBtnPrimary: {
-    backgroundColor: COLORS.cardBg,
-    borderColor: COLORS.outline,
+  choiceBtnText: {
+    fontFamily: FONTS.semiBold, fontSize: 15, lineHeight: 23,
+    letterSpacing: -0.275, color: '#424343',
   },
-  choiceBtnPrimaryText: { fontFamily: 'ahn2006-M', fontSize: 18, color: COLORS.textPrimary },
-  choiceBtnSecondary: {
-    backgroundColor: COLORS.cardBg,
-    borderColor: COLORS.outline,
-  },
-  choiceBtnSecondaryText: { fontFamily: 'ahn2006-M', fontSize: 18, color: COLORS.textPrimary },
 
-  // 입력 바
-  inputBar: {
+  // 입력 행: 좌우 16, 버튼 32, 입력창 높이 49
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 9.5,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopWidth: 1.5,
-    borderTopColor: COLORS.outline,
-    backgroundColor: COLORS.bg,
+    marginTop: 13,
   },
-  endConversationBtn: {
-    alignItems: 'center',
-    paddingVertical: 8,
-    backgroundColor: COLORS.bg,
-  },
-  endConversationText: {
-    fontFamily: 'ahn2006-M',
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textDecorationLine: 'underline',
-  },
+  inputRowWithChoices: { marginTop: 27 },
   addBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.cardBg,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
+    borderColor: '#303a1e',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-  },
-  addBtnText: {
-    fontSize: 24,
-    color: COLORS.textSecondary,
-    lineHeight: 28,
   },
   input: {
     flex: 1,
-    height: 44,
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 22,
+    height: 46,
+    backgroundColor: COLORS.bg,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: COLORS.inputBorder,
-    paddingHorizontal: 16,
+    borderColor: '#303a1e',
+    paddingHorizontal: 12,
     paddingVertical: 0,
-    fontFamily: 'ahn2006-M',
-    fontSize: 16,
-    color: COLORS.textPrimary,
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    lineHeight: 22,
+    color: '#424343',
+    shadowColor: '#101828',
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
   },
   sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.green,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.lime,
+    borderWidth: 1.5,
+    borderColor: '#303a1e',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-  },
-  sendBtnDisabled: { backgroundColor: COLORS.btnDisabledBg },
-  sendArrow: {
-    fontFamily: 'Paperlogy-5Medium',
-    fontSize: 22,
-    color: '#fff',
-    lineHeight: 26,
   },
 
   // 인라인 이미지 선택창
   imagePickerBar: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     backgroundColor: COLORS.bg,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.outline,
+    borderTopWidth: 2,
+    borderTopColor: 'rgba(20,83,45,0.30)',
   },
   imagePickerBtn: {
     flex: 1,
-    height: 44,
-    borderRadius: 22,
+    height: 46,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    backgroundColor: COLORS.cardBg,
+    borderColor: '#303a1e',
+    backgroundColor: COLORS.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   imagePickerBtnText: {
-    fontFamily: 'ahn2006-M',
-    fontSize: 16,
-    color: COLORS.textPrimary,
+    fontFamily: FONTS.semiBold,
+    fontSize: 15,
+    color: '#424343',
   },
 
   // 변환 로딩
@@ -1443,86 +1489,107 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   transformingText: {
-    fontFamily: 'ahn2006-M',
+    fontFamily: 'SUITE-Bold',
     fontSize: 16,
     color: COLORS.textTertiary,
   },
   transformingSubText: {
-    fontFamily: 'Paperlogy-4Regular',
+    fontFamily: 'SUITE-Regular',
     fontSize: 13,
     color: COLORS.textTertiary,
   },
 
-  // 이미지 업로드 가이드 모달
+  // 사진 촬영 가이드 · 캐릭터 프리뷰 (공통 시트 헤더)
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    height: 56,
+    backgroundColor: COLORS.headerBg,
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.line,
+  },
+  sheetTitle: { fontFamily: FONTS.extraBold, fontSize: 18, lineHeight: 26, color: COLORS.outline },
+
+  // 사진 촬영 가이드 (바텀 시트)
   guideOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
   },
   guideSheet: {
+    maxHeight: '90%',
     backgroundColor: COLORS.bg,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
     borderBottomWidth: 0,
-    paddingTop: 24,
-    paddingBottom: 36,
-    gap: 16,
+    borderColor: '#303a1e',
     overflow: 'hidden',
   },
-  guidePadded: {
-    paddingHorizontal: 20,
-    gap: 8,
-  },
-  guideTitle: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 24,
-    color: COLORS.textPrimary,
-  },
+  guideScroll: { flexGrow: 0 },
+  guideBody: { padding: 20, gap: 16 },
+  // 안내 문구(왼쪽) + 예시 버튼(오른쪽, 글자 너비)
+  guideTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   guideSubtitle: {
-    fontFamily: 'Paperlogy-4Regular',
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    lineHeight: 22,
+    flex: 1,
+    fontFamily: FONTS.bold,
+    fontSize: 16,
+    lineHeight: 24,
+    color: COLORS.forest,
+    textAlign: 'left',
   },
-  guideImage: {
-    width: '100%',
-    height: 220,
+  // 항목 목록 (박스 없음)
+  guideList: { gap: 14 },
+  guideItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  guideList: { gap: 12 },
-  guideItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  guideEmoji: { fontSize: 18, width: 24 },
+  guideIconBox: { width: 28, alignItems: 'center', justifyContent: 'center' },
   guideText: {
     flex: 1,
-    fontFamily: 'Paperlogy-4Regular',
+    fontFamily: FONTS.semiBold,
     fontSize: 14,
-    color: COLORS.textPrimary,
     lineHeight: 20,
+    color: '#191C1B',
   },
-  guideBtn: {
-    height: 56,
-    borderRadius: 9999,
-    borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    backgroundColor: COLORS.lime,
+  guideFooter: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 28, gap: 10 },
+  // 예시 버튼: 글자 너비에 맞춤 (테두리는 시트의 다른 박스와 같은 1.5px #303a1e)
+  exampleBtn: {
+    height: 34,
+    paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#303a1e',
+    backgroundColor: COLORS.bg,
   },
-  guideBtnText: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 18,
-    color: COLORS.textPrimary,
-  },
-  guideCancelBtn: { alignItems: 'center', paddingVertical: 8 },
-  guideCancelText: {
-    fontFamily: 'Paperlogy-5Medium',
-    fontSize: 14,
-    color: COLORS.textTertiary,
-  },
+  exampleBtnText: { fontFamily: FONTS.bold, fontSize: 14, color: COLORS.pine },
 
-  // 캐릭터 프리뷰 모달
+  // 사진 예시 팝업 (화면 중앙)
+  exampleOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  exampleCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: COLORS.bg,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#303a1e',
+    overflow: 'hidden',
+  },
+  exampleBody: { padding: 16 },
+  exampleImage: { width: '100%', height: 280 },
+
+  // 캐릭터 프리뷰 (가운데 팝업)
   previewOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -1530,49 +1597,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   previewSheet: {
+    width: 320,
     backgroundColor: COLORS.bg,
-    borderRadius: 28,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    padding: 24,
-    alignItems: 'center',
-    width: 300,
+    borderColor: '#303a1e',
+    overflow: 'hidden',
   },
-  previewTitle: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 22,
-    color: COLORS.textPrimary,
-    textAlign: 'center',
-  },
-  previewConfirmBtn: {
-    width: '100%',
-    height: 52,
-    borderRadius: 9999,
-    backgroundColor: COLORS.lime,
-    borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  previewConfirmText: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 18,
-    color: COLORS.textPrimary,
-  },
-  previewRetakeBtn: {
-    width: '100%',
-    height: 52,
-    borderRadius: 9999,
-    borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    backgroundColor: COLORS.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewRetakeText: {
-    fontFamily: 'ahn2006-M',
-    fontSize: 18,
-    color: COLORS.textTertiary,
-  },
+  previewBody: { padding: 20, gap: 12, alignItems: 'stretch' },
+  failedText: { fontFamily: FONTS.bold, fontSize: 15, lineHeight: 23, color: COLORS.forest, textAlign: 'center', marginBottom: 4 },
 });

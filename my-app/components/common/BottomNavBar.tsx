@@ -1,73 +1,57 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Text, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS } from '../../constants';
-import { HomeIcon } from './Icons';
-import RecordIconSvg from '../../assets/images/record-icon.svg';
-import CollectionIconSvg from '../../assets/images/collection-icon.svg';
+import { COLORS, FONTS } from '../../constants';
+import { HomeIcon, RecordIcon, CollectionIcon, ChatIcon } from './Icons';
 
-function RecordIcon({ color, size = 20 }: { color: string; size?: number }) {
-  return <RecordIconSvg width={size} height={size} fill={color} />;
-}
-function CollectionIcon({ color, size = 20 }: { color: string; size?: number }) {
-  return <CollectionIconSvg width={size} height={size} fill={color} />;
-}
+// Figma 하단 탭 (node 5:14): 라인(2px, 위) + 간격 3 + 흰 배경 75 = 80. 항목은 라인 아래 21px에서 시작.
+export const TAB_BAR_HEIGHT = 80;
+const BORDER_W = 2;
 
-let LinearGradient: React.ComponentType<any> | null = null;
-try { LinearGradient = require('expo-linear-gradient').LinearGradient; } catch {}
-
-function GradPill({ style, children }: { style?: any; children: React.ReactNode }) {
-  if (LinearGradient) {
-    return (
-      <LinearGradient colors={['#f3f4f1', '#b5ff22']} style={style}>
-        {children}
-      </LinearGradient>
-    );
-  }
-  return <View style={[style, { backgroundColor: COLORS.lime }]}>{children}</View>;
-}
-
-export type ActiveTab = 'home' | 'calendar' | 'collection';
+export type ActiveTab = 'home' | 'calendar' | 'collection' | 'chat';
 
 interface Props {
   activeTab: ActiveTab;
+  /** 이미 활성인 탭을 다시 눌렀을 때 (예: 도감 상세 → 도감 목록) */
+  onActiveTabPress?: () => void;
 }
 
-const ACTIVE_COLOR   = COLORS.outline;
-const INACTIVE_COLOR = 'rgba(71,84,103,0.55)';
+const TABS: {
+  key: ActiveTab;
+  label: string;
+  route: string;
+  Icon: React.ComponentType<{ color: string; size?: number }>;
+}[] = [
+  { key: 'home',       label: 'Home',       route: '/',           Icon: HomeIcon },
+  { key: 'calendar',   label: 'Record',     route: '/calendar',   Icon: RecordIcon },
+  { key: 'collection', label: 'Collection', route: '/collection', Icon: CollectionIcon },
+  { key: 'chat',       label: 'Chat',       route: '/chat',       Icon: ChatIcon },
+];
 
-export default function BottomNavBar({ activeTab }: Props) {
+export default function BottomNavBar({ activeTab, onActiveTabPress }: Props) {
   const insets = useSafeAreaInsets();
 
-  const tabs: { key: ActiveTab; label: string; route: string; Icon: React.ComponentType<{ color: string; size?: number }> }[] = [
-    { key: 'home',         label: 'Home',       route: '/',            Icon: HomeIcon },
-    { key: 'calendar',     label: 'Record',     route: '/calendar',    Icon: RecordIcon },
-    { key: 'collection', label: 'Collection', route: '/collection', Icon: CollectionIcon },
-  ];
-
   return (
-    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-      {tabs.map(({ key, label, route, Icon }) => {
-        const isActive = activeTab === key;
-        const color = ACTIVE_COLOR;
-
-        if (isActive) {
-          return (
-            <TouchableOpacity key={key} onPress={() => router.replace(route as any)} activeOpacity={0.8}>
-              <GradPill style={styles.activePill}>
-                <Icon color={color} size={20} />
-                <Text style={styles.activeLabel}>{label}</Text>
-              </GradPill>
-            </TouchableOpacity>
-          );
-        }
+    <View style={[styles.bar, { height: TAB_BAR_HEIGHT + insets.bottom }]}>
+      {TABS.map(({ key, label, route, Icon }) => {
+        const color = key === activeTab ? COLORS.tabActive : COLORS.tabInactive;
         return (
-          <TouchableOpacity key={key} onPress={() => router.replace(route as any)} activeOpacity={0.8}>
-            <View style={styles.inactiveTab}>
-              <Icon color={key === 'home' ? ACTIVE_COLOR : INACTIVE_COLOR} size={20} />
-              <Text style={styles.inactiveLabel}>{label}</Text>
+          <TouchableOpacity
+            key={key}
+            style={styles.tab}
+            activeOpacity={0.7}
+            onPress={() => {
+              if (key !== activeTab) router.replace(route as any);
+              else onActiveTabPress?.();
+            }}
+          >
+            {/* 아이콘 20px 높이, 칸의 가로 중앙 */}
+            <View style={styles.iconSlot}>
+              <Icon color={color} size={20} />
             </View>
+            {/* 라벨: 아이콘 아래 6px (Figma top 26), 14px ExtraBold, 줄높이 15 */}
+            <Text style={[styles.label, { color }]} numberOfLines={1}>{label}</Text>
           </TouchableOpacity>
         );
       })}
@@ -75,50 +59,30 @@ export default function BottomNavBar({ activeTab }: Props) {
   );
 }
 
+// 4개 탭을 같은 폭으로 나눔. 항목은 선 아래 21px에서 시작.
 const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingTop: 12,
-    paddingHorizontal: 16,
     backgroundColor: COLORS.bg,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    borderTopColor: COLORS.outline,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
+    borderTopWidth: BORDER_W,
+    borderTopColor: 'rgba(122,177,11,0.30)',   // #7AB10B 30%
+    paddingTop: 21,
   },
-  activePill: {
-    flexDirection: 'column',
+  tab: {
+    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    width: 100,
-    height: 55,
-    borderRadius: 9999,
-    borderWidth: 1.5,
-    borderColor: COLORS.outline,
-    gap: 5,
   },
-  inactiveTab: {
-    flexDirection: 'column',
+  iconSlot: {
+    height: 20,
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'center',
-    width: 100,
-    paddingVertical: 6,
-    gap: 5,
   },
-  activeLabel: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 15,
-    color: COLORS.outline,
-    letterSpacing: 0.4,
-  },
-  inactiveLabel: {
-    fontFamily: 'ahn2006-B',
-    fontSize: 15,
-    color: INACTIVE_COLOR,
-    letterSpacing: 0.4,
+  label: {
+    marginTop: 6,
+    fontFamily: FONTS.extraBold,
+    fontSize: 14,
+    lineHeight: 15,
+    letterSpacing: -0.25,
+    textAlign: 'center',
   },
 });
