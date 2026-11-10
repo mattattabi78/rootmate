@@ -18,12 +18,9 @@ Notifications.setNotificationHandler({
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    'SUITE-Light':     require('../assets/fonts/SUITE-Light.ttf'),
     'SUITE-Regular':   require('../assets/fonts/SUITE-Regular.ttf'),
     'SUITE-Medium':    require('../assets/fonts/SUITE-Medium.ttf'),
-    'SUITE-SemiBold':  require('../assets/fonts/SUITE-SemiBold.ttf'),
     'SUITE-Bold':      require('../assets/fonts/SUITE-Bold.ttf'),
-    'SUITE-ExtraBold': require('../assets/fonts/SUITE-ExtraBold.ttf'),
     'SUITE-Heavy':     require('../assets/fonts/SUITE-Heavy.ttf'),
   });
 

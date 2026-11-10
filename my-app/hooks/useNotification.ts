@@ -4,7 +4,6 @@
 // 현재는 함수 껍데기만 구현. 백엔드 팀원이 실제 로직 채움.
 import { PlantType } from '../constants/character';
 import { isSupportedTask, PLANT_TASKS, PlantTask, getRandomNotification } from '../constants/plants';
-import { STAGE_TASKS, getActiveTaskIds } from '../constants/growthStages';
 
 let Notifications: any = null;
 try {
@@ -21,12 +20,10 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 }
 
 /**
- * 성장 단계가 바뀔 때마다 호출.
- * 현재 단계의 활성 task 목록을 기반으로 알림을 재스케줄함.
+ * 식물의 task 목록을 기반으로 알림을 재스케줄함.
  */
 export async function rescheduleNotifications(
   plantType: PlantType,
-  currentStage: number,
   plantedAt: string,
 ): Promise<void> {
   if (!Notifications) return;
@@ -37,10 +34,9 @@ export async function rescheduleNotifications(
   const hasPermission = await requestNotificationPermissions();
   if (!hasPermission) return;
 
-  // 2. 현재 단계의 활성 task id 목록
-  const activeIds = getActiveTaskIds(plantType, currentStage);
+  // 2. 알림을 등록할 task 목록
   const allTasks = PLANT_TASKS[plantType] ?? [];
-  const activeTasks = allTasks.filter(t => isSupportedTask(t.id) && activeIds.includes(t.id as any));
+  const activeTasks = allTasks.filter(t => isSupportedTask(t.id));
 
   // 3. 각 task의 notificationTime 기반으로 반복 알림 등록
   for (const task of activeTasks) {

@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { COLORS, FONTS } from '../../constants';
+import { COLORS, FONTS, fs } from '../../constants';
 import { storage, DEFAULT_NOTIFICATION_TIMES, NotificationTimes } from '../../store/storage';
 import { applyNotificationSettings } from '../../utils/notifications';
 import Button from '../common/Button';
@@ -266,13 +266,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: COLORS.line,
   },
-  title: { fontFamily: FONTS.extraBold, fontSize: 18, lineHeight: 26, color: COLORS.outline },
+  title: { fontFamily: FONTS.bold, fontSize: fs(18), lineHeight: fs(26), color: COLORS.outline },
   scroll: { flexGrow: 0 },
   body: { padding: 20, gap: 12 },
-  sectionTitle: { fontFamily: FONTS.extraBold, fontSize: 15, lineHeight: 20, color: COLORS.green },
+  sectionTitle: { fontFamily: FONTS.bold, fontSize: fs(15), lineHeight: fs(20), color: COLORS.green },
   sectionGap: { marginTop: 12 },
   field: { gap: 6 },
-  fieldLabel: { fontFamily: FONTS.bold, fontSize: 13, lineHeight: 18, color: COLORS.textSecondary },
+  fieldLabel: { fontFamily: FONTS.bold, fontSize: fs(13), lineHeight: fs(18), color: COLORS.textSecondary },
   inputWrap: {
     height: 48,
     flexDirection: 'row',
@@ -284,8 +284,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   inputWrapError: { borderColor: COLORS.inputBorderError },
-  input: { flex: 1, fontFamily: FONTS.bold, fontSize: 16, color: COLORS.textPrimary, padding: 0 },
-  counter: { fontFamily: FONTS.bold, fontSize: 13, color: COLORS.textTertiary, marginLeft: 8 },
+  input: { flex: 1, fontFamily: FONTS.bold, fontSize: fs(16), color: COLORS.textPrimary, padding: 0 },
+  counter: { fontFamily: FONTS.bold, fontSize: fs(13), color: COLORS.textTertiary, marginLeft: 8 },
   box: {
     gap: 10,
     paddingVertical: 14,
@@ -296,7 +296,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   boxHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  boxTitle: { fontFamily: FONTS.extraBold, fontSize: 16, color: COLORS.pine },
+  // "내 이름"·"식물 이름"(fieldLabel)과 같은 글자 스타일
+  boxTitle: { fontFamily: FONTS.bold, fontSize: fs(13), lineHeight: fs(18), color: COLORS.textSecondary },
   footer: { paddingHorizontal: 20, paddingBottom: 20, paddingTop: 4 },
 
   // 나가기 확인 레이어 (팝업 위에 겹침)
@@ -316,12 +317,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#303a1e',
   },
-  confirmTitle: { fontFamily: FONTS.extraBold, fontSize: 17, lineHeight: 24, color: COLORS.outline, textAlign: 'center' },
-  confirmDesc: { fontFamily: FONTS.semiBold, fontSize: 14, lineHeight: 20, color: COLORS.textSecondary, textAlign: 'center', marginBottom: 8 },
+  confirmTitle: { fontFamily: FONTS.bold, fontSize: fs(17), lineHeight: fs(24), color: COLORS.outline, textAlign: 'center' },
+  confirmDesc: { fontFamily: FONTS.medium, fontSize: fs(14), lineHeight: fs(20), color: COLORS.textSecondary, textAlign: 'center', marginBottom: 8 },
   confirmRow: { flexDirection: 'row', gap: 10 },
   confirmBtn: { flex: 1, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1.5, borderColor: '#303a1e' },
   confirmBtnStay: { backgroundColor: COLORS.lime },
   confirmBtnLeave: { backgroundColor: COLORS.bg, borderColor: '#d93025' },
-  confirmBtnText: { fontFamily: FONTS.bold, fontSize: 15, color: COLORS.outline },
+  confirmBtnText: { fontFamily: FONTS.bold, fontSize: fs(15), color: COLORS.outline },
   confirmBtnLeaveText: { color: '#d93025' },
 });

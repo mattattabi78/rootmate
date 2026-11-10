@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS, PLANTS } from '../../constants';
+import { COLORS, FONTS, PLANTS, fs } from '../../constants';
 import { storage } from '../../store/storage';
 import ProgressDots from '../../components/common/ProgressDots';
 import Button from '../../components/common/Button';
@@ -110,13 +110,13 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  backArrow: { fontFamily: FONTS.extraBold, fontSize: 22, color: COLORS.pine },
+  backArrow: { fontFamily: FONTS.bold, fontSize: fs(22), color: COLORS.pine },
   content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 48 },
   heading: {
-    fontFamily: FONTS.extraBold,
-    fontSize: 28,
+    fontFamily: FONTS.bold,
+    fontSize: fs(28),
     color: COLORS.pine,
-    lineHeight: 38,
+    lineHeight: fs(38),
     textAlign: 'center',
     marginBottom: 40,
   },
@@ -131,11 +131,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   inputWrapFocused: { borderColor: COLORS.inputBorderFocus, borderWidth: 1.5 },
-  input: { flex: 1, fontFamily: FONTS.bold, fontSize: 20, color: COLORS.textPrimary, padding: 0, textAlign: 'center' },
-  counter: { fontFamily: FONTS.bold, fontSize: 20, color: COLORS.textTertiary, marginLeft: 8 },
+  input: { flex: 1, fontFamily: FONTS.bold, fontSize: fs(20), color: COLORS.textPrimary, padding: 0, textAlign: 'center' },
+  counter: { fontFamily: FONTS.bold, fontSize: fs(20), color: COLORS.textTertiary, marginLeft: 8 },
   confirmation: {
     fontFamily: FONTS.bold,
-    fontSize: 15,
+    fontSize: fs(15),
     textAlign: 'center',
     marginTop: 16,
     color: COLORS.pine,

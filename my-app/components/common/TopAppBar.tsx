@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { COLORS, FONTS } from '../../constants';
+import { COLORS, FONTS, fs, ui } from '../../constants';
 import { storage } from '../../store/storage';
 import { getDevAdjustedDate } from '../../utils/devOverrides';
 import { HeartIcon } from './Icons';
@@ -20,7 +20,8 @@ interface Props {
   showBadge?: boolean;
 }
 
-export const HEADER_HEIGHT = 69;
+// 작은 화면에서는 글자·카드와 같은 배율(ui)로 줄임 (기준 기기에서는 그대로 69)
+export const HEADER_HEIGHT = ui(69);
 
 // 식물을 입양한 날(D+0)부터 오늘까지 경과한 일수 — 로컬 날짜 기준
 function daysSince(adoptedAt: string): number {
@@ -60,7 +61,7 @@ export default function TopAppBar({
       <View style={styles.left}>
         {showBack && (
           <TouchableOpacity onPress={handleBack} hitSlop={12} style={styles.backBtn}>
-            <ChevronPixelIcon color="#41493B" size={14} />
+            <ChevronPixelIcon color="#41493B" size={ui(14)} />
           </TouchableOpacity>
         )}
         <Text style={[styles.title, showBack && styles.titleAfterBack]}>{title}</Text>
@@ -76,7 +77,7 @@ export default function TopAppBar({
             style={styles.badge}
           >
             <Text style={styles.badgeText}>D+{days}</Text>
-            <HeartIcon color={COLORS.outline} size={13} />
+            <HeartIcon color={COLORS.outline} size={ui(13)} />
           </TouchableOpacity>
           {/* 설정 (팝업) */}
           <TouchableOpacity
@@ -85,7 +86,7 @@ export default function TopAppBar({
             hitSlop={10}
             accessibilityLabel="설정"
           >
-            <GearPixelIcon color={COLORS.outline} size={22} />
+            <GearPixelIcon color={COLORS.outline} size={ui(22)} />
           </TouchableOpacity>
           <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
         </View>
@@ -117,9 +118,9 @@ const styles = StyleSheet.create({
     paddingRight: 5,
   },
   title: {
-    fontFamily: FONTS.extraBold,
-    fontSize: 20,
-    lineHeight: 28,
+    fontFamily: FONTS.bold,
+    fontSize: fs(20),
+    lineHeight: fs(28),
     letterSpacing: 0.9,
     color: COLORS.outline,
     marginLeft: 8,
@@ -134,13 +135,13 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: COLORS.outline,
     borderRadius: 4,
-    paddingHorizontal: 11,
-    paddingVertical: 3,
+    paddingHorizontal: ui(11),
+    paddingVertical: ui(3),
   },
   badgeText: {
-    fontFamily: FONTS.extraBold,
-    fontSize: 15,
-    lineHeight: 17,
+    fontFamily: FONTS.bold,
+    fontSize: fs(15),
+    lineHeight: fs(17),
     color: COLORS.outline,
   },
 });

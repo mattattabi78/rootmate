@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ChevronPixelIcon } from '../common/PixelIcons';
-import { COLORS, FONTS } from '../../constants';
+import { COLORS, FONTS, fs } from '../../constants';
 
 // 알림 시간 선택: 30분 단위, 아침 05:00~12:00 / 저녁 17:00~23:30 (자정부터의 분)
 export const STEP_MIN = 30;
@@ -49,6 +49,6 @@ const styles = StyleSheet.create({
   rowDisabled: { opacity: 0.4 },
   time: {
     minWidth: 110, textAlign: 'center',
-    fontFamily: FONTS.extraBold, fontSize: 24, lineHeight: 32, color: COLORS.pine,
+    fontFamily: FONTS.bold, fontSize: fs(24), lineHeight: fs(32), color: COLORS.pine,
   },
 });

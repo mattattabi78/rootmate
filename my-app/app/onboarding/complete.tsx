@@ -9,7 +9,7 @@ import PlantCharacter from '../../components/common/PlantCharacter';
 import { PlantType } from '../../constants/character';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS } from '../../constants';
+import { COLORS, fs } from '../../constants';
 import { storage } from '../../store/storage';
 import Button from '../../components/common/Button';
 
@@ -96,14 +96,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: 'SUITE-ExtraBold',
-    fontSize: 28,
+    fontSize: fs(28),
     color: COLORS.textPrimary,
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
     fontFamily: 'SUITE-Medium',
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.pine,
     textAlign: 'center',
     marginTop: 10,
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   },
   body: {
     fontFamily: 'SUITE-Medium',
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.pine,
     textAlign: 'center',
   },

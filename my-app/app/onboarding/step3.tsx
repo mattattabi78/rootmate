@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS, PLANTS, Plant } from '../../constants';
+import { COLORS, FONTS, PLANTS, Plant, fs } from '../../constants';
 import { storage } from '../../store/storage';
 import ProgressDots from '../../components/common/ProgressDots';
 import Button from '../../components/common/Button';
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  backArrow: { fontFamily: FONTS.extraBold, fontSize: 22, color: COLORS.pine },
+  backArrow: { fontFamily: FONTS.bold, fontSize: fs(22), color: COLORS.pine },
   content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingBottom: 32 },
   illustration: {
     alignSelf: 'center',
@@ -106,18 +106,18 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   plantName: {
-    fontFamily: FONTS.extraBold,
-    fontSize: 28,
+    fontFamily: FONTS.bold,
+    fontSize: fs(28),
     color: COLORS.pine,
     textAlign: 'center',
     marginBottom: 4,
   },
   description: {
     fontFamily: FONTS.bold,
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.forest,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: fs(22),
     marginTop: 15,
     marginBottom: 28,
   },
@@ -135,8 +135,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
-  careLabel: { fontFamily: FONTS.bold, fontSize: 15, color: COLORS.line },
-  careValue: { fontFamily: FONTS.semiBold, fontSize: 15, color: COLORS.textPrimary, flex: 1, textAlign: 'right' },
+  careLabel: { fontFamily: FONTS.bold, fontSize: fs(15), color: COLORS.line },
+  careValue: { fontFamily: FONTS.medium, fontSize: fs(15), color: COLORS.textPrimary, flex: 1, textAlign: 'right' },
   divider: { height: 1, backgroundColor: COLORS.inputBorder, marginHorizontal: 16 },
   footer: { paddingHorizontal: 24, paddingBottom: 32 },
 });

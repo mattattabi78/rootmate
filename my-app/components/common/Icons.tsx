@@ -48,9 +48,6 @@ export function ChatIcon({ color, size = 20 }: IconProps) {
   );
 }
 
-// 기존 이름 호환
-export const ChatBubbleIcon = ChatIcon;
-
 export function HeartIcon({ color = '#14532D', size = 13 }: { color?: string; size?: number }) {
   return (
     <Svg width={Math.round((size * 14) / 13)} height={size} viewBox="0 0 14 13" fill="none">

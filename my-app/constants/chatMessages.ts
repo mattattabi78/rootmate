@@ -8,6 +8,8 @@ export interface PlantChatMessages {
   taskDone: () => string;
   taskSkip: (taskLabel: string) => string;
   taskRetry: (taskLabel: string) => string;
+  /** '오늘은 못할 것 같아'를 골랐을 때 — 이해해 주고, 내일 다시 같이 할 수 있게 남겨둔다고 알려 준다 */
+  taskCantToday: (taskLabel: string) => string;
   reminderYes: () => string;
   reminderNo: () => string;
   waterMoist: () => string;
@@ -42,6 +44,7 @@ const MESSAGES: Record<PlantType, PlantChatMessages> = {
     taskDone: () => randomMessage(['오케이. 잘했어 👍', '좋아. 오늘도 잘 챙겨줬네 🌿', '고마워. 덕분에 힘이 나!']),
     taskSkip: (label) => `${label} 못 했구나. 2시간 뒤에 알림 줄까?`,
     taskRetry: (label) => `그래서, 지금은 ${label} 했어?`,
+    taskCantToday: (label) => `그럴 수 있지. 오늘은 ${label} 쉬어도 돼. 내일 다시 할 수 있게 남겨둘게.`,
     reminderYes: () => randomMessage(['알림 맞춰뒀어. 잊지 말고.', '좋아, 2시간 뒤에 알려줄게.', '알림 설정했어. 그때 꼭 해줘.']),
     reminderNo: () => randomMessage(['알겠어. 오늘은 그냥 넘어가자.', '괜찮아. 시간 될 때 해줘.', '좋아, 다음에 잊지 않도록 하자.']),
     waterMoist: () => randomMessage(['흙이 촉촉하면 안 줘도 돼. 확인해줬네.', '아직 물을 안 줘도 괜찮아. 잘 살펴봤어!', '촉촉한 상태구나. 오늘은 물을 쉬어도 돼.']),
@@ -63,6 +66,7 @@ const MESSAGES: Record<PlantType, PlantChatMessages> = {
     taskDone: () => randomMessage(['와~ 잘 했어! 역시 최고야! 🎉', '최고다~ 오늘도 완벽해! 🎉', '잘했어! 덕분에 기분이 좋아 🍅']),
     taskSkip: (label) => `에구, ${label} 못 했구나... 2시간 뒤에 알림 받을래?`,
     taskRetry: (label) => `혹시 지금은 ${label} 했어?? ><`,
+    taskCantToday: (label) => `그럴 수도 있지~ 오늘은 ${label} 안 해도 괜찮아! 내일 다시 할 수 있게 남겨둘게 🍅`,
     reminderYes: () => randomMessage(['알겠어! 2시간 뒤에 꼭 알려줄게 ⏰', '좋아! 알림 맞춰둘게 ⏰', '잊지 않게 내가 2시간 뒤에 알려줄게!']),
     reminderNo: () => randomMessage(['그럼 시간 날 때 꼭 해줘~', '알겠어~ 나중에 꼭 챙겨줘!', '좋아, 나중에 잊지 말고 해줘 🍅']),
     waterMoist: () => randomMessage(['흙이 촉촉하구나! 오늘은 안 줘도 돼 💧', '아직 물은 필요 없겠다! 고마워!', '촉촉해서 다행이다~ 오늘은 물을 쉬자 💧']),
@@ -84,6 +88,7 @@ const MESSAGES: Record<PlantType, PlantChatMessages> = {
     taskDone: () => randomMessage(['오케이. 잘했어.', '관리 꽤 잘하네.', '이 정도면 합격이야. 고마워 🌼']),
     taskSkip: (label) => `${label} 못 했구나. 2시간 뒤에 알림 줄까?`,
     taskRetry: (label) => `그래서, 지금은 ${label} 했어?`,
+    taskCantToday: (label) => `그럴 수 있지. 오늘은 ${label} 쉬어도 돼. 내일 다시 할 수 있게 남겨둘게.`,
     reminderYes: () => randomMessage(['알림 맞춰뒀어. 잊지 말고.', '좋아, 2시간 뒤에 알려줄게.', '알림 설정했어. 그때 꼭 해줘.']),
     reminderNo: () => randomMessage(['알겠어. 오늘은 그냥 넘어가자.', '괜찮아. 시간 될 때 해줘.', '좋아, 다음에 잊지 않도록 하자.']),
     waterMoist: () => randomMessage(['흙이 촉촉하면 안 줘도 돼. 확인해줬네.', '아직 물을 안 줘도 괜찮아. 잘 살펴봤어!', '촉촉한 상태구나. 오늘은 물을 쉬어도 돼.']),
@@ -101,11 +106,13 @@ export function getPlantMessages(plantType: PlantType): PlantChatMessages {
 }
 
 // ─── task 확인 질문의 선택지 (물주기·햇빛 확인 등 모든 task가 같은 구성) ───────────
-// 했어 / 오늘은 안 해도 되는 이유(선택) / 깜빡함
-const TASK_CHOICES: Record<string, { done: string; alt?: string; skip: string }> = {
-  water:    { done: '당연하지!', alt: '아직 흙이 촉촉해.',     skip: '깜빡했어 ㅜㅜ' },
-  sunlight: { done: '당연하지!', alt: '오늘은 날씨가 흐렸어.', skip: '깜빡했어 ㅜㅜ' },
+// 했어 / 오늘은 안 해도 되는 이유(선택) / 오늘은 못할 것 같음(외출 등 → 내일 task 목록에 같이 띄움) / 깜빡함(→ 2시간 뒤 알림 제안)
+const CANT_TODAY = '오늘은 못할 것 같아.';
+interface TaskChoices { done: string; alt?: string; later: string; skip: string }
+const TASK_CHOICES: Record<string, TaskChoices> = {
+  water:    { done: '당연하지!', alt: '아직 흙이 촉촉해.',     later: CANT_TODAY, skip: '깜빡했어 ㅜㅜ' },
+  sunlight: { done: '당연하지!', alt: '오늘은 날씨가 흐렸어.', later: CANT_TODAY, skip: '깜빡했어 ㅜㅜ' },
 };
-const DEFAULT_TASK_CHOICES = { done: '당연하지!', skip: '깜빡했어 ㅜㅜ' };
-export const getTaskChoices = (taskId: string): { done: string; alt?: string; skip: string } =>
+const DEFAULT_TASK_CHOICES: TaskChoices = { done: '당연하지!', later: CANT_TODAY, skip: '깜빡했어 ㅜㅜ' };
+export const getTaskChoices = (taskId: string): TaskChoices =>
   TASK_CHOICES[taskId] ?? DEFAULT_TASK_CHOICES;

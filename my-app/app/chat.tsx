@@ -16,17 +16,16 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS } from '../constants';
-import { PlantType, GrowthStage, Expression, getExpressionImage } from '../constants/character';
+import { COLORS, FONTS, fs } from '../constants';
+import { PlantType, Expression } from '../constants/character';
+import FaceOverlay from '../components/common/BlinkingFace';
 import PlantCharacter from '../components/common/PlantCharacter';
 import { getTodayQuestion, getLongBreakQuestion } from '../services/api/questionPool';
 import { usePlantExpression } from '../hooks/usePlantExpression';
 import {
-  getOrInitGrowthState, recordStageEntry, getDaysSinceStageEntry,
-  setPendingConfirmQuestion, wasStageCheckedToday, setLastStageCheckDate,
+  getOrInitGrowthState,
   recordTaskCompletion, getTodayCompletedTaskIds,
 } from '../store/growthStore';
-import { getNextStageConfig, AUTO_ADVANCE_MESSAGES, STAGE_CONFIRM_MESSAGES, getActiveTaskIds } from '../constants/growthStages';
 import { storage, DailyRecord, MemorySummary } from '../store/storage';
 import { isSupportedTask, isTaskDueFor, isObservationDue, PlantTask, PLANT_TASKS } from '../constants/plants';
 import { getPlantMessages, getTaskChoices } from '../constants/chatMessages';
@@ -36,12 +35,13 @@ import * as ImagePicker from 'expo-image-picker';
 import { CameraView } from 'expo-camera';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Asset } from 'expo-asset';
-import { VASE_IMAGE } from '../constants/character';
+import { POT_REFERENCE_IMAGE } from '../constants/character';
 import EmojiText from '../components/common/EmojiText';
 import { getLocalDateString } from '../utils/date';
+import { shouldBackdateRecord } from '../utils/recordDate';
 import { getKstDayOfWeek, getDevAdjustedDate, getDevChatRounds } from '../utils/devOverrides';
 import { scheduleTaskReminder, cancelEveningNotification } from '../utils/notifications';
-import { getGuideItems, GUIDE_TITLE, GUIDE_SUBTITLE, GUIDE_BTN_LABEL, GUIDE_CAMERA_LABEL, GUIDE_EXAMPLE_OPEN } from '../constants/imageGuide';
+import { getGuideItems, GUIDE_TITLE, GUIDE_BTN_LABEL, GUIDE_CAMERA_LABEL, GUIDE_EXAMPLE_OPEN } from '../constants/imageGuide';
 import { persistImageUri } from '../utils/persistImage';
 
 // ─── 그라디언트 ───────────────────────────────────────────────────
@@ -72,7 +72,6 @@ interface Message {
 type Phase =
   | 'loading'
   | 'already_done'     // 오늘 이미 완료
-  | 'stage_confirm'    // 성장 단계 USER_CONFIRMED 질문 버튼 표시
   | 'task_check'       // 오늘의 task 확인 (task 순서대로)
   | 'observing'        // 식물 관찰 답변 대기
   | 'photo_capture'    // 식물 사진 촬영 대기
@@ -92,7 +91,15 @@ function newId() { return String(++msgId); }
 const choicesFor = getTaskChoices;
 
 // ─── 화면 ─────────────────────────────────────────────────────────
+// 자정~새벽 4시에 연 대화는 전날 기록으로 저장 (전날 기록이 없을 때). 화면의 날짜 표시는 시스템 시간 그대로
 export default function ChatScreen() {
+  const [backdate, setBackdate] = useState<boolean | null>(null);
+  useEffect(() => { shouldBackdateRecord().then(setBackdate).catch(() => setBackdate(false)); }, []);
+  if (backdate === null) return null;
+  return <ChatInner backdate={backdate} />;
+}
+
+function ChatInner({ backdate }: { backdate: boolean }) {
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>('loading');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -112,7 +119,6 @@ export default function ChatScreen() {
   // '흙이 촉촉해' 등 오늘은 안 해도 되는 이유를 고른 task (물주기는 water_moist로 기록해 다음 날 재확인)
   const [chatAltTaskIds, setChatAltTaskIds] = useState<string[]>([]);
   const [canEndConversation, setCanEndConversation] = useState(false);
-  const [plantStage, setPlantStage]   = useState<GrowthStage>(1);
   const [plantPhotoUri, setPlantPhotoUri] = useState<string | undefined>();
   const [generatedPlantUri, setGeneratedPlantUri] = useState<string | null>(null);
   const [generatedFacePos, setGeneratedFacePos] = useState<{ x: number; y: number; pot_width: number } | null>(null);
@@ -138,6 +144,7 @@ export default function ChatScreen() {
   const [maxRounds] = useState(() => getDevChatRounds());
 
   const today = getDevAdjustedDate();
+  if (backdate) today.setDate(today.getDate() - 1);
   const todayStr = getLocalDateString(today);
   // KST 기준 요일 (0=일, 3=수)
   const kstDow = getKstDayOfWeek();
@@ -148,17 +155,17 @@ export default function ChatScreen() {
   // ── 오늘 task 목록 계산 (daysOfWeek 필터 포함) ────────────────────
   const buildTodayTasks = (
     pType: PlantType,
-    stage: number,
     alreadyDoneToday: string[],
     completedTasks: { taskId: string; completedAt: string }[],
     plantedAt: string,
+    deferredIds: string[] = [],   // 어제 '오늘은 못할 것 같아'로 넘겨서 오늘 같이 떠야 하는 task
   ): PlantTask[] => {
-    const activeIds = getActiveTaskIds(pType, stage);
-    const observationDue = isObservationDue(pType, plantedAt, completedTasks, todayStr, stage);
+    const observationDue = isObservationDue(pType, plantedAt, completedTasks, todayStr);
     const observationDay = observationDue || alreadyDoneToday.includes('observe');
     return (PLANT_TASKS[pType] ?? []).filter(t => {
       if (!isSupportedTask(t.id)) return false;
-      if (!activeIds.includes(t.id as any)) return false;
+      // 어제 못해서 넘어온 task는 요일·주기 조건과 상관없이 오늘 목록에 포함 (이미 했거나 한 번만 하는 task를 끝낸 경우는 제외)
+      if (deferredIds.includes(t.id) && !alreadyDoneToday.includes(t.id) && !(t.oneTime && completedTasks.some(e => e.taskId === t.id))) return true;
       if (t.id === 'sunlight' && observationDay) return false;
       if (t.id === 'observe' && !observationDue) return false;
       if (t.oneTime && completedTasks.some(entry => entry.taskId === t.id)) return false;
@@ -166,7 +173,7 @@ export default function ChatScreen() {
       if (t.daysOfWeek && !t.daysOfWeek.includes(kstDow)) return false;
       if (
         (t.id === 'water' || t.id === 'sunlight' || t.id === 'observe') &&
-        !isTaskDueFor(pType, stage, t, plantedAt, completedTasks, todayStr)
+        !isTaskDueFor(pType, t, plantedAt, completedTasks, todayStr)
       ) return false;
       return true;
     });
@@ -246,9 +253,8 @@ export default function ChatScreen() {
       setPlantType(pType);
       memorySummariesRef.current = await storage.getRecentMemorySummaries();
 
-      // 성장 상태 먼저 확인 (task 필터링에 필요)
+      // task 완료 기록 먼저 확인 (task 필터링에 필요)
       const growthState = await getOrInitGrowthState(pType, pAt);
-      setPlantStage(growthState.currentStage as GrowthStage);   // 아바타의 대체 이미지는 현재 단계를 따라감
 
       // 오늘 완료 기록 확인
       const existingRecord = await storage.getDailyRecord(todayStr);
@@ -256,10 +262,10 @@ export default function ChatScreen() {
         const alreadyDoneIds = await getTodayCompletedTaskIds();
         const pendingTasks   = buildTodayTasks(
           pType,
-          growthState.currentStage,
           alreadyDoneIds,
           growthState.completedTasks,
           growthState.plantedAt,
+          await storage.getDeferredTasks(todayStr),
         );
 
         if (pendingTasks.length === 0) {
@@ -283,10 +289,10 @@ export default function ChatScreen() {
         const alreadyDoneToday = await getTodayCompletedTaskIds();
         const longBreakTasks = buildTodayTasks(
           pType,
-          growthState.currentStage,
           alreadyDoneToday,
           growthState.completedTasks,
           growthState.plantedAt,
+          await storage.getDeferredTasks(todayStr),
         );
         const fallbackQuestion = getTodayQuestion(pNick, new Date(pAt), qIdx, dqIdx);
         setTasks(longBreakTasks);
@@ -337,7 +343,7 @@ export default function ChatScreen() {
           setChatAltTaskIds(draft.chatAltTaskIds ?? []);
           setCanEndConversation(!!draft.canEndConversation);
           setTodayQuestion(draft.todayQuestion ?? '');
-          setPhase(draft.phase ?? 'task_check');
+          setPhase(!draft.phase || (draft.phase as string) === 'stage_confirm' ? 'task_check' : draft.phase);
         }
         return;
       }
@@ -346,47 +352,17 @@ export default function ChatScreen() {
       const installDate = plantData?.adoptedAt ? new Date(plantData.adoptedAt) : new Date();
       const fallbackQuestion = getTodayQuestion(pNick, installDate, qIdx, dqIdx);
       setTodayQuestion(fallbackQuestion);
-      if (!hasExistingRecordRef.current) setTemporaryExpression('oh', 2000);
+      if (!hasExistingRecordRef.current) setTemporaryExpression('surprise', 2000);
 
-      const alreadyChecked = await wasStageCheckedToday();
       const alreadyDone    = await getTodayCompletedTaskIds();
       const todayTaskList  = buildTodayTasks(
         pType,
-        growthState.currentStage,
         alreadyDone,
         growthState.completedTasks,
         growthState.plantedAt,
+        await storage.getDeferredTasks(todayStr),
       );
       setTasks(todayTaskList);
-
-      let growthMsg: string | null = null;
-      let needConfirm = false;
-      let confirmQ: string | undefined;
-
-      if (!alreadyChecked) {
-        const nextCfg = getNextStageConfig(pType, growthState.currentStage);
-        if (nextCfg) {
-          if (nextCfg.triggerCondition === 'DAYS_PASSED') {
-            const days = await getDaysSinceStageEntry(growthState.currentStage);
-            if (days >= (nextCfg.daysRequired ?? 0)) {
-              await recordStageEntry(nextCfg.stage);
-              setPlantStage(nextCfg.stage as GrowthStage);
-              growthMsg = AUTO_ADVANCE_MESSAGES[pType]?.[nextCfg.stage] ?? null;
-            }
-          } else if (nextCfg.triggerCondition === 'USER_CONFIRMED') {
-            const days = await getDaysSinceStageEntry(growthState.currentStage);
-            if (days >= (nextCfg.daysRequired ?? 0)) {
-              if (!growthState.pendingConfirmQuestion) await setPendingConfirmQuestion(nextCfg.confirmQuestion);
-              needConfirm = true;
-              confirmQ    = nextCfg.confirmQuestion;
-            }
-          }
-        }
-        await setLastStageCheckDate(todayStr);
-      } else if (growthState.pendingConfirmQuestion) {
-        needConfirm = true;
-        confirmQ    = growthState.pendingConfirmQuestion;
-      }
 
       const plantMessages = getPlantMessages(plantTypeRef.current);
       const greetMsg = { id: newId(), from: 'plant' as const, text: plantMessages.greeting(pNick) };
@@ -394,15 +370,7 @@ export default function ChatScreen() {
       setMessages([greetMsg]);
 
       setTimeout(() => {
-        if (growthMsg) {
-          setMessages(prev => [...prev, { id: newId(), from: 'plant', text: growthMsg! }]);
-          setTimeout(() => startTaskAt(0, todayTaskList, fallbackQuestion), 800);
-        } else if (needConfirm && confirmQ) {
-          setMessages(prev => [...prev, { id: newId(), from: 'plant', text: confirmQ! }]);
-          setPhase('stage_confirm');
-        } else {
-          startTaskAt(0, todayTaskList, fallbackQuestion);
-        }
+        startTaskAt(0, todayTaskList, fallbackQuestion);
       }, 500);
     })();
   }, []);
@@ -421,28 +389,6 @@ export default function ChatScreen() {
       observationChat: observationChatRef.current,
     });
   }, [messages, phase, canEndConversation, chatAltTaskIds]);
-
-  // ── 성장 단계 확인 답변 ─────────────────────────────────────────
-  const handleGrowthConfirm = async (confirmed: boolean) => {
-    setPhase('loading');
-    const userText  = confirmed ? '네, 됐어요!' : '아직이요';
-    let plantText = STAGE_CONFIRM_MESSAGES[plantType].notConfirmed;
-    if (confirmed) {
-      const state = await getOrInitGrowthState(plantType, new Date().toISOString());
-      const nextCfg = getNextStageConfig(plantType, state.currentStage);
-      if (nextCfg) { await recordStageEntry(nextCfg.stage); setPlantStage(nextCfg.stage as GrowthStage); }
-      // 단계별 전용 문구가 있으면 우선 사용 (예: 큰 화분 안내)
-      plantText = nextCfg?.confirmedMessage ?? STAGE_CONFIRM_MESSAGES[plantType].confirmed;
-      setTemporaryExpression('sparkle', 3000);
-    }
-    await setPendingConfirmQuestion(undefined);
-    setMessages(prev => [
-      ...prev,
-      { id: newId(), from: 'user',  text: userText },
-      { id: newId(), from: 'plant', text: plantText },
-    ]);
-    setTimeout(() => startTaskAt(0, tasks, todayQuestion), 800);
-  };
 
   // ── task 선택 (모든 task 공용) ──────────────────────────────────
   const handleTaskChoice = (done: boolean) => {
@@ -470,6 +416,24 @@ export default function ChatScreen() {
         setPhase('water_reminder');
       }, 500);
     }
+  };
+
+  // ── '오늘은 못할 것 같아' (외출 등 상황이 안 될 때): 이해해 주고, 이 task를 내일 목록에 같이 띄우도록 넘긴다 ──
+  const handleTaskCantToday = () => {
+    const m = getPlantMessages(plantTypeRef.current);
+    const task = tasks[taskIdx];
+    setPhase('loading');
+    const tomorrow = new Date(todayStr + 'T00:00:00');
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    storage.deferTask(getLocalDateString(tomorrow), task.id);
+    setMessages(prev => [...prev, { id: newId(), from: 'user', text: choicesFor(task.id).later }]);
+    setTimeout(() => {
+      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: m.taskCantToday(task.label) }]);
+      // 대화는 다음 task → 오늘 어땠는지 묻는 질문 순서로 이어진다
+      const next = taskIdx + 1;
+      setTaskIdx(next);
+      setTimeout(() => startTaskAt(next, tasks, todayQuestion), 500);
+    }, 500);
   };
 
   // ── 대체 선택 (흙이 촉촉함 / 날씨가 흐림 → 오늘은 하지 않아도 되는 경우, 완료로 기록) ──
@@ -594,7 +558,7 @@ export default function ChatScreen() {
       const resized = await ref.saveAsync({ compress: 0.8, format: SaveFormat.JPEG, base64: true });
       const base64DataUrl = `data:image/jpeg;base64,${resized.base64!}`;
 
-      const vaseAsset = Asset.fromModule(VASE_IMAGE);
+      const vaseAsset = Asset.fromModule(POT_REFERENCE_IMAGE);
       await vaseAsset.downloadAsync();
       const vaseRef = await ImageManipulator.manipulate(vaseAsset.localUri!).renderAsync();
       const vaseSaved = await vaseRef.saveAsync({ base64: true, format: SaveFormat.PNG });
@@ -610,7 +574,7 @@ export default function ChatScreen() {
         setPendingPhotoUri(null);
         setShowPhotoFailed(true);
       }
-    } catch (e) {
+    } catch {
       // 생성 실패 → 같은 안내 (기존 캐릭터 유지)
       setPendingPhotoUri(null);
       setShowPhotoFailed(true);
@@ -625,7 +589,7 @@ export default function ChatScreen() {
 
     const persistUri = await persistImageUri(previewPlantUri);
 
-    await storage.saveGeneratedPlant(persistUri, previewFacePos);
+    await storage.saveGeneratedPlant(persistUri, previewFacePos, todayStr);
     setGeneratedPlantUri(persistUri);
     setGeneratedFacePos(previewFacePos);
     setPreviewPlantUri(null);
@@ -663,7 +627,7 @@ export default function ChatScreen() {
     // 마음건강 질문 이미지 답변
     setMessages(prev => [...prev, { id: newId(), from: 'user', text: '', imageUri: uri }]);
     setPhase('loading');
-    setTemporaryExpression('heart', 3000);
+    setTemporaryExpression('default', 3000);
     const loadingId = newId();
     setMessages(prev => [...prev, { id: loadingId, from: 'plant', text: '.' }]);
     let dots = 1;
@@ -713,7 +677,7 @@ export default function ChatScreen() {
     setInputText('');
     setPhase('loading');
     setMessages(prev => [...prev, { id: newId(), from: 'user', text }]);
-    setTemporaryExpression('heart', 3000);
+    setTemporaryExpression('default', 3000);
     const loadingId = newId();
     setMessages(prev => [...prev, { id: loadingId, from: 'plant', text: '.' }]);
     let dots = 1;
@@ -860,6 +824,8 @@ export default function ChatScreen() {
   };
 
   // ── 렌더 ─────────────────────────────────────────────────────────
+  const isEnded = phase === 'already_done' || phase === 'reminder_done' || phase === 'done';
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <TopAppBar showBack showBadge={false} />
@@ -892,7 +858,6 @@ export default function ChatScreen() {
                 isGrouped={idx > 0 && messages[idx - 1].from === msg.from}
                 plantNickname={plantNickname}
                 plantType={plantType}
-                plantStage={plantStage}
                 plantExpression={plantExpression}
                 generatedPlantUri={generatedPlantUri}
                 generatedFacePos={generatedFacePos}
@@ -902,39 +867,6 @@ export default function ChatScreen() {
                 }}
               />
             ))}
-            {phase === 'already_done' && (
-              <View style={styles.doneCard}>
-                <EmojiText style={styles.doneText}>오늘 기록이 완료됐어요</EmojiText>
-                <TouchableOpacity onPress={() => router.replace('/' as any)} style={styles.doneBtn}>
-                  <Text style={styles.doneBtnText}>홈으로 돌아가기</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            {phase === 'reminder_done' && (
-              <View style={styles.doneCard}>
-                <TouchableOpacity onPress={() => router.replace('/' as any)} style={styles.doneBtn}>
-                  <Text style={styles.doneBtnText}>홈으로 돌아가기</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            {phase === 'done' && (
-              <View style={styles.doneCard}>
-                <TouchableOpacity
-                  onPress={async () => {
-                    const lastShown = await storage.getLastStreakShownDate();
-                    if (lastShown === todayStr) {
-                      router.replace('/' as any);
-                    } else {
-                      await storage.setLastStreakShownDate(todayStr);
-                      router.replace('/streak' as any);
-                    }
-                  }}
-                  style={styles.doneBtn}
-                >
-                  <Text style={styles.doneBtnText}>홈으로 가기</Text>
-                </TouchableOpacity>
-              </View>
-            )}
           </ScrollView>
 
           {/* 인라인 이미지 선택창 */}
@@ -962,20 +894,14 @@ export default function ChatScreen() {
           )}
 
           {/* 하단 패널: 선택지 + 입력 행 (Figma: 흰 배경, 상단 2px 선) */}
-          <View style={[styles.bottomPanel, { paddingBottom: 16 + insets.bottom }]}>
-            {phase === 'stage_confirm' && (
-              <View style={styles.choiceContainer}>
-                <ChoiceBtn onPress={() => handleGrowthConfirm(true)}>네, 됐어요!</ChoiceBtn>
-                <ChoiceBtn onPress={() => handleGrowthConfirm(false)}>나중에 줄게!</ChoiceBtn>
-              </View>
-            )}
-
+          <View style={[styles.bottomPanel, isEnded && styles.bottomPanelEnded, { paddingBottom: 16 + insets.bottom }]}>
             {phase === 'task_check' && tasks[taskIdx] && (
               <View style={styles.choiceContainer}>
                 <ChoiceBtn onPress={() => handleTaskChoice(true)}>{choicesFor(tasks[taskIdx].id).done}</ChoiceBtn>
                 {choicesFor(tasks[taskIdx].id).alt && (
                   <ChoiceBtn onPress={handleTaskAlt}>{choicesFor(tasks[taskIdx].id).alt as string}</ChoiceBtn>
                 )}
+                <ChoiceBtn onPress={handleTaskCantToday}>{choicesFor(tasks[taskIdx].id).later}</ChoiceBtn>
                 <ChoiceBtn onPress={() => handleTaskChoice(false)}>{choicesFor(tasks[taskIdx].id).skip}</ChoiceBtn>
               </View>
             )}
@@ -1004,7 +930,34 @@ export default function ChatScreen() {
               </View>
             )}
 
-            {/* 입력 행: 항상 표시, 답변 단계에서만 입력 가능 */}
+            {/* 대화 종료: 이미 오늘 기록을 마친 경우에는 입력창과 같은 모양의 완료 칸을 위에 두고, 그 아래에 홈으로 돌아가기 버튼. 둘 사이 간격은 같은 화자의 연속 말풍선 간격(8)과 같음 */}
+            {phase === 'already_done' && (
+              <View style={styles.endDoneBadge}>
+                <Text style={styles.doneBtnText}>오늘 기록 완료!</Text>
+              </View>
+            )}
+            {isEnded && (
+              <TouchableOpacity
+                style={styles.endHomeBtn}
+                activeOpacity={0.8}
+                onPress={async () => {
+                  if (phase === 'done') {
+                    const lastShown = await storage.getLastStreakShownDate();
+                    if (lastShown !== todayStr) {
+                      await storage.setLastStreakShownDate(todayStr);
+                      router.replace('/streak' as any);
+                      return;
+                    }
+                  }
+                  router.replace('/' as any);
+                }}
+              >
+                <Text style={styles.doneBtnText}>홈으로 돌아가기</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* 입력 행: 대화 중에만 표시, 답변 단계에서만 입력 가능 */}
+            {!isEnded && (
             <View style={[styles.inputRow, hasChoices(phase, tasks[taskIdx]) && styles.inputRowWithChoices]}>
               <TouchableOpacity
                 onPress={handlePlusButton}
@@ -1034,6 +987,7 @@ export default function ChatScreen() {
 <ArrowRightPixelIcon color="#1D1B20" size={10} />
               </TouchableOpacity>
             </View>
+            )}
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -1041,13 +995,17 @@ export default function ChatScreen() {
       {/* 사진 촬영 가이드 (바텀 시트) — 설정 팝업과 같은 스타일: 라임 헤더, 반경 10, #303a1e 테두리 */}
       <Modal visible={showGuideModal} transparent animationType="slide" onRequestClose={() => setShowGuideModal(false)}>
         <View style={styles.guideOverlay}>
+          {/* 시트 바깥(어두운 배경)을 누르면 닫힘 */}
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowGuideModal(false)} />
           <View style={styles.guideSheet}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>{GUIDE_TITLE}</Text>
-              <TouchableOpacity onPress={() => setShowGuideModal(false)} hitSlop={14}>
-                <Svg width={14} height={14} viewBox="0 0 14 14" fill="none">
-                  <Path d="M2 2L12 12M12 2L2 12" stroke={COLORS.pine} strokeWidth={2} strokeLinecap="round" />
-                </Svg>
+              <TouchableOpacity
+                style={styles.exampleBtn}
+                activeOpacity={0.7}
+                onPress={() => setShowGuideExample(true)}
+              >
+                <Text style={styles.exampleBtnText}>{GUIDE_EXAMPLE_OPEN}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1056,18 +1014,6 @@ export default function ChatScreen() {
               contentContainerStyle={styles.guideBody}
               showsVerticalScrollIndicator={false}
             >
-              {/* 안내 문구 + 예시 버튼(글자 너비에 맞춤, 안내 문구 오른쪽) */}
-              <View style={styles.guideTopRow}>
-                <Text style={styles.guideSubtitle}>{GUIDE_SUBTITLE}</Text>
-                <TouchableOpacity
-                  style={styles.exampleBtn}
-                  activeOpacity={0.7}
-                  onPress={() => setShowGuideExample(true)}
-                >
-                  <Text style={styles.exampleBtnText}>{GUIDE_EXAMPLE_OPEN}</Text>
-                </TouchableOpacity>
-              </View>
-
               {/* 가이드 항목 */}
               <View style={styles.guideList}>
                 {getGuideItems(plantType).map((item, i) => (
@@ -1096,8 +1042,8 @@ export default function ChatScreen() {
 
           {/* 사진 예시 팝업 — 화면 중앙 (같은 Modal 안의 오버레이) */}
           {showGuideExample && (
-            <View style={styles.exampleOverlay}>
-              <View style={styles.exampleCard}>
+            <TouchableOpacity style={styles.exampleOverlay} activeOpacity={1} onPress={() => setShowGuideExample(false)}>
+              <View style={styles.exampleCard} onStartShouldSetResponder={() => true}>
                 <View style={styles.sheetHeader}>
                   <Text style={styles.sheetTitle}>사진 예시</Text>
                   <TouchableOpacity onPress={() => setShowGuideExample(false)} hitSlop={14}>
@@ -1108,13 +1054,13 @@ export default function ChatScreen() {
                 </View>
                 <View style={styles.exampleBody}>
                   <Image
-                    source={require('../assets/images/guide.png')}
+                    source={require('../assets/images/ui/guide.png')}
                     style={styles.exampleImage}
                     resizeMode="contain"
                   />
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           )}
         </View>
       </Modal>
@@ -1159,15 +1105,14 @@ export default function ChatScreen() {
                   resizeMode="contain"
                 />
                 {previewFacePos && (
-                  <Image
-                    source={getExpressionImage(plantType, 'sparkle')}
+                  <FaceOverlay
+                    plantType={plantType}
                     style={{
                       position: 'absolute',
                       width: 110, height: 110,
                       left: (previewFacePos.x / 100) * 220 - 55,
                       top:  (previewFacePos.y / 100) * 220 - 55,
                     }}
-                    resizeMode="contain"
                   />
                 )}
               </View>
@@ -1196,17 +1141,17 @@ function ChoiceBtn({ onPress, children }: { onPress: () => void; children: strin
 }
 
 function hasChoices(phase: Phase, task?: PlantTask) {
-  return phase === 'stage_confirm' || phase === 'water_reminder' || phase === 'photo_capture'
+  return phase === 'water_reminder' || phase === 'photo_capture'
     || (phase === 'task_check' && !!task);
 }
 
 // ─── 말풍선 컴포넌트 ──────────────────────────────────────────────
 function MessageBubble({
-  message, isGrouped, plantNickname, plantType, plantStage, plantExpression,
+  message, isGrouped, plantNickname, plantType, plantExpression,
   generatedPlantUri, generatedFacePos, onGenImgError,
 }: {
   message: Message; isGrouped: boolean; plantNickname: string; plantType: PlantType;
-  plantStage: GrowthStage; plantExpression: Expression;
+  plantExpression: Expression;
   generatedPlantUri?: string | null;
   generatedFacePos?: { x: number; y: number; pot_width: number } | null;
   onGenImgError?: () => void;
@@ -1228,15 +1173,15 @@ function MessageBubble({
                 onError={onGenImgError}
               />
               {generatedFacePos && (
-                <Image
-                  source={getExpressionImage(plantType, plantExpression)}
+                <FaceOverlay
+                  plantType={plantType}
+                  expression={plantExpression}
                   style={{
                     position: 'absolute',
                     width: 20, height: 20,
                     left: (generatedFacePos.x / 100) * 40 - 10,
                     top: (generatedFacePos.y / 100) * 40 - 10,
                   }}
-                  resizeMode="contain"
                 />
               )}
             </View>
@@ -1244,7 +1189,7 @@ function MessageBubble({
             <View style={styles.avatarInner}>
               <PlantCharacter
                 plantType={plantType}
-                stage={plantStage}
+                stage={1}
                 expression={plantExpression}
                 width={37}
               />
@@ -1286,9 +1231,9 @@ const styles = StyleSheet.create({
   // 날짜 — 채팅 상단 중앙
   chatDate: {
     textAlign: 'center',
-    fontFamily: FONTS.extraBold,
-    fontSize: 15,
-    lineHeight: 20,
+    fontFamily: FONTS.bold,
+    fontSize: fs(15),
+    lineHeight: fs(20),
     color: COLORS.green,
     marginBottom: -9,   // 날짜 하단 → 첫 말풍선 31
   },
@@ -1336,7 +1281,7 @@ const styles = StyleSheet.create({
   bubbleUser: { alignSelf: 'flex-end', paddingHorizontal: 10.5 },
 
   bubbleSender: {
-    fontFamily: FONTS.semiBold, fontSize: 17, lineHeight: 16.5,
+    fontFamily: FONTS.medium, fontSize: fs(17), lineHeight: fs(16.5),
     letterSpacing: -0.275, color: COLORS.forest,
   },
   bubbleImage: {
@@ -1347,37 +1292,47 @@ const styles = StyleSheet.create({
     borderColor: '#2a2a2a',
   },
   bubbleText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 15,
-    lineHeight: 23,
+    fontFamily: FONTS.medium,
+    fontSize: fs(15),
+    lineHeight: fs(23),
     letterSpacing: -0.275,
     color: '#424343',
   },
   bubbleTextUser: { textAlign: 'right' },
 
   // 완료 카드
-  doneCard: {
-    alignItems: 'center',
-    padding: 24,
-    gap: 12,
-    backgroundColor: COLORS.bg,
+  // 이미 기록을 마친 경우의 완료 표시: 입력창(높이 46, 흰 배경, 반경 10, 1.5 테두리)과 같은 모양·세로 위치.
+  // 가로는 화면 전체(좌우 16 여백)
+  endDoneBadge: {
+    marginHorizontal: 16,
+    marginTop: 13,
+    height: 46,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#2a2a2a',
+    borderColor: '#303a1e',
+    backgroundColor: COLORS.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#101828',
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
   },
-  doneText: { fontFamily: FONTS.bold, fontSize: 18, color: COLORS.green },
-  doneBtn: {
-    marginTop: 4,
-    paddingHorizontal: 28,
-    paddingVertical: 12,
+  endHomeBtn: {
+    marginHorizontal: 16,
+    marginTop: 8,          // 같은 화자의 연속 말풍선 사이 간격(40 − 32 = 8)과 같음 — 완료 칸과 이 버튼 사이에도 그대로 적용
+    height: 48,
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: '#303a1e',
     backgroundColor: COLORS.lime,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  doneBtnText: { fontFamily: FONTS.bold, fontSize: 16, color: COLORS.outline },
+  doneBtnText: { fontFamily: FONTS.bold, fontSize: fs(16), color: COLORS.outline },
 
   // 하단 패널: 흰 배경 + 상단 2px 선
+  bottomPanelEnded: { backgroundColor: 'transparent', borderTopWidth: 0 },
   bottomPanel: {
     backgroundColor: COLORS.bg,
     borderTopWidth: 2,
@@ -1403,7 +1358,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
   },
   choiceBtnText: {
-    fontFamily: FONTS.semiBold, fontSize: 15, lineHeight: 23,
+    fontFamily: FONTS.medium, fontSize: fs(15), lineHeight: fs(23),
     letterSpacing: -0.275, color: '#424343',
   },
 
@@ -1435,9 +1390,9 @@ const styles = StyleSheet.create({
     borderColor: '#303a1e',
     paddingHorizontal: 12,
     paddingVertical: 0,
-    fontFamily: FONTS.semiBold,
-    fontSize: 13,
-    lineHeight: 22,
+    fontFamily: FONTS.medium,
+    fontSize: fs(13),
+    lineHeight: fs(22),
     color: '#424343',
     shadowColor: '#101828',
     shadowOpacity: 0.05,
@@ -1477,8 +1432,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   imagePickerBtnText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 15,
+    fontFamily: FONTS.medium,
+    fontSize: fs(15),
     color: '#424343',
   },
 
@@ -1490,12 +1445,12 @@ const styles = StyleSheet.create({
   },
   transformingText: {
     fontFamily: 'SUITE-Bold',
-    fontSize: 16,
+    fontSize: fs(16),
     color: COLORS.textTertiary,
   },
   transformingSubText: {
     fontFamily: 'SUITE-Regular',
-    fontSize: 13,
+    fontSize: fs(13),
     color: COLORS.textTertiary,
   },
 
@@ -1510,7 +1465,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: COLORS.line,
   },
-  sheetTitle: { fontFamily: FONTS.extraBold, fontSize: 18, lineHeight: 26, color: COLORS.outline },
+  sheetTitle: { fontFamily: FONTS.bold, fontSize: fs(18), lineHeight: fs(26), color: COLORS.outline },
 
   // 사진 촬영 가이드 (바텀 시트)
   guideOverlay: {
@@ -1530,16 +1485,6 @@ const styles = StyleSheet.create({
   },
   guideScroll: { flexGrow: 0 },
   guideBody: { padding: 20, gap: 16 },
-  // 안내 문구(왼쪽) + 예시 버튼(오른쪽, 글자 너비)
-  guideTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  guideSubtitle: {
-    flex: 1,
-    fontFamily: FONTS.bold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: COLORS.forest,
-    textAlign: 'left',
-  },
   // 항목 목록 (박스 없음)
   guideList: { gap: 14 },
   guideItem: {
@@ -1550,9 +1495,9 @@ const styles = StyleSheet.create({
   guideIconBox: { width: 28, alignItems: 'center', justifyContent: 'center' },
   guideText: {
     flex: 1,
-    fontFamily: FONTS.semiBold,
-    fontSize: 14,
-    lineHeight: 20,
+    fontFamily: FONTS.medium,
+    fontSize: fs(14),
+    lineHeight: fs(20),
     color: '#191C1B',
   },
   guideFooter: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 28, gap: 10 },
@@ -1567,7 +1512,7 @@ const styles = StyleSheet.create({
     borderColor: '#303a1e',
     backgroundColor: COLORS.bg,
   },
-  exampleBtnText: { fontFamily: FONTS.bold, fontSize: 14, color: COLORS.pine },
+  exampleBtnText: { fontFamily: FONTS.bold, fontSize: fs(14), color: COLORS.pine },
 
   // 사진 예시 팝업 (화면 중앙)
   exampleOverlay: {
@@ -1605,5 +1550,5 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   previewBody: { padding: 20, gap: 12, alignItems: 'stretch' },
-  failedText: { fontFamily: FONTS.bold, fontSize: 15, lineHeight: 23, color: COLORS.forest, textAlign: 'center', marginBottom: 4 },
+  failedText: { fontFamily: FONTS.bold, fontSize: fs(15), lineHeight: fs(23), color: COLORS.forest, textAlign: 'center', marginBottom: 4 },
 });

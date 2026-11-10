@@ -2,11 +2,12 @@ import React from 'react';
 import { Text, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS } from '../../constants';
+import { COLORS, FONTS, fs, ui } from '../../constants';
 import { HomeIcon, RecordIcon, CollectionIcon, ChatIcon } from './Icons';
 
 // Figma 하단 탭 (node 5:14): 라인(2px, 위) + 간격 3 + 흰 배경 75 = 80. 항목은 라인 아래 21px에서 시작.
-export const TAB_BAR_HEIGHT = 80;
+// 작은 화면에서는 글자·카드와 같은 배율(ui)로 줄임 (기준 기기에서는 그대로 80)
+export const TAB_BAR_HEIGHT = ui(80);
 const BORDER_W = 2;
 
 export type ActiveTab = 'home' | 'calendar' | 'collection' | 'chat';
@@ -48,7 +49,7 @@ export default function BottomNavBar({ activeTab, onActiveTabPress }: Props) {
           >
             {/* 아이콘 20px 높이, 칸의 가로 중앙 */}
             <View style={styles.iconSlot}>
-              <Icon color={color} size={20} />
+              <Icon color={color} size={ui(20)} />
             </View>
             {/* 라벨: 아이콘 아래 6px (Figma top 26), 14px ExtraBold, 줄높이 15 */}
             <Text style={[styles.label, { color }]} numberOfLines={1}>{label}</Text>
@@ -66,22 +67,22 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
     borderTopWidth: BORDER_W,
     borderTopColor: 'rgba(122,177,11,0.30)',   // #7AB10B 30%
-    paddingTop: 21,
+    paddingTop: ui(21),
   },
   tab: {
     flex: 1,
     alignItems: 'center',
   },
   iconSlot: {
-    height: 20,
+    height: ui(20),
     justifyContent: 'center',
     alignItems: 'center',
   },
   label: {
-    marginTop: 6,
-    fontFamily: FONTS.extraBold,
-    fontSize: 14,
-    lineHeight: 15,
+    marginTop: ui(6),
+    fontFamily: FONTS.bold,
+    fontSize: fs(14),
+    lineHeight: fs(15),
     letterSpacing: -0.25,
     textAlign: 'center',
   },

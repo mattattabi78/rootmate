@@ -367,7 +367,6 @@ export function isObservationDue(
   plantedAt: string,
   completedTasks: { taskId: string; completedAt: string }[],
   today = getLocalDateString(getDevAdjustedDate()),
-  stage = 1,
 ): boolean {
   const tasks = PLANT_TASKS[plantType] ?? [];
   const observationTask = tasks.find(item => item.id === 'observe');
@@ -381,116 +380,24 @@ export function isObservationDue(
   // 사진 찍는 날(수·토)에는 관찰하기 생략 — 사진 찍기 자체가 관찰
   if (PHOTO_DAYS.includes(new Date(`${today}T00:00:00`).getDay())) return false;
   if (!isTaskDue(sunlightTask, plantedAt, completedTasks, today)) return false;
-  if (isWaterDue(plantType, stage, completedTasks, today)) return false;
+  if (isWaterDue(plantType, completedTasks, today)) return false;
   return isTaskDue(observationTask, plantedAt, completedTasks, today);
 }
 
-/** task 종류별 '오늘 해야 하는 날인지' 판단 — 물주기는 계절·성장 단계 보정(constants/watering.ts) */
+/** task 종류별 '오늘 해야 하는 날인지' 판단 — 물주기는 계절 주기(constants/watering.ts) */
 export function isTaskDueFor(
   plantType: string,
-  stage: number,
   task: PlantTask,
   plantedAt: string,
   completedTasks: { taskId: string; completedAt: string }[],
   today = getLocalDateString(getDevAdjustedDate()),
 ): boolean {
-  if (task.id === 'water') return isWaterDue(plantType, stage, completedTasks, today);
+  if (task.id === 'water') return isWaterDue(plantType, completedTasks, today);
   return isTaskDue(task, plantedAt, completedTasks, today);
-}
-
-/** 파종일 기준 현재 주차 계산 */
-export function getCurrentWeek(plantedAt: string): number {
-  const planted = new Date(plantedAt);
-  const now = new Date();
-  const diffDays = Math.floor((now.getTime() - planted.getTime()) / (1000 * 60 * 60 * 24));
-  return Math.floor(diffDays / 7);
-}
-
-/** 오늘 해야 할 task 목록 반환 */
-export function getTodayTasks(
-  plantType: string,
-  plantedAt: string,
-  completedTaskIds: string[],
-  completedTasks: { taskId: string; completedAt: string }[] = [],
-  stage = 1,
-): PlantTask[] {
-  const tasks = PLANT_TASKS[plantType] ?? [];
-  const observationDue = isObservationDue(plantType, plantedAt, completedTasks, undefined, stage);
-  const observationDay = observationDue || completedTaskIds.includes('observe');
-  const currentWeek = getCurrentWeek(plantedAt);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const planted = new Date(plantedAt);
-  planted.setHours(0, 0, 0, 0);
-  const daysSincePlanted = Math.floor((today.getTime() - planted.getTime()) / (1000 * 60 * 60 * 24));
-
-  return tasks.filter(task => {
-    if (!isSupportedTask(task.id)) return false;
-    if (currentWeek < task.startWeek) return false;
-    if (task.id === 'sunlight' && observationDay) return false;
-    if (task.id === 'observe' && !observationDue) return false;
-
-    if (task.oneTime) {
-      return !completedTasks.some(entry => entry.taskId === task.id);
-    }
-
-    if (task.intervalDays === 0) return !completedTaskIds.includes(task.id);
-    if (task.id === 'water' || task.id === 'sunlight' || task.id === 'observe') {
-      return isTaskDueFor(plantType, stage, task, plantedAt, completedTasks);
-    }
-
-    const daysFromStart = daysSincePlanted - task.startWeek * 7;
-    if (daysFromStart < 0) return false;
-    return daysFromStart % task.intervalDays === 0;
-  });
-}
-
-/** 특정 task의 다음 실행 예정일 계산 */
-export function getNextTaskDate(
-  task: PlantTask,
-  plantedAt: string,
-  lastCompletedDate?: string,
-): Date {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  if (task.oneTime || task.intervalDays === 0) return today;
-
-  if (lastCompletedDate) {
-    const last = new Date(lastCompletedDate);
-    last.setHours(0, 0, 0, 0);
-    const next = new Date(last);
-    next.setDate(next.getDate() + task.intervalDays);
-    return next;
-  }
-
-  const planted = new Date(plantedAt);
-  planted.setHours(0, 0, 0, 0);
-  const startDate = new Date(planted);
-  startDate.setDate(startDate.getDate() + task.startWeek * 7);
-
-  const daysSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-  if (daysSinceStart < 0) return startDate;
-
-  const periodsPassed = Math.floor(daysSinceStart / task.intervalDays);
-  const next = new Date(startDate);
-  next.setDate(next.getDate() + (periodsPassed + 1) * task.intervalDays);
-  return next;
 }
 
 /** task 알림 메시지를 랜덤으로 하나 선택 */
 export function getRandomNotification(task: PlantTask): string {
   const { notifications } = task;
   return notifications[Math.floor(Math.random() * notifications.length)];
-}
-
-/** growthStage 문자열을 현재 성장 단계 번호로 변환 */
-export function growthStageToStep(stage: string, totalSteps: number): number {
-  switch (stage) {
-    case 'seed':    return 1;
-    case 'sprout':  return 2;
-    case 'growing': return Math.max(3, Math.floor(totalSteps * 0.5));
-    case 'done':    return totalSteps;
-    default:        return 1;
-  }
 }

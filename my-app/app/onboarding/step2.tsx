@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS, PLANTS, PLANT_CODES } from '../../constants';
+import { COLORS, FONTS, PLANTS, PLANT_CODES, fs } from '../../constants';
 import { storage } from '../../store/storage';
 import PlantCharacter from '../../components/common/PlantCharacter';
 import { PlantType } from '../../constants/character';
@@ -192,21 +192,21 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  backArrow: { fontFamily: FONTS.extraBold, fontSize: 22, color: COLORS.pine },
+  backArrow: { fontFamily: FONTS.bold, fontSize: fs(22), color: COLORS.pine },
   content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingBottom: 24 },
   heading: {
-    fontFamily: FONTS.extraBold,
-    fontSize: 28,
+    fontFamily: FONTS.bold,
+    fontSize: fs(28),
     color: COLORS.pine,
-    lineHeight: 38,
+    lineHeight: fs(38),
     textAlign: 'center',
     marginBottom: 8,
   },
   sub: {
     fontFamily: FONTS.bold,
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.forest,
-    lineHeight: 22,
+    lineHeight: fs(22),
     textAlign: 'center',
     marginBottom: 32,
   },
@@ -221,25 +221,25 @@ const styles = StyleSheet.create({
   },
   inputWrapValid: { borderColor: COLORS.inputBorderFocus, borderWidth: 1.5 },
   inputWrapError: { borderColor: COLORS.inputBorderError, borderWidth: 1.5 },
-  input: { fontFamily: FONTS.bold, fontSize: 20, color: COLORS.textPrimary, textAlign: 'center' },
+  input: { fontFamily: FONTS.bold, fontSize: fs(20), color: COLORS.textPrimary, textAlign: 'center' },
   feedbackValid: {
     fontFamily: FONTS.bold,
     textAlign: 'center',
     marginTop: 8,
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.green,
   },
   feedbackError: {
     fontFamily: FONTS.bold,
     textAlign: 'center',
     marginTop: 8,
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.red,
   },
   switchLink: { marginTop: 20, alignSelf: 'center' },
   switchLinkText: {
     fontFamily: 'SUITE-Medium',
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.textTertiary,
     textDecorationLine: 'underline',
   },
@@ -270,16 +270,15 @@ const styles = StyleSheet.create({
     borderColor: COLORS.pine,
     backgroundColor: COLORS.limeLight,
   },
-  plantEmoji: { fontSize: 28 },
   plantName: {
     fontFamily: FONTS.bold,
-    fontSize: 17,
+    fontSize: fs(17),
     color: COLORS.textPrimary,
     textAlign: 'center',
   },
   plantNameSelected: {
     color: COLORS.pine,
-    fontFamily: FONTS.extraBold,
+    fontFamily: FONTS.bold,
   },
   footer: { paddingHorizontal: 24, paddingBottom: 32 },
 });
