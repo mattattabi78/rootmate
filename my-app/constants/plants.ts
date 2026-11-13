@@ -110,7 +110,7 @@ export const PLANTS: Record<string, Plant> = {
     id: 'marigold',
     name: '메리골드',
     scientificName: 'Tagetes',
-    description: '안녕. 날 키운다니 좋은 선택이야.\n햇빛만 충분하면 금방 꽃 피울 수 있어.\n기대할게',
+    description: '안녕, 와줘서 반가워.\n햇빛만 충분하면 금방 꽃 피울 수 있어.\n내가 곁에서 도와줄게, 같이 해보자!',
     care: {
       water: '겉흙이 마르면 흠뻑',
       sunlight: '하루 4~6시간 이상 직사광선',
@@ -231,9 +231,9 @@ export const PLANT_TASKS: Record<string, PlantTask[]> = {
       intervalDays: 3,
       notificationTime: '19:00',
       notifications: [
-        '목말라. 흙이 말랐는지 확인해 줘.',
-        '흙 한번 만져봐. 말랐으면 물 좀 줘.',
-        '흙이 바삭해 보이는데? 물 한 잔 부탁할게.',
+        '목이 말라. 흙이 말랐는지 한번 봐줄래?',
+        '흙을 살짝 만져봐 줘. 말랐으면 물 한 잔 부탁할게.',
+        '흙이 바삭해 보여. 물 조금만 줄 수 있을까?',
       ],
     },
     {
@@ -244,9 +244,9 @@ export const PLANT_TASKS: Record<string, PlantTask[]> = {
       intervalDays: 1,
       notificationTime: '19:00',
       notifications: [
-        '햇빛 좀 받아야겠어. 창가로 데려가줘.',
-        '빛이 부족하면 꽃이 안 필지도 몰라..',
-        '햇빛이 부족하면 잎이 약해질 수 있어.',
+        '햇빛을 좀 쬐고 싶어. 창가로 데려가 줄래?',
+        '빛이 부족하면 꽃이 안 필지도 몰라. 볕 좋은 곳으로 옮겨줘.',
+        '햇빛을 충분히 받아야 잎이 튼튼해져. 부탁할게!',
       ],
     },
     {
@@ -256,7 +256,7 @@ export const PLANT_TASKS: Record<string, PlantTask[]> = {
       startWeek: 0,
       intervalDays: 3,
       notificationTime: '19:00',
-      notifications: ['지금 내 모습 어때?'],
+      notifications: ['지금 내 모습 어때? 같이 살펴봐 줘.'],
     },
     {
       id: 'photo',
@@ -266,7 +266,7 @@ export const PLANT_TASKS: Record<string, PlantTask[]> = {
       intervalDays: 1,
       daysOfWeek: PHOTO_DAYS,
       notificationTime: '19:00',
-      notifications: ['오늘은 사진 찍는 날이야. 내 모습 남겨줘!', '내 사진 찍어줄래? 나 많이 컸을걸.'],
+      notifications: ['오늘은 사진 찍는 날이야. 내 모습 남겨줄래?', '내 사진 찍어줄래? 나 많이 컸을걸.'],
     },
   ],
 };
@@ -311,20 +311,21 @@ export const PLANT_INFO: Record<string, PlantInfo> = {
     tagline: '작은 희망을 품은 허브',
     totalPeriod: '약 6~8주',
     intro: '열대 아시아가 원산지인 향긋한 허브예요.\n민트 향과 은은한 정향 향이 어우러져 다양한 요리에 활용되며,\n발아가 쉬워 초보자도 부담 없이 키울 수 있어요.',
-    cardIntro: '열대 아시아 원산의 향긋한 허브로,\n민트향과 은은한 정향이 어우러져\n요리에 잘 어울려요.\n발아가 잘 돼서 초보자도 키우기 쉬워요!',
+    cardIntro: '열대 아시아 원산의 향긋한 허브로,\n민트향과 은은한 정향이 어우러져\n요리에 잘 어울려요.\n발아가 잘 돼서\n초보자도 키우기 쉬워요!',
   },
   tomato: {
     name: '방울토마토',
     emoji: '🍅',
     tagline: '노력이 결실을 맺는 식물',
-    totalPeriod: '약 90~120일',
+    totalPeriod: '약 13~17주',
     intro: '빨갛게 익기까지는 시간이 걸리지만,\n기다린 만큼 달콤한 열매를 선물해줘요.\n수확량이 많아 키우는 재미가 있어요!',
+    cardIntro: '빨갛게 익기까지는 시간이 걸리지만,\n기다린 만큼 달콤한 열매를\n만날 수 있어요.\n수확량이 많아 키우는 재미가 있어요!',
   },
   marigold: {
     name: '메리골드',
     emoji: '🌼',
     tagline: '반드시 오고야 말 행복',
-    totalPeriod: '파종 후 약 30~40일 개화',
+    totalPeriod: '약 4~6주',
     intro: '노란빛, 주황빛 꽃을 오래 피우는 튼튼한 꽃이에요.\n햇빛만 충분하면 초보자도 쉽게 키울 수 있고,\n시든 꽃을 정리해 주면 새 꽃이 계속 피어나요.',
     cardIntro: '노란빛, 주황빛 꽃을 오래 피우는\n튼튼한 꽃이에요.\n햇빛만 충분하면 초보자도\n쉽게 키울 수 있어요!',
   },

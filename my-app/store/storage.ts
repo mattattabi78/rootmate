@@ -45,6 +45,7 @@ export const KEYS = {
   NOTIFICATION_TIMES:     '@plant/notification_times',
   NOTIFICATION_SIG:       '@plant/notification_signature',
   GROWN_PLANTS:           '@plant/grown_plants',
+  GROWN_SINCE:            '@plant/grown_since',
   GENERATED_PLANT_HISTORY: '@plant/generated_plant_history',   // [{ date, uri, facePos }] — 사진으로 만든 캐릭터를 만든 날짜별 기록 (Record 팝업에서 그날의 캐릭터를 보여주는 데 사용)
   DEFERRED_TASKS:         '@plant/deferred_tasks',   // { 'YYYY-MM-DD': taskId[] } — 못 해서 다음 날로 넘긴 task
 };
@@ -94,6 +95,23 @@ export const storage = {
       if (!grown.includes(data.id)) {
         await AsyncStorage.setItem(KEYS.GROWN_PLANTS, JSON.stringify([...grown, data.id]));
       }
+      // 도감에 표시할 '키우기 시작한 날' (식물별 처음 키운 날, 한 번만 기록)
+      const since = await storage.getGrownSince();
+      if (!since[data.id]) {
+        await AsyncStorage.setItem(KEYS.GROWN_SINCE, JSON.stringify({ ...since, [data.id]: data.adoptedAt ?? new Date().toISOString() }));
+      }
+    }
+  },
+  /** 식물별 키우기 시작한 날(ISO). 기록이 없는 현재 식물은 입양일로 채움 */
+  async getGrownSince(): Promise<Record<string, string>> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.GROWN_SINCE);
+      const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+      const current = await storage.getPlantData();
+      if (current?.id && !map[current.id] && current.adoptedAt) map[current.id] = current.adoptedAt;
+      return map;
+    } catch {
+      return {};
     }
   },
   /** 키운 적 있는 식물 id 목록 (현재 키우는 식물 포함) */

@@ -132,11 +132,8 @@ export default function Step2() {
                     onPress={() => setSelectedId(plant.id)}
                     activeOpacity={0.8}
                   >
-                    {/* 캐릭터 사각형 박스*/}
-                    <View style={[
-                      styles.plantCard,
-                      selectedId === plant.id && styles.plantCardSelected,
-                    ]}>
+                    {/* 캐릭터 (배경·테두리 없음) */}
+                    <View style={styles.plantCard}>
                       {/* 박스 중앙에 배치 (이전 64의 2배). 세로 위치는 CARD_CHAR_OFFSET_Y로 조정 */}
                       <View style={{ transform: [{ translateY: CARD_CHAR_OFFSET_Y }] }}>
                         <PlantCharacter
@@ -258,17 +255,9 @@ const styles = StyleSheet.create({
   plantCard: {
     width: '100%',
     aspectRatio: 1 / 1,
-    backgroundColor: COLORS.bg,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: COLORS.inputBorder,
+    // 배경·테두리 없이 캐릭터만 보여준다 (선택 표시는 아래 이름의 라임 배경)
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  plantCardSelected: {
-    borderColor: COLORS.pine,
-    backgroundColor: COLORS.limeLight,
   },
   plantName: {
     fontFamily: FONTS.bold,
@@ -279,6 +268,11 @@ const styles = StyleSheet.create({
   plantNameSelected: {
     color: COLORS.pine,
     fontFamily: FONTS.bold,
+    backgroundColor: COLORS.limeLight,
+    borderRadius: 10,
+    overflow: 'hidden',
+    paddingHorizontal: 12,
+    paddingVertical: 2,
   },
   footer: { paddingHorizontal: 24, paddingBottom: 32 },
 });

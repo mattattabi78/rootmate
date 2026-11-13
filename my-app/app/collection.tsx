@@ -2,14 +2,16 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
+  Image,
   Modal,
   PanResponder,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import Svg, { Path, SvgProps } from 'react-native-svg';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { COLORS, FONTS, fs, ui } from '../constants';
@@ -17,32 +19,25 @@ import { storage } from '../store/storage';
 import TopAppBar from '../components/common/TopAppBar';
 import FitToScreen from '../components/common/FitToScreen';
 import BottomNavBar from '../components/common/BottomNavBar';
-import PlantCharacter from '../components/common/PlantCharacter';
+import { LockPixelIcon } from '../components/common/PixelIcons';
+import PlantCharacter, { CHARACTER_RATIO } from '../components/common/PlantCharacter';
+import FaceOverlay from '../components/common/BlinkingFace';
+import { usePlantExpression } from '../hooks/usePlantExpression';
 import PlantDetailView from '../components/plant/PlantDetailView';
 import Wallpaper, { WALLPAPER_COLOR } from '../components/common/Wallpaper';
-import BasilSilhouette from '../assets/images/characters/silhouette/basil.svg';
-import TomatoSilhouette from '../assets/images/characters/silhouette/tomato.svg';
-import MarigoldSilhouette from '../assets/images/characters/silhouette/marigold.svg';
 import { PLANT_INFO } from '../constants/plants';
-import { PlantType, GrowthStage, getMaxStage } from '../constants/character';
+import { PlantType, GrowthStage, Expression, getMaxStage } from '../constants/character';
 
 const ALL_PLANTS: PlantType[] = ['basil', 'tomato', 'marigold'];
 
-// 키운 적 없는 식물 카드: 실루엣과 글자를 모두 하단 탭바의 비활성 아이콘과 같은 회색으로 보여준다.
+// 키운 적 없는 식물 카드: 회색 테마 + 씨앗 단계 캐릭터(투명도 없음), 글자는 하단 탭바의 비활성 아이콘과 같은 회색으로 보여준다.
 const LOCKED_GRAY = COLORS.tabInactive;
-// 실루엣 SVG(색은 currentColor).
-// 파일은 캐릭터 영역만 잘려 있어서, 846×1254 캐릭터 캔버스 안에서의 위치·크기(x, y, w, h)로 컬러 캐릭터와 같은 자리에 놓는다.
-// 위치는 각 식물의 다 자란 모습(`characters/_reference/{식물}_character.png`)과 가장 많이 겹치는 곳으로 맞춘 값이라, 어긋나 보이면 여기만 조정하면 된다.
-const CANVAS_W = 846;
-const SILHOUETTES: Record<PlantType, { Svg: React.FC<SvgProps>; x: number; y: number; w: number; h: number }> = {
-  basil:    { Svg: BasilSilhouette,    x: 87,  y: 141, w: 675, h: 1101 },
-  tomato:   { Svg: TomatoSilhouette,   x: 100, y: -8,  w: 660, h: 1184 },
-  marigold: { Svg: MarigoldSilhouette, x: 109, y: 167, w: 643, h: 1041 },
-};
+const CANVAS_W = 846;               // 캐릭터 레이어 캔버스 폭 (높이 1254)
 
 // Figma 덱 수치 (402x874 프레임)
 // Figma 덱 수치 (402x874 프레임, 본문은 y=69부터)
 // 카드 크기는 작은 화면에서 글자와 같은 비율(ui)로 줄임 (큰 화면에서는 ui(n) = n)
+const CHAR_W = 120;   // 카드 앞면 아치 속 캐릭터 영역 폭 (높이는 폭 × 5/3)
 const CARD_W = ui(240);
 const CARD_H = ui(360);
 const SIDE_W = ui(167);
@@ -69,43 +64,155 @@ function hasFinalConsonant(word: string): boolean {
   return code >= 0xAC00 && code <= 0xD7A3 && (code - 0xAC00) % 28 !== 0;
 }
 
-// ─── 카드 한 장의 내용 (메인 카드·뒤 카드 공용) ─────────────────────
-// 키운 적 있으면 캐릭터·소개, 없으면 초록 실루엣과 ? (카드 크기 CARD_W×CARD_H 기준 좌표)
-function CardFace({ plantType, unlocked }: { plantType: PlantType; unlocked: boolean }) {
-  const info = PLANT_INFO[plantType];
-  const sil = SILHOUETTES[plantType];
-  const k = ui(90) / CANVAS_W;   // 실루엣: 캐릭터 영역 폭 90(ui) 기준 배율
+// ─── 카드 한 장 (앞면 / 뒷면) ───────────────────────────────────────
+// 카드 크기 CARD_W×CARD_H 기준 좌표. 키운 적 있는 식물은 모두 초록 테마(파스텔 연두 배경 + 진한 초록 포인트색), 키운 적 없는 식물은 회색 테마.
+const GREEN_THEME = { bg: '#D6F2A0', accent: '#286905', soft: '#EEF9D5' };
+const LOCKED_THEME = { bg: '#E6E6E6', accent: LOCKED_GRAY, soft: '#F5F5F5' };
+// 아치 창 안에서 캐릭터를 놓는 기준점: 846×1254 캐릭터 캔버스 위의 좌표가 아치 창 가운데에 오게 한다.
+// 식물마다 가운데를 따로 재면 화분 높이가 카드마다 달라 보이므로(예: 토마토가 위로 뜸), 화분이 모든 카드에서 같은 높이에 오도록
+// 식물 3종의 이미지를 합친 영역(grown = 마지막 단계, seed = 1단계)의 가운데를 공통으로 쓴다.
+// 이미지(characters/{식물}/{식물}_N.png + pot_layer.png)의 불투명 영역 bbox에서 구한 값이라, 이미지를 바꾸면 여기도 갱신한다.
+const CONTENT_CENTER: Record<'grown' | 'seed', { x: number; y: number }> = {
+  grown: { x: 430.5, y: 612.5 },   // 합친 영역: y 0 ~ 1225 (토마토가 가장 키가 큼)
+  seed:  { x: 430.5, y: 776 },     // 합친 영역: y 327 ~ 1225
+};
+// 지금 키우는 식물의 현재 모습(홈 화면과 같은 캐릭터·표정)
+export interface LiveLook {
+  expression: Expression;
+  generated: { uri: string; facePos: { x: number; y: number } } | null;   // 사진으로 만든 캐릭터
+}
+const ARCH_W = ui(192);
+const ARCH_H = ui(248);   // 아래 이름표 윗면(360-22-44)과 12 떨어지게
+const BOX_W = CARD_W - ui(32);   // 뒷면 본문 상자
+const BOX_H = CARD_H - ui(122);
+
+// 배경 물방울 무늬 (연하게)
+function Dots({ color }: { color: string }) {
+  const dots = [];
+  const step = ui(20);
+  for (let y = 0, r = 0; y < CARD_H + step; y += step, r++) {
+    for (let x = (r % 2) * (step / 2); x < CARD_W + step; x += step) {
+      dots.push(<Circle key={`${x}-${y}`} cx={x} cy={y} r={ui(2.2)} fill={color} />);
+    }
+  }
+  return <Svg width={CARD_W} height={CARD_H} style={StyleSheet.absoluteFill} pointerEvents="none">{dots}</Svg>;
+}
+
+// 가장자리가 볼록볼록한 상자 배경 (참고 카드의 본문 상자)
+function ScallopBox({ w, h, fill }: { w: number; h: number; fill: string }) {
+  const b = ui(6);
+  const nx = Math.max(2, Math.round((w - 2 * b) / (2 * b)));
+  const ny = Math.max(2, Math.round((h - 2 * b) / (2 * b)));
+  const sx = (w - 2 * b) / nx;
+  const sy = (h - 2 * b) / ny;
+  const bumps = [];
+  for (let i = 0; i < nx; i++) {
+    const cx = b + sx * (i + 0.5);
+    bumps.push(<Circle key={`t${i}`} cx={cx} cy={b} r={sx / 2} fill={fill} />);
+    bumps.push(<Circle key={`b${i}`} cx={cx} cy={h - b} r={sx / 2} fill={fill} />);
+  }
+  for (let j = 0; j < ny; j++) {
+    const cy = b + sy * (j + 0.5);
+    bumps.push(<Circle key={`l${j}`} cx={b} cy={cy} r={sy / 2} fill={fill} />);
+    bumps.push(<Circle key={`r${j}`} cx={w - b} cy={cy} r={sy / 2} fill={fill} />);
+  }
   return (
-    <>
-      <Text style={[styles.cardName, !unlocked && styles.lockedText]}>{info.name}</Text>
+    <Svg width={w} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Rect x={b} y={b} width={w - 2 * b} height={h - 2 * b} fill={fill} />
+      {bumps}
+    </Svg>
+  );
+}
 
-      {unlocked && (
-        <View style={styles.cardChar} pointerEvents="none">
-          {/* 도감 카드 이미지는 기본 이미지로 고정: 각 식물의 마지막 성장 단계 (성장 단계·AI 캐릭터와 무관) */}
-          <PlantCharacter
-            plantType={plantType}
-            stage={getMaxStage(plantType) as GrowthStage}
-            expression="default"
-            width={ui(90)}
-          />
-        </View>
-      )}
+const pad2 = (n: number) => String(n).padStart(2, '0');
 
-      {!unlocked && sil && (
-        <View style={styles.cardChar} pointerEvents="none">
-          <sil.Svg
-            width={sil.w * k} height={sil.h * k} color={LOCKED_GRAY}
-            style={{ position: 'absolute', left: sil.x * k, top: sil.y * k }}
-          />
-        </View>
-      )}
+// ISO 날짜 → 2026.11.03
+function formatSince(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`;
+}
 
-      {/* 키운 적 없는 식물도 닉네임(태그라인)과 소개를 보여주되 회색으로 (상세 페이지는 열리지 않음) */}
-      <View style={styles.cardTextWrap}>
-        <Text style={[styles.cardTagline, !unlocked && styles.lockedText]}>{info.tagline}</Text>
-        <Text style={[styles.cardIntro, !unlocked && styles.lockedText]}>{info.cardIntro ?? info.intro}</Text>
+// 앞면: No. → 아치 창 속 캐릭터 → 아래 이름표
+//   키운 적 없음: 씨앗 단계(1단계) / 키운 적 있음: 다 자란 모습 / 지금 키우는 식물(live): 홈 화면과 같은 현재 모습
+function CardFront({ plantType, unlocked, live }: { plantType: PlantType; unlocked: boolean; live?: LiveLook }) {
+  const info = PLANT_INFO[plantType];
+  const th = unlocked ? GREEN_THEME : LOCKED_THEME;
+  const k = ui(CHAR_W) / CANVAS_W;   // 캐릭터 캔버스(846 폭) → 카드 속 크기 배율
+  const showGenerated = !!live?.generated;
+  const seed = !unlocked || !!live;   // 씨앗 단계 기본 캐릭터를 쓰는 경우
+  const center = CONTENT_CENTER[seed ? 'seed' : 'grown'];
+  const GEN = ui(CHAR_W) * 1.4;       // 사진 캐릭터(정사각형) 크기
+  return (
+    <View style={[styles.faceFill, { backgroundColor: th.bg }]}>
+      <Dots color={th.soft} />
+      <Text style={[styles.cardNo, { color: th.accent }]}>No.{pad2(ALL_PLANTS.indexOf(plantType) + 1)}</Text>
+      <View style={[styles.arch, { backgroundColor: th.soft, borderColor: th.accent }]} pointerEvents="none">
+        {showGenerated ? (
+          // 사진으로 만든 캐릭터 + 화분 위 얼굴 (홈 화면과 같은 구성)
+          <View style={{ position: 'absolute', width: GEN, height: GEN, left: (ARCH_W - 4 - GEN) / 2, top: (ARCH_H - 4 - GEN) / 2 }}>
+            <Image source={{ uri: live!.generated!.uri }} style={{ width: GEN, height: GEN }} resizeMode="contain" />
+            <FaceOverlay
+              plantType={plantType}
+              expression={live!.expression}
+              style={{
+                position: 'absolute', width: GEN / 2, height: GEN / 2,
+                left: (live!.generated!.facePos.x / 100) * GEN - GEN / 4,
+                top: (live!.generated!.facePos.y / 100) * GEN - GEN / 4,
+              }}
+            />
+          </View>
+        ) : (
+          /* 캐릭터는 식물마다 키가 달라서 시작점을 정하지 않고, 이미지 내용(화분+식물)의 가운데가 아치 창 가운데에 오게 놓는다 */
+          <View style={{ position: 'absolute', width: ui(CHAR_W), height: ui(CHAR_W) * CHARACTER_RATIO, left: (ARCH_W - 4) / 2 - center.x * k, top: (ARCH_H - 4) / 2 - center.y * k }}>
+            <PlantCharacter
+              plantType={plantType}
+              stage={(seed ? 1 : getMaxStage(plantType)) as GrowthStage}
+              expression={live?.expression ?? 'default'}
+              width={ui(CHAR_W)}
+            />
+          </View>
+        )}
       </View>
-    </>
+      <View style={[styles.banner, { backgroundColor: th.accent }]}>
+        <Text style={styles.bannerText}>{info.name}</Text>
+        {!unlocked && <LockPixelIcon color="#FFFFFF" size={16} />}
+      </View>
+    </View>
+  );
+}
+
+// 뒷면: No. → 이름·태그라인 → 볼록볼록한 본문 상자(상세 설명, 재배 기간, 키우기 시작한 날). 모두 가운데 정렬
+function CardBack({ plantType, unlocked, since }: { plantType: PlantType; unlocked: boolean; since?: string }) {
+  const info = PLANT_INFO[plantType];
+  const th = unlocked ? GREEN_THEME : LOCKED_THEME;
+  const textColor = th.accent;   // 본문 글자색도 테마색 (초록 / 회색)
+  const labelColor = unlocked ? COLORS.tabInactive : LOCKED_GRAY;
+  return (
+    <View style={[styles.faceFill, { backgroundColor: th.bg }]}>
+      <Dots color={th.soft} />
+      <Text style={[styles.cardNo, { color: th.accent }]}>No.{pad2(ALL_PLANTS.indexOf(plantType) + 1)}</Text>
+      <View style={styles.backHead}>
+        <Text style={[styles.backName, { color: th.accent }]}>{info.name}</Text>
+        <Text style={[styles.backTagline, { color: th.accent }]}>{info.tagline}</Text>
+      </View>
+      <View style={styles.backBox}>
+        <ScallopBox w={BOX_W} h={BOX_H} fill="#FFFFFF" />
+        <View style={styles.backBoxInner}>
+          <Text style={[styles.backIntro, { color: textColor }]}>{info.cardIntro ?? info.intro}</Text>
+          <View style={styles.backInfo}>
+            <Text style={[styles.backInfoLine, { color: labelColor }]}>
+              재배 기간  <Text style={[styles.backInfoValue, { color: th.accent }]}>{info.totalPeriod}</Text>
+            </Text>
+            {unlocked && !!since && (
+              <Text style={[styles.backInfoLine, { color: labelColor }]}>
+                키우기 시작한 날  <Text style={[styles.backInfoValue, { color: th.accent }]}>{formatSince(since)}</Text>
+              </Text>
+            )}
+          </View>
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -116,6 +223,10 @@ export default function CollectionScreen() {
   const [frontSide, setFrontSide] = useState<'left' | 'right'>('right');   // 뒤 카드 두 장 중 더 앞에 그릴 쪽 (평소엔 오른쪽이 위)
   const [deckH, setDeckH] = useState(0);   // 카드 덱 영역 높이 (카드 묶음을 세로 가운데에 두는 데 사용, 측정 전에는 숨김)
   const [grown, setGrown] = useState<string[]>([]);   // 키운 적 있는 식물 id
+  const [since, setSince] = useState<Record<string, string>>({});   // 식물별 키우기 시작한 날(ISO)
+  const [currentPlant, setCurrentPlant] = useState<PlantType>('basil');   // 지금 키우는 식물
+  const [generated, setGenerated] = useState<LiveLook['generated']>(null);   // 지금 키우는 식물의 사진 캐릭터
+  const { expression: liveExpr, refresh: refreshLiveExpr } = usePlantExpression(currentPlant);
 
   // 스와이프 애니메이션 값: dx = 손가락 이동량(뒤 카드가 중앙으로 올라오는 정도도 이 값에서 계산), enter = 넘긴 직후 뒤 카드가 다시 나타나는 정도(0→1)
   const [dx] = useState(() => new Animated.Value(0));
@@ -126,18 +237,32 @@ export default function CollectionScreen() {
   const [bodyH, setBodyH] = useState(0);
   const [detailOpen, setDetailOpen] = useState(false);
   const detailScrollY = useRef(0);
+  const [flip] = useState(() => new Animated.Value(0));   // 0 = 앞면, 1 = 뒷면
+  const flipped = useRef(false);
+  const toggleFlip = () => {
+    flipped.current = !flipped.current;
+    Animated.timing(flip, { toValue: flipped.current ? 1 : 0, duration: 420, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }).start();
+  };
 
   const clampIndex = (n: number) => Math.max(0, Math.min(ALL_PLANTS.length - 1, n));
 
   // 처음 열 때 내가 키우는 식물 카드부터 보여 줌
   useFocusEffect(useCallback(() => {
     storage.getPlantData().then(plantData => {
-      if (plantData?.id) setIndex(clampIndex(ALL_PLANTS.indexOf(plantData.id as PlantType)));
+      if (plantData?.id) {
+        setIndex(clampIndex(ALL_PLANTS.indexOf(plantData.id as PlantType)));
+        setCurrentPlant(plantData.id as PlantType);
+      }
     });
+    storage.getGeneratedPlant().then(g => setGenerated(g ? { uri: g.uri, facePos: g.facePos } : null));
+    refreshLiveExpr();
     storage.getGrownPlants().then(setGrown);
-  }, []));
+    storage.getGrownSince().then(setSince);
+  }, []));   // eslint-disable-line react-hooks/exhaustive-deps
 
   const plantType = ALL_PLANTS[index];
+  // 지금 키우는 식물 카드만 현재 모습(홈 화면과 같은 캐릭터·표정)으로 보여 줌
+  const liveFor = (t: PlantType): LiveLook | undefined => (t === currentPlant ? { expression: liveExpr, generated } : undefined);
   // 키운 적 있는 식물만 공개 (아니면 이름만 보임)
   const isUnlocked = grown.includes(plantType);
 
@@ -213,6 +338,13 @@ export default function CollectionScreen() {
 
   // 넘김 직후: 메인 카드가 이미 새 식물 내용(뒤 카드가 중앙으로 올라와 있던 모습과 같음)이므로 dx만 0으로 되돌림.
   // 이때 뒤 카드 두 장은 새 이전·다음 카드로 바뀌므로 잠시 숨겼다가 부드럽게 다시 나타냄
+  // 다른 카드로 넘어가면 항상 앞면부터
+  useEffect(() => {
+    flipped.current = false;
+    flip.stopAnimation();
+    flip.setValue(0);
+  }, [index]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!swapPending.current) return;
     swapPending.current = false;
@@ -295,18 +427,26 @@ export default function CollectionScreen() {
           {/* 뒤쪽 카드 2장 */}
           <Animated.View style={[styles.sideCard, styles.sideCardLeft, { top: deckTop + CARD_H / 2 - SIDE_H / 2, zIndex: frontSide === 'left' ? 2 : 1 }, leftTransform]}>
             <View style={styles.sideClip}>
-              <View style={styles.sideScaled}><CardFace plantType={prevType} unlocked={grown.includes(prevType)} /></View>
+              <View style={styles.sideScaled}><CardFront plantType={prevType} unlocked={grown.includes(prevType)} live={liveFor(prevType)} /></View>
             </View>
           </Animated.View>
           <Animated.View style={[styles.sideCard, styles.sideCardRight, { top: deckTop + CARD_H / 2 - SIDE_H / 2, zIndex: frontSide === 'right' ? 2 : 1 }, rightTransform]}>
             <View style={styles.sideClip}>
-              <View style={styles.sideScaled}><CardFace plantType={nextType} unlocked={grown.includes(nextType)} /></View>
+              <View style={styles.sideScaled}><CardFront plantType={nextType} unlocked={grown.includes(nextType)} live={liveFor(nextType)} /></View>
             </View>
           </Animated.View>
 
           {/* 메인 카드 */}
+          {/* 탭할 때마다 앞뒤가 뒤집힘 (좌우 드래그는 카드 넘기기) */}
           <Animated.View style={[styles.mainCard, { top: deckTop, zIndex: 3 }, cardTransform]}>
-            <CardFace plantType={plantType} unlocked={isUnlocked} />
+            <Pressable style={StyleSheet.absoluteFill} onPress={toggleFlip}>
+              <Animated.View style={[styles.faceOuter, { transform: [{ perspective: 1200 }, { rotateY: flip.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }]}>
+                <View style={styles.faceInner}><CardFront plantType={plantType} unlocked={isUnlocked} live={liveFor(plantType)} /></View>
+              </Animated.View>
+              <Animated.View style={[styles.faceOuter, { transform: [{ perspective: 1200 }, { rotateY: flip.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] }) }] }]}>
+                <View style={styles.faceInner}><CardBack plantType={plantType} unlocked={isUnlocked} since={since[plantType]} /></View>
+              </Animated.View>
+            </Pressable>
           </Animated.View>
 
           {/* 더 알아보기: 누르거나 위로 스와이프하면 상세 페이지가 아래에서 올라옴.
@@ -377,8 +517,8 @@ const styles = StyleSheet.create({
     top: 326 - SIDE_H / 2,
     width: SIDE_W,
     height: SIDE_H,
-    borderRadius: 10,
-    borderWidth: 1,
+    borderRadius: 20,
+    borderWidth: 1.5,
     borderColor: COLORS.line,
     backgroundColor: COLORS.bg,           // 불투명: 카드가 겹쳐도 뒤가 비쳐 보이지 않음
     shadowColor: '#000',
@@ -388,7 +528,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   // 그림자는 바깥 카드에 두고, 안쪽 내용만 둥근 모서리로 잘라냄
-  sideClip: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 9, overflow: 'hidden' },
+  sideClip: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 18.5, overflow: 'hidden' },
   // 메인 카드 크기(240×360)로 그린 내용을 뒤 카드 크기(167×250)에 맞게 축소
   sideScaled: {
     position: 'absolute',
@@ -400,31 +540,15 @@ const styles = StyleSheet.create({
   sideCardRight: { left: '50%', marginLeft: ui(54) - SIDE_W / 2 },
 
   // 메인 카드 top 215 → 146
-  mainCard: {
-    position: 'absolute',
-    top: 146,
-    width: CARD_W,
-    height: CARD_H,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    backgroundColor: COLORS.bg,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
+  mainCard: { position: 'absolute', top: 146, width: CARD_W, height: CARD_H },
+  // 앞·뒷면: 겹쳐 두고 뒷면(backface)은 숨김. 그림자는 바깥, 둥근 모서리 잘라내기는 안쪽에서
+  faceOuter: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 20, backgroundColor: COLORS.bg,
+    backfaceVisibility: 'hidden',
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 20, shadowOffset: { width: 0, height: 0 }, elevation: 6,
   },
-  // 이름: top 247 (카드 기준 32), 24px, 줄높이 20 → 28로 맞추고 top 28
-  cardName: {
-    position: 'absolute', top: ui(28), left: 0, right: 0, textAlign: 'center',
-    fontFamily: FONTS.bold, fontSize: fs(24), lineHeight: fs(28), color: COLORS.green,
-  },
-  // 캐릭터 90x150: 카드 기준 top 60
-  // 캐릭터 영역 90x150 (카드 기준 left 72, top 75 → 중심 (117, 135))
-  cardChar: { position: 'absolute', top: ui(75), left: ui(72), width: ui(90), height: ui(150) },
-  // 태그라인 top 446 (카드 기준 231), 폭 170, 요소 간격 15
-  // 세부 설명(태그라인·소개) 글자는 줄이지 않는다. 폭 170은 그대로 두고 카드 가운데에 맞춤
+  faceInner: { flex: 1, borderRadius: 20, borderWidth: 1.5, borderColor: COLORS.line, overflow: 'hidden' },
+  faceFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   // 안내 팝업 (설정 화면의 '저장하지 않고 나갈까요?' 팝업과 같은 모양)
   noticeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
   noticeBox: {
@@ -436,16 +560,28 @@ const styles = StyleSheet.create({
   noticeBtn: { height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1.5, borderColor: '#303a1e', backgroundColor: COLORS.lime },
   noticeBtnText: { fontFamily: FONTS.bold, fontSize: fs(15), color: COLORS.outline },
   lockedText: { color: LOCKED_GRAY },
-  cardTextWrap: { position: 'absolute', top: ui(231), left: (CARD_W - 170) / 2, width: 170, alignItems: 'center', gap: 15 },
-  cardTagline: {
-    fontFamily: FONTS.bold, fontSize: 16, lineHeight: 20,   // 줄이지 않음
-    color: COLORS.green, textAlign: 'center',
+  // 앞면
+  cardNo: { position: 'absolute', top: ui(14), left: ui(20), fontFamily: FONTS.bold, fontSize: 11, lineHeight: 15 },
+  arch: {
+    position: 'absolute', top: ui(34), left: (CARD_W - ARCH_W) / 2, width: ARCH_W, height: ARCH_H,
+    borderTopLeftRadius: ARCH_W / 2, borderTopRightRadius: ARCH_W / 2, borderBottomLeftRadius: 14, borderBottomRightRadius: 14,
+    borderWidth: 2, overflow: 'hidden',
   },
-  cardIntro: {
-    alignSelf: 'stretch',
-    fontFamily: FONTS.medium, fontSize: 10, lineHeight: 15,   // 줄이지 않음
-    color: '#000', textAlign: 'center',
+  banner: {
+    position: 'absolute', bottom: ui(22), left: ui(30), right: ui(30), height: ui(44), borderRadius: 22,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
+  bannerText: { fontFamily: FONTS.bold, fontSize: fs(18), lineHeight: fs(24), color: '#FFFFFF' },
+  // 뒷면 (모두 가운데 정렬)
+  backHead: { position: 'absolute', top: ui(34), left: ui(20), right: ui(20), alignItems: 'center', gap: 2 },
+  backName: { fontFamily: FONTS.bold, fontSize: fs(22), lineHeight: fs(28), textAlign: 'center' },
+  backTagline: { fontFamily: FONTS.bold, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  backBox: { position: 'absolute', top: ui(100), left: ui(16), width: BOX_W, height: BOX_H },
+  backBoxInner: { flex: 1, paddingHorizontal: ui(26), paddingVertical: ui(22), alignItems: 'center', justifyContent: 'center', gap: ui(16) },
+  backIntro: { fontFamily: FONTS.medium, fontSize: 11, lineHeight: 18, textAlign: 'center' },
+  backInfo: { alignItems: 'center', gap: 4 },
+  backInfoLine: { fontFamily: FONTS.medium, fontSize: 10, lineHeight: 15, textAlign: 'center' },
+  backInfoValue: { fontFamily: FONTS.bold, fontSize: 11 },
 
   // 더 알아보기: 화살표 top 630 (→561), 높이 58 / 텍스트 top 694 (→625)
   moreBtn: { position: 'absolute', top: 561, alignItems: 'center' },

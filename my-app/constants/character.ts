@@ -12,7 +12,7 @@ export const POT_IMAGE = require('../assets/images/characters/pot_layer.png');
 export const POT_REFERENCE_IMAGE = require('../assets/images/characters/pot.png');
 
 // 화분 얼굴 v2 (프레임 있는 버전). 이미지는 scripts/build_faces.py 로 만든다.
-//   - 얼굴 종류: default(기본) / smile(웃음, 바질) / neutral(무표정) / tear(눈물) / cry(더 슬픈 눈물, 메리골드) / surprise(놀람, 바질)
+//   - 얼굴 종류: default(기본) / smile(웃음, 바질은 기본 얼굴이 웃음이라 기본으로 대체) / neutral(무표정) / tear(눈물) / cry(더 슬픈 눈물, 메리골드) / surprise(놀람, 바질: 입 고정 + 큰 눈, 깜빡임은 비정기)
 //   - 눈 상태(open·half·closed)로 깜빡이고, tear는 눈물 3프레임(t1→t2→t3)이 흐름
 //   - 표정 이름(Expression)은 getFaceKind()로 얼굴 종류에 연결
 export type EyeState = 'open' | 'half' | 'closed';
@@ -22,7 +22,7 @@ export interface FaceSet {
   layers: Record<EyeState, any>;
   /** 오버레이용: 500×500 정사각형, 얼굴 중심이 이미지 중심 (AI 사진 캐릭터 위에 얹을 때) */
   overlays: Record<EyeState, any>;
-  /** 3프레임 애니메이션 (tear: 눈물 t1→t3, surprise: 놀람 s1→s3) — layers/overlays와 같은 좌표계의 별도 레이어 */
+  /** 3프레임 애니메이션 (tear: 눈물 t1→t3) — layers/overlays와 같은 좌표계의 별도 레이어 */
   tears?: { layers: [any, any, any]; overlays: [any, any, any] };
   /** 애니메이션을 끈 정지 화면에서 보여줄 프레임 (0~2, 기본 1) */
   staticFrame?: number;
@@ -40,10 +40,6 @@ export const FACE_SETS: Record<PlantType, Partial<Record<FaceKind, FaceSet>> & {
         half: require('../assets/images/characters/face_v2/basil_overlay_half.png'),
         closed: require('../assets/images/characters/face_v2/basil_overlay_closed.png'),
       },
-    },
-    smile: {
-      layers: { open: require('../assets/images/characters/face_v2/basil_smile_open.png'), half: require('../assets/images/characters/face_v2/basil_smile_half.png'), closed: require('../assets/images/characters/face_v2/basil_smile_closed.png') },
-      overlays: { open: require('../assets/images/characters/face_v2/basil_smile_overlay_open.png'), half: require('../assets/images/characters/face_v2/basil_smile_overlay_half.png'), closed: require('../assets/images/characters/face_v2/basil_smile_overlay_closed.png') },
     },
     neutral: {
       layers: { open: require('../assets/images/characters/face_v2/basil_neutral_open.png'), half: require('../assets/images/characters/face_v2/basil_neutral_half.png'), closed: require('../assets/images/characters/face_v2/basil_neutral_closed.png') },
@@ -66,13 +62,8 @@ export const FACE_SETS: Record<PlantType, Partial<Record<FaceKind, FaceSet>> & {
       },
     },
     surprise: {
-      layers: { open: require('../assets/images/characters/face_v2/basil_surprise_open.png'), half: require('../assets/images/characters/face_v2/basil_surprise_open.png'), closed: require('../assets/images/characters/face_v2/basil_surprise_open.png') },
-      overlays: { open: require('../assets/images/characters/face_v2/basil_surprise_overlay_open.png'), half: require('../assets/images/characters/face_v2/basil_surprise_overlay_open.png'), closed: require('../assets/images/characters/face_v2/basil_surprise_overlay_open.png') },
-      tears: {
-        layers: [require('../assets/images/characters/face_v2/basil_surprise_s1.png'), require('../assets/images/characters/face_v2/basil_surprise_s2.png'), require('../assets/images/characters/face_v2/basil_surprise_s3.png')],
-        overlays: [require('../assets/images/characters/face_v2/basil_surprise_overlay_s1.png'), require('../assets/images/characters/face_v2/basil_surprise_overlay_s2.png'), require('../assets/images/characters/face_v2/basil_surprise_overlay_s3.png')],
-      },
-      staticFrame: 2,
+      layers: { open: require('../assets/images/characters/face_v2/basil_surprise_open.png'), half: require('../assets/images/characters/face_v2/basil_surprise_half.png'), closed: require('../assets/images/characters/face_v2/basil_surprise_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/basil_surprise_overlay_open.png'), half: require('../assets/images/characters/face_v2/basil_surprise_overlay_half.png'), closed: require('../assets/images/characters/face_v2/basil_surprise_overlay_closed.png') },
     },
   },
   tomato: {

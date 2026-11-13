@@ -25,7 +25,7 @@ rootmate/
 └── my-app/                          # Expo 앱 루트
     ├── app/                         # 화면 (Expo Router file-based routing)
     │   ├── _layout.tsx              # 폰트 로딩(SUITE), 알림 핸들러, Stack
-    │   ├── welcome.tsx              # 환영 화면
+    │   ├── welcome.tsx              # 환영 화면 (미사용: 첫 진입은 온보딩으로 바로 이동)
     │   ├── index.tsx                # 홈 탭
     │   ├── calendar.tsx             # Record 탭 (캘린더 / 앨범)
     │   ├── collection.tsx           # 도감 탭 (카드 덱 + 같은 화면의 상세 페이지)
@@ -48,7 +48,7 @@ rootmate/
     ├── utils/                       # 날짜, 채팅 복원, 알림 예약, 개발자 날짜 시뮬레이션, 작은 화면 압축(layout), 진동(haptics)
     ├── scripts/build_faces.py       # 화분 얼굴 이미지(face_v2) 생성
     ├── assets/                      # SUITE 폰트(Regular·Medium·Bold·Heavy), images/ui(월페이퍼·가이드), images/characters
-    │                                #   (식물 단계, face_v2, silhouette, pot, `_source`·`_reference`·`_legacy`는 보관용)
+    │                                #   (식물 단계, face_v2, pot, `_source`·`_reference`·`_legacy`는 보관용)
     ├── DESIGN.md                    # 디자인 시스템 (Y2K 개정판)
     ├── QUESTIONS.md                 # 질문 목록 (questions.ts와 동기화)
     └── notification.json            # 식물별 알림 문구·주기 기획 데이터
@@ -66,7 +66,7 @@ rootmate/
 | 로컬 저장 | AsyncStorage |
 | 이미지 / 카메라 | expo-image, expo-image-picker, expo-image-manipulator, expo-camera |
 | 알림 | expo-notifications |
-| 그래픽 | react-native-svg (아이콘 대부분을 SVG 코드로 구현), react-native-svg-transformer(도감 실루엣 `.svg`) |
+| 그래픽 | react-native-svg (아이콘 대부분을 SVG 코드로 구현), react-native-svg-transformer(`.svg` 파일 컴포넌트) |
 | 진동 | expo-haptics (연속 관리 연출) |
 | 애니메이션 | React Native Animated + PanResponder (도감 카드·상세 전환, 컨페티, 캐릭터 얼굴 깜빡임·눈물) |
 | 스타일 | React Native StyleSheet. 폰트는 SUITE 한 종류(Regular · Medium · Bold · Heavy) |
@@ -113,13 +113,14 @@ rootmate/
 흐름은 아래 순서입니다. 탭바 없이 뒤로가기 헤더를 씁니다.
 
 ```
-Task 확인                    → "오늘 물 줬어?" "오늘 햇빛은 봤어?" (모든 식물 공통 문구)
-                               선택지: 당연하지! / 아직 흙이 촉촉해.(날씨가 흐렸어.) / 오늘은 못할 것 같아. / 깜빡했어 ㅜㅜ
-                               '촉촉해'를 고르면 물 준 날로 치지 않고 다음 날 다시 확인 (§5.5)
-                               깜빡했다고 하면 "알림 받을게요 / 괜찮아요" → 2시간 뒤 알림 예약 후 종료
-                               '오늘은 못할 것 같아.'를 고르면 그 task를 **내일 task 목록에 같이 띄우도록 넘기고**(`@plant/deferred_tasks`) 다음 task·오늘 질문으로 계속 진행
-사진 찍기 (수·토)            → 사진 촬영/갤러리 선택 → 캐릭터 생성 → 프리뷰에서 확정 (AI 키 필요)
-관찰하기 (3일 주기)          → 자유 입력 대화 (사진 찍는 날은 생략)
+체크리스트                   → 첫 인사 뒤 식물이 "오늘 한 일을 체크해줘"라고 말하고 채팅 아래에 체크박스(물 줬어 / 햇빛 확인했어 / 식물 관찰했어) + `완료` 버튼 표시
+                               체크한 항목 = task 완료 기록. 식물 반응은 전부 / 일부 / 거의 못 했을 때 3종 × 문구 3개 (식물별 말투, `checklistResult(kind, uncheckedLabels)`)
+                               일부·거의 못 했을 때는 체크하지 않은 task 이름을 문장에 넣어 "오늘도 날 돌봐줘서 고마워. {안 한 task}는/은 어떻게 할지 말해줄래?" 식으로 이어지며, 은/는은 자동으로 붙음 (`chatMessages.ts`의 `topic()`)
+                               체크하지 않은 항목은 한 화면에서 항목마다 칩 선택 후 `확인`:
+                               아직 흙이 촉촉해.(날씨가 흐렸어.) → 물 준 날로 치지 않고 다음 날 다시 확인 (§5.5) /
+                               조금 이따가 할게. → 2시간 뒤 알림 예약(식물 답변에 알림 시각 표시, `formatClock`; 식물이 말한 뒤 알림 권한을 확인해, 아직 안 물어본 상태면 허용 요청 창을 띄우고 이미 거부한 상태면 설정 이동을 안내(`ensureNotificationPermission`)) / 내일로 미룰게. → 그 task를 **내일 task 목록에 같이 띄우도록 넘김**(`@plant/deferred_tasks`)
+사진 찍기 (수·토)            → 체크리스트 뒤 별도 단계: 사진 촬영/갤러리 선택 → 캐릭터 생성 → 프리뷰에서 확정 (AI 키 필요)
+                               '나중에 찍을게' → "2시간 뒤에 알려줘 / 내일로 미룰게" 선택 (알림 예약 또는 `@plant/deferred_tasks`)
 마음 건강 질문               → 모든 task를 마치면 AI가 식물 말투로 질문, 유저가 답하면 식물이 반응
                                (라운드 수는 개발자 메뉴에서 조정)
 완료                         → 일기 요약 저장, 연속 관리 갱신. 입력창 자리에 같은 크기의 `오늘 기록 완료!` 박스(가로 전체)가 뜨고 말풍선 간격만큼 아래에 `홈으로 돌아가기` 버튼 표시 (채팅에는 하단 탭 없음)
@@ -139,7 +140,7 @@ Task 확인                    → "오늘 물 줬어?" "오늘 햇빛은 봤어
 ### 4.6 도감 탭 (`collection.tsx`)
 
 - 카드 속 캐릭터는 각 식물의 **마지막 단계 기본 이미지로 고정**(AI 캐릭터와 무관)
-- 식물 카드 덱: 좌우 스와이프로 바질 → 방울토마토 → 메리골드를 **무한 순환**. **키운 적 없는 식물 카드는 실루엣과 이름·태그라인·소개를 모두 회색으로 표시**하며 `더 알아보기`도 회색으로 보이고 누르면 "{식물}을(를) 키우기 시작해야 확인할 수 있어요" 안내가 뜸 (상세로 이동 불가, `@plant/grown_plants`)
+- 식물 카드 덱: 좌우 스와이프로 바질 → 방울토마토 → 메리골드를 **무한 순환**. **카드를 탭하면 앞면(아치 창 속 캐릭터 + 이름표)과 뒷면(이름·태그라인·볼록한 본문 상자의 설명·재배 기간(주 단위)·키우기 시작한 날)이 뒤집히고**, **키운 적 없는 식물 카드는 회색 테마에 씨앗 단계 캐릭터와 자물쇠**를 두며, `더 알아보기`도 회색으로 보이고 누르면 "{식물}을(를) 키우기 시작해야 확인할 수 있어요" 안내가 뜸 (상세로 이동 불가, `@plant/grown_plants`)
 - `더 알아보기`를 누르거나 위로 스와이프하면 **같은 화면 안에서** 상세 페이지가 아래에서 올라옴. 맨 위에서 아래로 당기거나 Collection 탭을 다시 누르면 돌아감
 - 상세 탭 3개: 기본 정보 / 성장 과정 / 잘 키우기. 본문은 `constants/plantGuide.ts`에 식물별·탭별로 모여 있음 (세 식물 모두 팀원이 정리한 최종 문구가 반영됨. `성장 과정` 카드 수는 바질 5 / 토마토 7 / 메리골드 5로, 앱의 캐릭터 이미지 단계와는 별개의 안내용 단계. `잘 키우기`가 비면 task 안내가 대신 표시됨)
 
@@ -208,7 +209,7 @@ interface DailyRecord {
 
 - 실제 화면의 기본 캐릭터는 1단계 이미지로 고정됩니다. 단계 이미지(`characters/{basil,tomato,marigold}/…_N.png`)는 **개발자 메뉴의 캐릭터 개발 모드**에서 식물이 자랐을 때 UI가 어색하지 않은지 확인하는 용도와, 도감 카드(마지막 단계 이미지)에 씁니다. 단계 수와 이미지 연결은 `constants/character.ts`의 `IMAGE_STAGE_MAP`·`getMaxStage`.
 - `store/growthStore.ts`·`hooks/useGrowthManager.ts`에는 **오늘 task 완료 기록**만 남았습니다. 이전 버전이 저장해 둔 단계 값(`currentStage`, `stageHistory` 등)은 읽지 않고 그대로 둡니다.
-- 채팅 임시 저장(draft)에 예전 `stage_confirm` 단계가 남아 있으면 task 확인 단계로 이어집니다.
+- 채팅 임시 저장(draft)에 예전 단계(`stage_confirm`, `task_check`, `water_reminder`, `observing`, `reminder_done`)가 남아 있으면 체크리스트 단계로 이어집니다.
 
 ### 5.4 마음 건강 질문
 
@@ -257,7 +258,8 @@ interface DailyRecord {
 @plant/user_nickname             string
 @plant/plant_data                JSON (PlantData)
 @plant/grown_plants              string[]             — 키운 적 있는 식물 id (도감 컬러 표시용)
-@plant/deferred_tasks            {날짜: taskId[]}     — '오늘은 못할 것 같아'로 다음 날로 넘긴 task
+@plant/grown_since               {식물id: ISO}        — 식물별 처음 키우기 시작한 날 (도감 카드 뒷면 표시, 기록 없는 현재 식물은 입양일로 대체)
+@plant/deferred_tasks            {날짜: taskId[]}     — 체크리스트 후속 선택 '내일로 미룰게'(사진도 같은 문구)로 다음 날로 넘긴 task
 @plant/streak_count              number
 @plant/last_record_date          string
 @plant/first_record_date         string
@@ -305,7 +307,7 @@ AI는 이미 코드에 연결되어 있습니다. **이 저장소에는 API 키(
 | `updatePlantCharacterWithCustomPot()` | 식물 사진 → 픽셀 캐릭터 생성 (Replicate) |
 | `analyzeGeneratedImageForFace()` | 생성된 이미지에서 화분 위치를 찾아 표정을 올릴 좌표 계산 |
 
-식물별 말투는 `services/api/chat.ts`의 `PLANT_PERSONAS`(바질: 담백한 반말, 방울토마토: 귀여운 동생, 메리골드: 담백하고 솔직한 반말)에 정의되어 있습니다.
+식물별 말투는 `services/api/chat.ts`의 `PLANT_PERSONAS`(바질: 담백한 반말, 방울토마토: 귀여운 동생, 메리골드: 따뜻한 가족이자 조력자의 다정한 반말)에 정의되어 있습니다.
 
 ### 7.3 알려진 한계
 
@@ -337,6 +339,7 @@ AI는 이미 코드에 연결되어 있습니다. **이 저장소에는 API 키(
 | 항목 | 담당 | 설명 |
 |---|---|---|
 | 사진 task 후속 | 프론트 + AI | 수·토에 진입하도록 연결됨. 사진 → 캐릭터 결과 품질 검증, 사진을 못 찍은 주의 보충 정책(현재는 보충 없음) 결정 |
+| 관찰하기 상태 선택지 | 프론트 + 기획 | 관찰 체크 뒤 "어때 보여?" 칩(예: 쌩쌩해 보여 / 잎이 처졌어 / 잎 색이 변했어 / 벌레·곰팡이가 보여)과 상태별 식물 반응 문구 추가. 반응은 `plantGuide.ts` 근거로 작성, 선택한 상태를 일기 요약·대화 기억에 넘겨 다음 대화에 활용. 체크리스트 안/뒤 배치 결정 필요 |
 | 물주기 사용자별 학습 (방안 C) | 프론트 | 현재는 계절표 + `촉촉해` 시 재확인만 적용. `촉촉해`를 연달아 고르면 그 사용자의 주기를 늘리는 식의 학습은 미래 계획 |
 | 물주기 주기표 확정 | 기획 | 추정값 칸(바질 가을·겨울, 메리골드 여름·겨울) 확인. 지역·실내외 환경 반영 여부 결정 |
 | task별 주기 알림 연결 | 프론트 / 백엔드 | `rescheduleNotifications(plantType, plantedAt)` 연결 및 알림 정책 확정 (성장 단계 인자는 제거됨. 호출하는 곳은 아직 없음) |
@@ -362,7 +365,7 @@ AI는 이미 코드에 연결되어 있습니다. **이 저장소에는 API 키(
 
 #### 1. 도감(Collection) 탭
 - 카드 스와이프 시 뒷면 카드가 불투명한 실제 이전·다음 카드로 전환되며, 밀어낼 경우 해당 방향의 뒷면 카드가 중앙으로 이동함. 오른쪽 이동 시 뒷면 카드 위치가 어색하던 오류 수정함.
-- 미재배 식물은 회색 실루엣 및 회색 이름·소개로 표시됨. '더 알아보기'는 회색으로 처리되며, 클릭 시 "{식물}을(를) 키우기 시작해야 확인할 수 있어요" 팝업이 노출됨.
+- 미재배 식물은 씨앗 단계 캐릭터 및 회색 이름·소개로 표시됨. '더 알아보기'는 회색으로 처리되며, 클릭 시 "{식물}을(를) 키우기 시작해야 확인할 수 있어요" 팝업이 노출됨.
 - 화면별 카드 상하단 간격을 동일하게 맞춤.
 
 #### 2. 작은 화면(iPhone SE 등) 대응

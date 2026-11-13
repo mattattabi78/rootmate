@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: COLORS.bg,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.inputBorder,   // 위의 이름 입력칸(inputWrap)과 같은 회색
     borderRadius: 10,
   },
   boxHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

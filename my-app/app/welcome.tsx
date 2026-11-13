@@ -39,7 +39,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   title: {
-    fontFamily: 'SUITE-ExtraBold',
+    fontFamily: 'SUITE-Bold',
     fontSize: fs(44),
     color: COLORS.textPrimary,
     marginBottom: 16,

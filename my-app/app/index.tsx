@@ -118,11 +118,11 @@ export default function HomeScreen() {
     }, [onboardingChecked, todayStr, charDevMode]),
   );
 
-  // 온보딩 완료 여부 확인 — 미완료면 웰컴 화면으로 이동
+  // 온보딩 완료 여부 확인 — 미완료면 환영 화면 없이 바로 온보딩 첫 단계로 이동
   useEffect(() => {
     storage.isOnboardingComplete().then(done => {
       if (!done) {
-        router.replace('/welcome' as any);
+        router.replace('/onboarding/step1' as any);
       } else {
         setOnboardingChecked(true);
       }
