@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { COLORS, FONTS } from '../../constants';
+import { COLORS, FONTS, fs } from '../../constants';
 import { ActionIcon } from '../common/ActionIconButton';
 import {
   SunPixelIcon, ThermometerPixelIcon, SproutPixelIcon, SoilPixelIcon,
@@ -25,7 +25,7 @@ const C = { sun: '#FF8E47', water: '#14B5EB', pink: '#FF5C8D', green: '#38D76D',
 // 카드 제목 옆 아이콘. 탭마다 규칙이 다름 (해당하는 아이콘이 없으면 표시하지 않음)
 //  - info  : 항목 이름으로 선택, 항목마다 다른 색
 //  - growth: 모든 카드에 `+`, 단계마다 PALETTE 색을 돌려 사용
-//  - tips  : 제목의 단어로 선택, 없으면 반짝이
+//  - tips  : 제목의 단어로 선택(비료·잎·줄기 새싹 / 찬바람 온도계 / 흙 상태 흙 / 물 물방울), 없으면 반짝이
 function CardIcon({ tab, title, index }: { tab: 'info' | 'growth' | 'tips'; title: string; index: number }) {
   if (tab === 'growth') {
     return <PlusPixelIcon color={PALETTE[index % PALETTE.length]} size={16} />;
@@ -39,11 +39,12 @@ function CardIcon({ tab, title, index }: { tab: 'info' | 'growth' | 'tips'; titl
     return null;
   }
   // tips
-  if (title.includes('햇빛') || title.includes('빛')) return <SunPixelIcon color={C.sun} size={20} />;
+  if (title.includes('비료') || title.includes('잎') || title.includes('줄기')) return <SproutPixelIcon color={C.green} size={20} />;
+  if (title.includes('찬바람') || title.includes('온도')) return <ThermometerPixelIcon color={C.coral} size={20} />;
+  if (title.includes('흙 상태')) return <SoilPixelIcon color={C.soil} size={20} />;
   if (title.includes('물')) return <ActionIcon kind="water" height={20} />;
+  if (title.includes('햇빛') || title.includes('빛')) return <SunPixelIcon color={C.sun} size={20} />;
   if (title.includes('관찰')) return <ActionIcon kind="search" height={20} />;
-  if (title.includes('비료')) return <SproutPixelIcon color={C.green} size={20} />;
-  if (title.includes('온도')) return <ThermometerPixelIcon color={C.coral} size={20} />;
   return <SparklePixelIcon color={PALETTE[(index + 2) % PALETTE.length]} size={20} />;
 }
 
@@ -130,16 +131,16 @@ const styles = StyleSheet.create({
 
   // 식물 이름: 위아래 패딩 20, 높이 45
   nameBox: { paddingVertical: 20, alignItems: 'center' },
-  name: { fontFamily: FONTS.bold, fontSize: 22, lineHeight: 45, color: COLORS.pine },
+  name: { fontFamily: FONTS.bold, fontSize: fs(22), lineHeight: fs(45), color: COLORS.pine },
 
   // 탭: 62x45, 간격 50, 위아래 패딩 20
   tabRow: { flexDirection: 'row', justifyContent: 'center', gap: 50, paddingVertical: 20 },
   tab: { width: 62, height: 45, alignItems: 'center' },
   tabText: {
-    fontFamily: FONTS.bold, fontSize: 16, lineHeight: 45,
+    fontFamily: FONTS.bold, fontSize: fs(16), lineHeight: fs(45),
     color: COLORS.line, width: 90, textAlign: 'center',
   },
-  tabTextActive: { fontFamily: FONTS.extraBold, color: COLORS.pine },
+  tabTextActive: { fontFamily: FONTS.bold, color: COLORS.pine },
   tabUnderline: {
     position: 'absolute', left: 0, right: 0, bottom: -0.75,
     height: 1.5, backgroundColor: COLORS.pine,
@@ -158,6 +159,6 @@ const styles = StyleSheet.create({
   // 제목과 본문 사이 구분선
   cardDivider: { height: 1, backgroundColor: COLORS.line, marginTop: 4, marginBottom: 6 },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardTitle: { fontFamily: FONTS.semiBold, fontSize: 16, lineHeight: 25, color: '#000' },
-  cardBody: { fontFamily: FONTS.semiBold, fontSize: 14, lineHeight: 25, color: '#000' },
+  cardTitle: { fontFamily: FONTS.medium, fontSize: fs(16), lineHeight: fs(25), color: '#000' },
+  cardBody: { fontFamily: FONTS.medium, fontSize: fs(14), lineHeight: fs(25), color: '#000' },
 });

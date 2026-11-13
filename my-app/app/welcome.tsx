@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS } from '../constants';
+import { COLORS, fs } from '../constants';
 import PlantCharacter from '../components/common/PlantCharacter';
 
 export default function WelcomeScreen() {
@@ -39,8 +39,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   title: {
-    fontFamily: 'SUITE-ExtraBold',
-    fontSize: 44,
+    fontFamily: 'SUITE-Bold',
+    fontSize: fs(44),
     color: COLORS.textPrimary,
     marginBottom: 16,
   },
@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontFamily: 'SUITE-Bold',
-    fontSize: 18,
+    fontSize: fs(18),
     color: COLORS.textTertiary,
     marginTop: 32,
   },

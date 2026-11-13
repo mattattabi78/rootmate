@@ -26,7 +26,6 @@ const PLANT_EXTRA_GUIDE: Record<PlantType, GuideItem | null> = {
 // ─── 헤더 텍스트 ─────────────────────────────────────────────────
 
 export const GUIDE_TITLE = '사진 촬영 가이드';
-export const GUIDE_SUBTITLE = '아래 가이드에 맞게 찍으면\n더 예쁜 캐릭터가 만들어져요';
 export const GUIDE_BTN_LABEL = '갤러리에서 사진 선택';
 export const GUIDE_CAMERA_LABEL = '카메라로 바로 촬영';
 export const GUIDE_EXAMPLE_OPEN = '예시';

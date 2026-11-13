@@ -37,6 +37,17 @@ async function computeSituation(): Promise<PlantSituation> {
     }
   }
 
+  // 최근 7일에 물 준 기록이 없을 때: 키우기 시작한 지 얼마 안 된 식물은 방치된 게 아니므로,
+  // 입양일부터 지난 날수를 기준으로 삼는다 (처음 시작한 날 울음 표정이 나오지 않게 함)
+  if (daysSinceWater === 999) {
+    const plantData = await storage.getPlantData();
+    if (plantData?.adoptedAt) {
+      const adopted = new Date(getLocalDateString(new Date(plantData.adoptedAt)) + 'T00:00:00');
+      const now = new Date(todayStr + 'T00:00:00');
+      daysSinceWater = Math.max(0, Math.round((now.getTime() - adopted.getTime()) / 86400000));
+    }
+  }
+
   // 물 주기 초과 판단 (우선순위: 3일+ > 2일 > 1일 > 당일)
   if (daysSinceWater >= 3) return 'no_water_3days_plus';
   if (daysSinceWater === 2) return 'no_water_2days';

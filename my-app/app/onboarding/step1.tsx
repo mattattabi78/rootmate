@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS } from '../../constants';
+import { COLORS, FONTS, fs } from '../../constants';
 import { storage } from '../../store/storage';
 import ProgressDots from '../../components/common/ProgressDots';
 import Button from '../../components/common/Button';
@@ -93,18 +93,18 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 48 },   // 세로 중앙(버튼 영역만큼 살짝 위)
   heading: {
-    fontFamily: FONTS.extraBold,
-    fontSize: 28,
+    fontFamily: FONTS.bold,
+    fontSize: fs(28),
     color: COLORS.pine,
-    lineHeight: 38,
+    lineHeight: fs(38),
     textAlign: 'center',
     marginBottom: 8,
   },
   sub: {
     fontFamily: FONTS.bold,
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.forest,
-    lineHeight: 22,
+    lineHeight: fs(22),
     textAlign: 'center',
     marginBottom: 40,
   },
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   inputWrapFocused: { borderColor: COLORS.inputBorderFocus, borderWidth: 1.5 },
-  input: { flex: 1, fontFamily: FONTS.bold, fontSize: 20, color: COLORS.textPrimary, padding: 0, textAlign: 'center' },
-  counter: { fontFamily: FONTS.bold, fontSize: 20, color: COLORS.textTertiary, marginLeft: 8 },
+  input: { flex: 1, fontFamily: FONTS.bold, fontSize: fs(20), color: COLORS.textPrimary, padding: 0, textAlign: 'center' },
+  counter: { fontFamily: FONTS.bold, fontSize: fs(20), color: COLORS.textTertiary, marginLeft: 8 },
   footer: { paddingHorizontal: 24, paddingBottom: 32 },
 });

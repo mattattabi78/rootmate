@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS, PLANTS, PLANT_CODES } from '../../constants';
+import { COLORS, FONTS, PLANTS, PLANT_CODES, fs } from '../../constants';
 import { storage } from '../../store/storage';
 import PlantCharacter from '../../components/common/PlantCharacter';
 import { PlantType } from '../../constants/character';
@@ -132,11 +132,8 @@ export default function Step2() {
                     onPress={() => setSelectedId(plant.id)}
                     activeOpacity={0.8}
                   >
-                    {/* 캐릭터 사각형 박스*/}
-                    <View style={[
-                      styles.plantCard,
-                      selectedId === plant.id && styles.plantCardSelected,
-                    ]}>
+                    {/* 캐릭터 (배경·테두리 없음) */}
+                    <View style={styles.plantCard}>
                       {/* 박스 중앙에 배치 (이전 64의 2배). 세로 위치는 CARD_CHAR_OFFSET_Y로 조정 */}
                       <View style={{ transform: [{ translateY: CARD_CHAR_OFFSET_Y }] }}>
                         <PlantCharacter
@@ -192,21 +189,21 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  backArrow: { fontFamily: FONTS.extraBold, fontSize: 22, color: COLORS.pine },
+  backArrow: { fontFamily: FONTS.bold, fontSize: fs(22), color: COLORS.pine },
   content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingBottom: 24 },
   heading: {
-    fontFamily: FONTS.extraBold,
-    fontSize: 28,
+    fontFamily: FONTS.bold,
+    fontSize: fs(28),
     color: COLORS.pine,
-    lineHeight: 38,
+    lineHeight: fs(38),
     textAlign: 'center',
     marginBottom: 8,
   },
   sub: {
     fontFamily: FONTS.bold,
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.forest,
-    lineHeight: 22,
+    lineHeight: fs(22),
     textAlign: 'center',
     marginBottom: 32,
   },
@@ -221,25 +218,25 @@ const styles = StyleSheet.create({
   },
   inputWrapValid: { borderColor: COLORS.inputBorderFocus, borderWidth: 1.5 },
   inputWrapError: { borderColor: COLORS.inputBorderError, borderWidth: 1.5 },
-  input: { fontFamily: FONTS.bold, fontSize: 20, color: COLORS.textPrimary, textAlign: 'center' },
+  input: { fontFamily: FONTS.bold, fontSize: fs(20), color: COLORS.textPrimary, textAlign: 'center' },
   feedbackValid: {
     fontFamily: FONTS.bold,
     textAlign: 'center',
     marginTop: 8,
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.green,
   },
   feedbackError: {
     fontFamily: FONTS.bold,
     textAlign: 'center',
     marginTop: 8,
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.red,
   },
   switchLink: { marginTop: 20, alignSelf: 'center' },
   switchLinkText: {
     fontFamily: 'SUITE-Medium',
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.textTertiary,
     textDecorationLine: 'underline',
   },
@@ -258,28 +255,24 @@ const styles = StyleSheet.create({
   plantCard: {
     width: '100%',
     aspectRatio: 1 / 1,
-    backgroundColor: COLORS.bg,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: COLORS.inputBorder,
+    // 배경·테두리 없이 캐릭터만 보여준다 (선택 표시는 아래 이름의 라임 배경)
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
-  plantCardSelected: {
-    borderColor: COLORS.pine,
-    backgroundColor: COLORS.limeLight,
-  },
-  plantEmoji: { fontSize: 28 },
   plantName: {
     fontFamily: FONTS.bold,
-    fontSize: 17,
+    fontSize: fs(17),
     color: COLORS.textPrimary,
     textAlign: 'center',
   },
   plantNameSelected: {
     color: COLORS.pine,
-    fontFamily: FONTS.extraBold,
+    fontFamily: FONTS.bold,
+    backgroundColor: COLORS.limeLight,
+    borderRadius: 10,
+    overflow: 'hidden',
+    paddingHorizontal: 12,
+    paddingVertical: 2,
   },
   footer: { paddingHorizontal: 24, paddingBottom: 32 },
 });

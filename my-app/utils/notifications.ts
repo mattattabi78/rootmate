@@ -35,6 +35,18 @@ async function hasPermission(): Promise<boolean> {
   return status === 'granted';
 }
 
+/**
+ * 알림 권한 확인 — 허용돼 있으면 true, 아직 묻지 않았으면 허용 요청 창을 띄워 결과를 반환.
+ * 이미 거부해서 다시 물을 수 없으면 false (호출한 쪽에서 설정 이동을 안내)
+ */
+export async function ensureNotificationPermission(): Promise<boolean> {
+  const current = await Notifications.getPermissionsAsync();
+  if (current.status === 'granted') return true;
+  if (!current.canAskAgain) return false;
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === 'granted';
+}
+
 async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {

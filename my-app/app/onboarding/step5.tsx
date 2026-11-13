@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS } from '../../constants';
+import { COLORS, FONTS, fs } from '../../constants';
 import { storage, DEFAULT_NOTIFICATION_TIMES } from '../../store/storage';
 import ProgressDots from '../../components/common/ProgressDots';
 import Button from '../../components/common/Button';
@@ -26,6 +27,8 @@ export default function Step5() {
   const [plantNickname, setPlantNickname] = useState('');
   const [morning, setMorning] = useState(DEFAULT_NOTIFICATION_TIMES.morning);
   const [evening, setEvening] = useState(DEFAULT_NOTIFICATION_TIMES.evening);
+  const [morningOn, setMorningOn] = useState(true);
+  const [eveningOn, setEveningOn] = useState(true);
 
   useEffect(() => {
     storage.getPlantData().then((data) => {
@@ -34,12 +37,14 @@ export default function Step5() {
     storage.getNotificationTimes().then((t) => {
       setMorning(t.morning);
       setEvening(t.evening);
+      setMorningOn(t.morningEnabled);
+      setEveningOn(t.eveningEnabled);
     });
   }, []);
 
   const requestAndContinue = async () => {
-    await storage.setNotificationTimes({ ...DEFAULT_NOTIFICATION_TIMES, morning, evening });
-    if (Notifications) {
+    await storage.setNotificationTimes({ morning, evening, morningEnabled: morningOn, eveningEnabled: eveningOn });
+    if (Notifications && (morningOn || eveningOn)) {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status === 'granted') {
         // TODO: scheduleInitialNotifications 구현 후 연결
@@ -49,7 +54,7 @@ export default function Step5() {
   };
 
   const skipAndContinue = async () => {
-    await storage.setNotificationTimes({ ...DEFAULT_NOTIFICATION_TIMES, morning, evening });
+    await storage.setNotificationTimes({ morning, evening, morningEnabled: morningOn, eveningEnabled: eveningOn });
     router.push('/onboarding/complete' as any);
   };
 
@@ -71,19 +76,25 @@ export default function Step5() {
             : '제때 알려드릴게요.'}
         </Text>
         <Text style={styles.sub}>
-          아침과 저녁에 알림을 보내드려요.{'\n'}받고 싶은 시간을 정해주세요.
+          아침과 저녁에 알림을 보내드려요.{'\n'}켜고 끄거나 받고 싶은 시간을 정해주세요.
         </Text>
 
         {/* 알림 시간 설정 */}
         <View style={styles.list}>
           <View style={styles.timeBox}>
-            <Text style={styles.listTitle}>아침 알림</Text>
-            <TimeStepper value={morning} range={MORNING_RANGE} onChange={setMorning} />
+            <View style={styles.boxHead}>
+              <Text style={styles.listTitle}>아침 알림</Text>
+              <Switch value={morningOn} onValueChange={setMorningOn} trackColor={{ false: '#C5C7C0', true: COLORS.lime }} thumbColor={COLORS.outline} accessibilityLabel="아침 알림" />
+            </View>
+            <TimeStepper value={morning} range={MORNING_RANGE} onChange={setMorning} disabled={!morningOn} />
             <Text style={styles.listDesc}>오늘 식물을 챙겨달라고 알려줘요</Text>
           </View>
           <View style={styles.timeBox}>
-            <Text style={styles.listTitle}>저녁 알림</Text>
-            <TimeStepper value={evening} range={EVENING_RANGE} onChange={setEvening} />
+            <View style={styles.boxHead}>
+              <Text style={styles.listTitle}>저녁 알림</Text>
+              <Switch value={eveningOn} onValueChange={setEveningOn} trackColor={{ false: '#C5C7C0', true: COLORS.lime }} thumbColor={COLORS.outline} accessibilityLabel="저녁 알림" />
+            </View>
+            <TimeStepper value={evening} range={EVENING_RANGE} onChange={setEvening} disabled={!eveningOn} />
             <Text style={styles.listDesc}>아직 기록 전이라면 알려줘요</Text>
           </View>
         </View>
@@ -110,27 +121,27 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  backArrow: { fontFamily: FONTS.extraBold, fontSize: 22, color: COLORS.pine },
+  backArrow: { fontFamily: FONTS.bold, fontSize: fs(22), color: COLORS.pine },
   content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 48 },
   heading: {
-    fontFamily: FONTS.extraBold,
-    fontSize: 28,
+    fontFamily: FONTS.bold,
+    fontSize: fs(28),
     color: COLORS.pine,
-    lineHeight: 38,
+    lineHeight: fs(38),
     textAlign: 'center',
     marginBottom: 8,
   },
   sub: {
     fontFamily: FONTS.bold,
-    fontSize: 15,
+    fontSize: fs(15),
     color: COLORS.forest,
-    lineHeight: 22,
+    lineHeight: fs(22),
     textAlign: 'center',
     marginBottom: 36,
   },
   list: { gap: 12 },
   timeBox: {
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'center',
     gap: 10,
     paddingVertical: 20,
@@ -140,15 +151,15 @@ const styles = StyleSheet.create({
     borderColor: '#303a1e',
     borderRadius: 10,
   },
+  boxHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   listTitle: {
-    fontFamily: FONTS.extraBold,
-    fontSize: 16,
+    fontFamily: FONTS.bold,
+    fontSize: fs(16),
     color: COLORS.pine,
-    textAlign: 'center',
     marginBottom: 2,
   },
-  listDesc: { fontFamily: FONTS.semiBold, fontSize: 13, lineHeight: 19, color: COLORS.textSecondary, textAlign: 'center' },
+  listDesc: { fontFamily: FONTS.medium, fontSize: fs(13), lineHeight: fs(19), color: COLORS.textSecondary, textAlign: 'center' },
   footer: { paddingHorizontal: 24, paddingBottom: 32, gap: 12 },
   skipBtn: { alignItems: 'center', paddingVertical: 8 },
-  skipText: { fontFamily: 'SUITE-Regular', fontSize: 13, color: COLORS.textTertiary, textDecorationLine: 'underline' },
+  skipText: { fontFamily: 'SUITE-Regular', fontSize: fs(13), color: COLORS.textTertiary, textDecorationLine: 'underline' },
 });

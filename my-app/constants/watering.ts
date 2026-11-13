@@ -1,4 +1,4 @@
-// ─── 물주기 주기 계산 (계절 · 성장 단계 보정 + 촉촉 시 재확인) ─────────────────────
+// ─── 물주기 주기 계산 (계절 + 촉촉 시 재확인) ─────────────────────
 // 식물 가이드 공통 결론: "날짜가 아니라 흙 상태를 보고 준다". 주기는 계절·환경에 따라 달라지므로
 // 고정 주기 대신 계절표를 쓰고, "아직 흙이 촉촉해"를 고르면 다음 날 다시 확인한다.
 //
@@ -16,9 +16,6 @@ export const WATER_INTERVALS: Record<string, Record<Season, number>> = {
 };
 const DEFAULT_INTERVALS: Record<Season, number> = { spring: 2, summer: 1, autumn: 2, winter: 3 };
 
-const MIN_INTERVAL = 1;
-const MARIGOLD_SPROUT_LAST_STAGE = 3;   // 새싹·어린 모종 (1~3단계): 건조에 예민 → 주기 −1일
-const TOMATO_RIPENING_STAGE = 9;        // 열매가 익는 마지막 단계: 살짝 건조하게 → 주기 +1일
 
 /** 'YYYY-MM-DD' → 계절 (봄 3~5, 여름 6~8, 가을 9~11, 겨울 12~2) */
 export function getSeason(dateStr: string): Season {
@@ -29,13 +26,10 @@ export function getSeason(dateStr: string): Season {
   return 'winter';
 }
 
-/** 오늘의 물주기 주기(일): 계절표 + 성장 단계 보정 */
-export function getWaterInterval(plantType: string, stage: number, dateStr: string): number {
+/** 오늘의 물주기 주기(일): 계절표 */
+export function getWaterInterval(plantType: string, dateStr: string): number {
   const table = WATER_INTERVALS[plantType] ?? DEFAULT_INTERVALS;
-  let interval = table[getSeason(dateStr)];
-  if (plantType === 'marigold' && stage <= MARIGOLD_SPROUT_LAST_STAGE) interval -= 1;
-  if (plantType === 'tomato' && stage >= TOMATO_RIPENING_STAGE) interval += 1;
-  return Math.max(MIN_INTERVAL, interval);
+  return table[getSeason(dateStr)];
 }
 
 function addDays(dateStr: string, days: number): Date {
@@ -52,7 +46,6 @@ function addDays(dateStr: string, days: number): Date {
  */
 export function isWaterDue(
   plantType: string,
-  stage: number,
   completedTasks: { taskId: string; completedAt: string }[],
   today: string,
 ): boolean {
@@ -68,7 +61,7 @@ export function isWaterDue(
   if (lastMoist && (!lastWatered || lastMoist >= lastWatered)) {
     dueDate = addDays(lastMoist, 1);
   } else if (lastWatered) {
-    dueDate = addDays(lastWatered, getWaterInterval(plantType, stage, today));
+    dueDate = addDays(lastWatered, getWaterInterval(plantType, today));
   } else {
     return true;
   }

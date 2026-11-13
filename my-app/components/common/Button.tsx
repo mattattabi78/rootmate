@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   TouchableOpacityProps,
 } from 'react-native';
-import { COLORS, FONTS } from '../../constants';
+import { COLORS, FONTS, fs } from '../../constants';
 
 interface Props extends TouchableOpacityProps {
   label: string;
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: FONTS.bold,
-    fontSize: 18,
+    fontSize: fs(18),
     color: COLORS.outline,
   },
   labelPrimary:   { color: COLORS.outline },

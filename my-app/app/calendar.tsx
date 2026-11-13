@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Image,
   Modal,
+  useWindowDimensions,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,13 +11,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
-import { COLORS, FONTS } from '../constants';
+import { COLORS, FONTS, fs, ui } from '../constants';
 import { storage, DailyRecord } from '../store/storage';
 import { loadGrowthState } from '../store/growthStore';
-import { PlantType, GrowthStage } from '../constants/character';
+import { PlantType } from '../constants/character';
 import TopAppBar from '../components/common/TopAppBar';
+import FitToScreen from '../components/common/FitToScreen';
+import { compactFactor } from '../utils/layout';
 import BottomNavBar from '../components/common/BottomNavBar';
 import PlantCharacter from '../components/common/PlantCharacter';
+import FaceOverlay from '../components/common/BlinkingFace';
 import { ActionIcon } from '../components/common/ActionIconButton';
 import { ChevronPixelIcon } from '../components/common/PixelIcons';
 import { getDateStringForMonthDay } from '../utils/date';
@@ -48,20 +52,6 @@ function formatDateLabel(year: number, month: number, day: number) {
   return `${year}년 ${month + 1}월 ${day}일 (${DAY_HEADERS[d.getDay()]})`;
 }
 
-// 해당 날짜에 도달했던 성장 단계 (stageHistory 기준, 없으면 null)
-async function getStageAtDate(dateStr: string): Promise<GrowthStage | null> {
-  try {
-    const state = await loadGrowthState();
-    if (!state) return null;
-    const entered = state.stageHistory
-      .filter(h => h.enteredAt <= dateStr)
-      .sort((a, b) => b.stage - a.stage)[0];
-    return (entered?.stage ?? state.stageHistory[0]?.stage ?? 1) as GrowthStage;
-  } catch {
-    return null;
-  }
-}
-
 function Chevron({ dir, color = COLORS.pine }: { dir: 'left' | 'right'; color?: string }) {
   return <ChevronPixelIcon direction={dir} color={color} size={15} />;
 }
@@ -71,6 +61,7 @@ type TabView = 'calendar' | 'album';
 const TAB_LABEL: Record<TabView, string> = { calendar: '캘린더', album: '앨범' };
 
 export default function CalendarScreen() {
+  const [calH, setCalH] = useState(0);   // 캘린더 본문 높이 (짧은 화면에서 간격을 줄이는 데 사용)
   const [view, setView] = useState<TabView>('calendar');
 
   const [today, setToday]           = useState(() => getDevAdjustedDate());
@@ -83,7 +74,8 @@ export default function CalendarScreen() {
   const [modalVisible,   setModalVisible]   = useState(false);
   const [modalDateLabel, setModalDateLabel] = useState('');
   const [modalRecord,    setModalRecord]    = useState<DailyRecord | null>(null);
-  const [modalStage,     setModalStage]     = useState<GrowthStage>(1);
+  // 기록 팝업에 보여줄, 그 날짜의 사진 캐릭터(AI 생성 이미지). 그날까지 만든 것이 없으면 null → 기본 캐릭터
+  const [modalGenerated, setModalGenerated] = useState<{ uri: string; facePos: { x: number; y: number } } | null>(null);
 
   const loadRecordDays = useCallback(async (y: number, m: number) => {
     const days = await storage.getRecordedDaysForMonth(y, m);
@@ -130,8 +122,8 @@ export default function CalendarScreen() {
         plantPhotoUri: photos[0],
       };
     }
-    const stage = await getStageAtDate(dateStr);
-    setModalStage(stage ?? 1);
+    const g = await storage.getGeneratedPlantForDate(dateStr);
+    setModalGenerated(g ? { uri: g.uri, facePos: g.facePos } : null);
     setModalDateLabel(formatDateLabel(y, m, day));
     setModalRecord(record);
     setModalVisible(true);
@@ -140,13 +132,13 @@ export default function CalendarScreen() {
   // Figma 탭: 캘린더·앨범 2개(가운데 정렬)
   const tabs: TabView[] = ['calendar', 'album'];
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <TopAppBar />
+  // 짧은 화면(SE 등): 글자 크기는 그대로 두고 간격과 날짜 칸 높이만 줄임 (캘린더 탭만)
+  const f = view === 'calendar' ? compactFactor(calH, CAL_FIXED_H, CAL_FLEX_H, CAL_MIN_FACTOR) : 1;
 
-      <View style={styles.body}>
+  const content = (
+    <View style={{ flex: 1 }} onLayout={e => setCalH(e.nativeEvent.layout.height)}>
         {/* 탭 (밑줄) */}
-        <View style={[styles.tabRow, view === 'album' && styles.tabRowAlbum]}>
+        <View style={[styles.tabRow, view === 'album' && styles.tabRowAlbum, view === 'calendar' && { paddingTop: 30 * f, paddingBottom: 30 * f }]}>
           {tabs.map(tab => {
             const active = view === tab;
             return (
@@ -165,12 +157,12 @@ export default function CalendarScreen() {
 
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 * f }]}
           showsVerticalScrollIndicator={false}
         >
           {view === 'calendar' && (
             <>
-              <View style={styles.monthRow}>
+              <View style={[styles.monthRow, { marginTop: 27 * f }]}>
                 <TouchableOpacity onPress={goToPrev} hitSlop={20}>
                   <View style={styles.chevronBox}><Chevron dir="left" /></View>
                 </TouchableOpacity>
@@ -180,7 +172,7 @@ export default function CalendarScreen() {
                 </TouchableOpacity>
               </View>
               <CalendarGrid
-                year={year} month={month} today={today}
+                year={year} month={month} today={today} f={f}
                 recordDays={recordDays} onDayPress={d => openDay(year, month, d)}
               />
             </>
@@ -189,6 +181,18 @@ export default function CalendarScreen() {
             <AlbumList today={today} onDayPress={openDay} />
           )}
         </ScrollView>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <TopAppBar />
+
+      <View style={styles.body}>
+        {/* 캘린더 탭은 짧은 화면(SE 등)에서 통째로 줄여 스크롤 없이 한 번에 보이게 함. 앨범은 긴 목록이라 그대로 스크롤 */}
+        {view === 'calendar'
+          ? <FitToScreen designHeight={CAL_MIN_H}>{content}</FitToScreen>
+          : content}
       </View>
 
       <BottomNavBar activeTab="calendar" />
@@ -211,7 +215,7 @@ export default function CalendarScreen() {
                 label={modalDateLabel}
                 record={modalRecord}
                 plantType={plantType}
-                stage={modalStage}
+                generated={modalGenerated}
               />
             )}
           </TouchableOpacity>
@@ -221,30 +225,50 @@ export default function CalendarScreen() {
   );
 }
 
-// ─── 날짜별 기록 카드 (362x480 고정, 요소는 Figma 절대 좌표) ───────
-function DayRecordCard({ label, record, plantType, stage }: {
-  label: string; record: DailyRecord; plantType: PlantType; stage: GrowthStage;
+// ─── 날짜별 기록 카드 (폭 최대 362 · 높이 480, 요소는 Figma 절대 좌표) ───────
+function DayRecordCard({ label, record, plantType, generated }: {
+  label: string; record: DailyRecord; plantType: PlantType;
+  generated: { uri: string; facePos: { x: number; y: number } } | null;
 }) {
   const completedIds = record.completedTaskIds ?? (record.waterDone ? ['water'] : []);
   const photoUri = record.plantPhotoUri ?? record.answerImageUri;
   const text = record.conversationSummary || record.answer || '';
+  // 팝업 폭: 기본 362, 좁은 화면에서는 화면 좌우에 최소 28씩 여백이 남도록 줄임. 안쪽 내용(폭 260)은 가운데 정렬
+  const { width: screenW } = useWindowDimensions();
+  const cardW = Math.min(362, screenW - 2 * 28);
+  const sideInset = (cardW - 260) / 2;
 
   return (
-    <View style={styles.recordCard}>
+    <View style={[styles.recordCard, { width: cardW }]}>
       <Text style={styles.recordTitle}>{label}</Text>
 
-      <View style={styles.recordImageArea}>
+      <View style={[styles.recordImageArea, { left: sideInset }]}>
         {photoUri ? (
           <Image source={{ uri: photoUri }} style={styles.recordPhoto} resizeMode="cover" />
         ) : (
-          // 사진이 없으면 그날의 캐릭터만 표시
-          <View style={styles.recordPlant} pointerEvents="none">
-            <PlantCharacter plantType={plantType} stage={stage} width={101} />
-          </View>
+          // 사진이 없으면 캐릭터만 표시: 그날 보이던 사진 캐릭터가 있으면 그 모습, 없으면 그날의 성장 단계 기본 캐릭터
+          generated ? (
+            <View style={styles.recordGenerated} pointerEvents="none">
+              <Image source={{ uri: generated.uri }} style={{ width: GEN_SIZE, height: GEN_SIZE }} resizeMode="contain" />
+              <FaceOverlay
+                plantType={plantType}
+                style={{
+                  position: 'absolute',
+                  width: GEN_SIZE / 2, height: GEN_SIZE / 2,
+                  left: (generated.facePos.x / 100) * GEN_SIZE - GEN_SIZE / 4,
+                  top:  (generated.facePos.y / 100) * GEN_SIZE - GEN_SIZE / 4,
+                }}
+              />
+            </View>
+          ) : (
+            <View style={styles.recordPlant} pointerEvents="none">
+              <PlantCharacter plantType={plantType} stage={1} width={101} />
+            </View>
+          )
         )}
       </View>
 
-      <Text style={styles.recordText} numberOfLines={4}>{text}</Text>
+      <Text style={[styles.recordText, { left: sideInset }]} numberOfLines={5}>{text}</Text>
 
       <View style={styles.recordFooter}>
         <ActionIcon kind="water"  active={completedIds.includes('water')}    height={20.05} />
@@ -257,8 +281,8 @@ function DayRecordCard({ label, record, plantType, stage }: {
 }
 
 // ─── 캘린더 그리드 ────────────────────────────────────────────────
-function CalendarGrid({ year, month, today, recordDays, onDayPress }: {
-  year: number; month: number; today: Date; recordDays: number[];
+function CalendarGrid({ year, month, today, recordDays, onDayPress, f = 1 }: {
+  year: number; month: number; today: Date; recordDays: number[]; f?: number;
   onDayPress: (day: number) => void;
 }) {
   const grid = buildMonthGrid(year, month);
@@ -301,8 +325,8 @@ function CalendarGrid({ year, month, today, recordDays, onDayPress }: {
   };
 
   return (
-    <View style={styles.gridWrap}>
-      <View style={styles.weekHeaderRow}>
+    <View style={[styles.gridWrap, { marginTop: 33 * f }]}>
+      <View style={[styles.weekHeaderRow, { marginBottom: 36 * f }]}>
         {DAY_HEADERS.map((d, i) => (
           <View key={i} style={styles.dayCell}>
             <Text style={[styles.dayHeader, (i === 0 || i === 6) && styles.dayHeaderWeekend]}>{d}</Text>
@@ -311,7 +335,7 @@ function CalendarGrid({ year, month, today, recordDays, onDayPress }: {
       </View>
 
       {Array.from({ length: rows }).map((_, row) => (
-        <View key={row} style={styles.weekRow}>
+        <View key={row} style={[styles.weekRow, { height: Math.max(CELL_MIN_H, CELL_H * f) }]}>
           {grid.slice(row * 7, row * 7 + 7).map((entry, col) => {
             const cur       = entry.type === 'cur';
             const isToday   = isCurrentMonth && cur && entry.day === today.getDate();
@@ -442,7 +466,14 @@ function AlbumList({ today, onDayPress }: {
 }
 
 // ─── 스타일 (수치는 Figma 402x874 프레임 기준) ─────────────────────
+const GEN_SIZE = 160;   // 기록 팝업에서 사진으로 만든 캐릭터를 그리는 크기
 const CELL_H = 69.5;
+const CELL_MIN_H = ui(46);   // 날짜 원(40) + 물방울 뱃지가 들어가는 최소 칸 높이
+// 캘린더 높이 구성(6주짜리 달 기준): 줄이지 않는 부분 = 탭 글자 45 + 월 제목 26 + 요일 글자 38 = 109 / 줄이는 부분 = 여백(탭 위아래 60 + 27 + 33 + 36 + 24) + 날짜 칸 6×69.5 = 597
+const CAL_FIXED_H = ui(109);
+const CAL_FLEX_H = 597;
+const CAL_MIN_FACTOR = 0.5;
+const CAL_MIN_H = CAL_FIXED_H + CAL_FLEX_H * CAL_MIN_FACTOR + 6 * (CELL_MIN_H - CELL_H * CAL_MIN_FACTOR);   // 이보다 짧은 화면만 통째로 축소
 
 const styles = StyleSheet.create({
   safe:          { flex: 1, backgroundColor: COLORS.headerBg },
@@ -459,15 +490,15 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
   },
   tabRowAlbum: { paddingBottom: 10 },   // 앨범 프레임: 탭 영역 85 (월 라벨 y=181)
-  tab: { width: 62, height: 45, alignItems: 'center' },
+  tab: { width: ui(62), height: ui(45), alignItems: 'center' },
   tabUnderline: {
     position: 'absolute', left: 0, right: 0, bottom: -0.75,
     height: 1.5, backgroundColor: COLORS.pine,
   },
   tabText: {
     fontFamily: FONTS.bold,
-    fontSize: 22,
-    lineHeight: 45,
+    fontSize: fs(22),
+    lineHeight: fs(45),
     color: COLORS.tabTextOff,
     width: 80,
     textAlign: 'center',
@@ -487,8 +518,8 @@ const styles = StyleSheet.create({
   chevronBox: { width: 15, height: 15, alignItems: 'center', justifyContent: 'center' },
   monthTitle: {
     fontFamily: FONTS.bold,
-    fontSize: 22,
-    lineHeight: 26,
+    fontSize: fs(22),
+    lineHeight: fs(26),
     color: COLORS.pine,
     minWidth: 111,
     flexShrink: 0,
@@ -500,21 +531,21 @@ const styles = StyleSheet.create({
   weekHeaderRow: { flexDirection: 'row', marginBottom: 36 },
   weekRow:       { flexDirection: 'row', height: CELL_H },
   dayCell:       { flex: 1, alignItems: 'center', justifyContent: 'flex-start' },
-  dayHeader:     { fontFamily: FONTS.bold, fontSize: 17, lineHeight: 22, paddingVertical: 8, color: '#191C1B' },
+  dayHeader:     { fontFamily: FONTS.bold, fontSize: fs(17), lineHeight: fs(22), paddingVertical: 8, color: '#191C1B' },
   dayHeaderWeekend: { color: COLORS.weekend },
 
   dateCircle: {
-    width: 40, height: 40, borderRadius: 20,
+    width: ui(40), height: ui(40), borderRadius: ui(20),
     alignItems: 'center', justifyContent: 'center',
   },
   dateCircleRecord: { backgroundColor: COLORS.lime },
   dateCircleToday:  { backgroundColor: COLORS.line },
-  dateText:     { fontFamily: FONTS.bold, fontSize: 16, lineHeight: 22, color: '#191C1B' },
+  dateText:     { fontFamily: FONTS.bold, fontSize: fs(16), lineHeight: fs(22), color: '#191C1B' },
   prevNextText: { color: COLORS.prevMonthText },
   todayText:    { color: '#FFFFFF' },
 
   // 연속 기록 띠: 시작 원 중심 ~ 끝 원 중심
-  bandRow:  { position: 'absolute', top: 0, left: 0, right: 0, height: 40, flexDirection: 'row' },
+  bandRow:  { position: 'absolute', top: 0, left: 0, right: 0, height: ui(40), flexDirection: 'row' },
   bandHalf: { flex: 1 },
   bandOn:   { backgroundColor: COLORS.limeLight },
 
@@ -524,14 +555,14 @@ const styles = StyleSheet.create({
   // 앨범: 좌우 46, 사진 150x150 간격 10
   albumWrap:    { paddingHorizontal: 46, paddingTop: 27, gap: 27 },
   albumSection: { gap: 10 },
-  albumMonth:   { fontFamily: FONTS.extraBold, fontSize: 15, lineHeight: 20, color: COLORS.green },
+  albumMonth:   { fontFamily: FONTS.bold, fontSize: fs(15), lineHeight: fs(20), color: COLORS.green },
   albumGrid:    { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   albumPhoto: {
     width: 150, height: 150, borderRadius: 4,
     backgroundColor: '#E0E0E0', borderWidth: 1, borderColor: COLORS.line,
   },
   emptyAlbum: { paddingVertical: 60, alignItems: 'center' },
-  emptyText:  { fontFamily: FONTS.medium, fontSize: 15, color: COLORS.textTertiary },
+  emptyText:  { fontFamily: FONTS.medium, fontSize: fs(15), color: COLORS.textTertiary },
 
   // 날짜별 기록 카드: 362x480 고정, 내부는 절대 좌표
   modalOverlay: {
@@ -549,7 +580,7 @@ const styles = StyleSheet.create({
   recordTitle: {
     position: 'absolute', top: 51, left: 0, right: 0,
     textAlign: 'center',
-    fontFamily: FONTS.bold, fontSize: 20, lineHeight: 20,
+    fontFamily: FONTS.bold, fontSize: fs(20), lineHeight: fs(20),
     color: COLORS.outline,
   },
   recordImageArea: { position: 'absolute', top: 94, left: 51, width: 260, height: 180 },
@@ -558,10 +589,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.line, backgroundColor: '#E0E0E0',
   },
   // 캐릭터 101×150을 사진 영역(260×180) 중앙에 배치
+  // 사진으로 만든 캐릭터(정사각형)를 사진 영역(260×180) 중앙에 배치
+  recordGenerated: { position: 'absolute', left: (260 - GEN_SIZE) / 2, top: (180 - GEN_SIZE) / 2, width: GEN_SIZE, height: GEN_SIZE },
   recordPlant: { position: 'absolute', left: 79.5, top: 15, width: 101, height: 150 },
   recordText: {
-    position: 'absolute', top: 299, left: 51, width: 260, height: 80,
-    fontFamily: FONTS.bold, fontSize: 13, lineHeight: 20,
+    position: 'absolute', top: 299, left: 51, width: 260, height: 100,
+    fontFamily: FONTS.bold, fontSize: fs(13), lineHeight: fs(20),
     color: '#191C1B',
   },
   recordFooter: {

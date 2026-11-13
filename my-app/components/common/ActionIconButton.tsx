@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { UI_SCALE, ui } from '../../constants';
 
 // 홈 화면 액션 버튼(물주기 / 햇볕에 두기 / 식물 사진 찍기 / 식물 관찰) — 피그마 Y2K 아이콘
 export type ActionKind = 'water' | 'sun' | 'camera' | 'search';
@@ -60,7 +61,8 @@ export const ACTION_LABELS: Record<ActionKind, string> = {
   search: '식물 관찰',
 };
 
-export const ACTION_BTN_SIZE = 45;
+// 홈 task 버튼: 작은 화면에서는 글자·카드와 같은 배율(UI_SCALE)로 버튼과 아이콘을 함께 줄임
+export const ACTION_BTN_SIZE = ui(45);
 
 /** 박스 없이 아이콘만 (날짜별 기록 카드 하단 등). height 기준으로 비율 유지 */
 export function ActionIcon({ kind, active = true, height, color }: { kind: ActionKind; active?: boolean; height?: number; color?: string }) {
@@ -87,7 +89,8 @@ interface Props {
 export default function ActionIconButton({ kind, active, onPress }: Props) {
   return (
     <TouchableOpacity
-      style={styles.btn}
+      // 테두리 색은 안의 아이콘 색과 같게 (비활성은 아이콘과 같은 회색 + 같은 투명도)
+      style={[styles.btn, { borderColor: active ? ACTIVE_COLOR[kind] : 'rgba(71,71,71,0.2)' }]}
       activeOpacity={0.7}
       disabled={!active || !onPress}
       onPress={onPress}
@@ -95,7 +98,7 @@ export default function ActionIconButton({ kind, active, onPress }: Props) {
       accessibilityLabel={ACTION_LABELS[kind]}
       accessibilityState={{ disabled: !active }}
     >
-      <ActionIcon kind={kind} active={active} />
+      <ActionIcon kind={kind} active={active} height={ICONS[kind].h * UI_SCALE} />
     </TouchableOpacity>
   );
 }
@@ -106,7 +109,6 @@ const styles = StyleSheet.create({
     height: ACTION_BTN_SIZE,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: 'rgba(20,83,45,0.3)',
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',

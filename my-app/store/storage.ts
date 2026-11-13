@@ -39,12 +39,15 @@ export const KEYS = {
   PLANT_PHOTOS:        (date: string) => `@plant/photos_${date}`,
   CHAT_DRAFT:          (date: string) => `@plant/chat_draft_${date}`,
   GROWTH_STATE:           '@rootmate/growth_state',
-  LAST_STAGE_CHECK:       '@rootmate/last_stage_check',
   GENERATED_PLANT_URI:    '@plant/generated_plant_uri',
   GENERATED_FACE_POS:     '@plant/generated_face_pos',
   LAST_STREAK_SHOWN_DATE: '@plant/last_streak_shown_date',
   NOTIFICATION_TIMES:     '@plant/notification_times',
   NOTIFICATION_SIG:       '@plant/notification_signature',
+  GROWN_PLANTS:           '@plant/grown_plants',
+  GROWN_SINCE:            '@plant/grown_since',
+  GENERATED_PLANT_HISTORY: '@plant/generated_plant_history',   // [{ date, uri, facePos }] — 사진으로 만든 캐릭터를 만든 날짜별 기록 (Record 팝업에서 그날의 캐릭터를 보여주는 데 사용)
+  DEFERRED_TASKS:         '@plant/deferred_tasks',   // { 'YYYY-MM-DD': taskId[] } — 못 해서 다음 날로 넘긴 task
 };
 
 /** 알림 시간 (자정부터의 분). 기본: 아침 오전 9시, 저녁 오후 9시 */
@@ -86,6 +89,41 @@ export const storage = {
   // 식물
   async savePlantData(data: PlantData): Promise<void> {
     await AsyncStorage.setItem(KEYS.PLANT_DATA, JSON.stringify(data));
+    // 도감 컬러 표시용: 키운 적 있는 식물 종류 누적
+    if (data.id) {
+      const grown = await storage.getGrownPlants();
+      if (!grown.includes(data.id)) {
+        await AsyncStorage.setItem(KEYS.GROWN_PLANTS, JSON.stringify([...grown, data.id]));
+      }
+      // 도감에 표시할 '키우기 시작한 날' (식물별 처음 키운 날, 한 번만 기록)
+      const since = await storage.getGrownSince();
+      if (!since[data.id]) {
+        await AsyncStorage.setItem(KEYS.GROWN_SINCE, JSON.stringify({ ...since, [data.id]: data.adoptedAt ?? new Date().toISOString() }));
+      }
+    }
+  },
+  /** 식물별 키우기 시작한 날(ISO). 기록이 없는 현재 식물은 입양일로 채움 */
+  async getGrownSince(): Promise<Record<string, string>> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.GROWN_SINCE);
+      const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+      const current = await storage.getPlantData();
+      if (current?.id && !map[current.id] && current.adoptedAt) map[current.id] = current.adoptedAt;
+      return map;
+    } catch {
+      return {};
+    }
+  },
+  /** 키운 적 있는 식물 id 목록 (현재 키우는 식물 포함) */
+  async getGrownPlants(): Promise<string[]> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.GROWN_PLANTS);
+      const list: string[] = raw ? JSON.parse(raw) : [];
+      const current = await storage.getPlantData();
+      return current?.id && !list.includes(current.id) ? [...list, current.id] : list;
+    } catch {
+      return [];
+    }
   },
   async getPlantData(): Promise<PlantData | null> {
     const raw = await AsyncStorage.getItem(KEYS.PLANT_DATA);
@@ -230,12 +268,57 @@ export const storage = {
     await AsyncStorage.removeItem(KEYS.CHAT_DRAFT(date));
   },
 
+  // '오늘은 못할 것 같아'로 다음 날로 넘긴 task — 넘긴 날(date)의 task 목록에 같이 뜸
+  async deferTask(date: string, taskId: string): Promise<void> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.DEFERRED_TASKS);
+      const all: Record<string, string[]> = raw ? JSON.parse(raw) : {};
+      // 지난 날짜는 정리 (date 이전 키 삭제)
+      Object.keys(all).forEach(k => { if (k < date) delete all[k]; });
+      all[date] = Array.from(new Set([...(all[date] ?? []), taskId]));
+      await AsyncStorage.setItem(KEYS.DEFERRED_TASKS, JSON.stringify(all));
+    } catch { /* 저장 실패해도 대화는 계속 */ }
+  },
+  async getDeferredTasks(date: string): Promise<string[]> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.DEFERRED_TASKS);
+      const all: Record<string, string[]> = raw ? JSON.parse(raw) : {};
+      return all[date] ?? [];
+    } catch {
+      return [];
+    }
+  },
+
   // AI 생성 식물 이미지 (세션 간 유지)
-  async saveGeneratedPlant(uri: string, facePos: { x: number; y: number; pot_width: number }): Promise<void> {
+  /** date: 이 캐릭터를 만든 날(YYYY-MM-DD). 현재 캐릭터로 저장하면서, 날짜별 기록(history)에도 남겨 과거 기록에서 그날의 캐릭터를 볼 수 있게 한다 */
+  async saveGeneratedPlant(uri: string, facePos: { x: number; y: number; pot_width: number }, date: string): Promise<void> {
+    const history = await storage.getGeneratedPlantHistory();
+    // 같은 날 다시 만들면 그날 기록을 새 캐릭터로 교체
+    const next = [...history.filter(h => h.date !== date), { date, uri, facePos }].sort((a, b) => a.date.localeCompare(b.date));
     await Promise.all([
       AsyncStorage.setItem(KEYS.GENERATED_PLANT_URI, uri),
       AsyncStorage.setItem(KEYS.GENERATED_FACE_POS, JSON.stringify(facePos)),
+      AsyncStorage.setItem(KEYS.GENERATED_PLANT_HISTORY, JSON.stringify(next)),
     ]);
+  },
+  async getGeneratedPlantHistory(): Promise<{ date: string; uri: string; facePos: { x: number; y: number; pot_width: number } }[]> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.GENERATED_PLANT_HISTORY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  },
+  /**
+   * 해당 날짜에 보이던 사진 캐릭터: 그 날짜까지 만든 캐릭터 중 가장 최근 것.
+   * 그날까지 만든 캐릭터가 없으면 null (기본 캐릭터를 보여줌).
+   * 날짜 기록이 없던 시절에 만든 캐릭터(기록 없이 현재 캐릭터만 있는 경우)는 날짜를 알 수 없어 모든 날짜에 그대로 보여준다.
+   */
+  async getGeneratedPlantForDate(date: string): Promise<{ uri: string; facePos: { x: number; y: number; pot_width: number } } | null> {
+    const history = await storage.getGeneratedPlantHistory();
+    if (history.length === 0) return storage.getGeneratedPlant();
+    const entry = [...history].reverse().find(h => h.date <= date);
+    return entry ? { uri: entry.uri, facePos: entry.facePos } : null;
   },
   async getGeneratedPlant(): Promise<{ uri: string; facePos: { x: number; y: number; pot_width: number } } | null> {
     const [uri, posRaw] = await Promise.all([
@@ -291,6 +374,8 @@ export const storage = {
   async clearTodayRecord(): Promise<void> {
     const today = getLocalDateString();
     await AsyncStorage.removeItem(KEYS.DAILY_RECORD(today));
+    // 개발자 메뉴 초기화 후 다시 완료하면 연속 관리 화면이 다시 뜨도록 함
+    await AsyncStorage.removeItem(KEYS.LAST_STREAK_SHOWN_DATE);
   },
   async resetAll(): Promise<void> {
     await AsyncStorage.clear();

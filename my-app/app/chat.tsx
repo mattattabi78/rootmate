@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -16,32 +17,32 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS } from '../constants';
-import { PlantType, GrowthStage, Expression, getExpressionImage } from '../constants/character';
+import { COLORS, FONTS, fs } from '../constants';
+import { PlantType, Expression } from '../constants/character';
+import FaceOverlay from '../components/common/BlinkingFace';
 import PlantCharacter from '../components/common/PlantCharacter';
 import { getTodayQuestion, getLongBreakQuestion } from '../services/api/questionPool';
 import { usePlantExpression } from '../hooks/usePlantExpression';
 import {
-  getOrInitGrowthState, recordStageEntry, getDaysSinceStageEntry,
-  setPendingConfirmQuestion, wasStageCheckedToday, setLastStageCheckDate,
+  getOrInitGrowthState,
   recordTaskCompletion, getTodayCompletedTaskIds,
 } from '../store/growthStore';
-import { getNextStageConfig, AUTO_ADVANCE_MESSAGES, STAGE_CONFIRM_MESSAGES, getActiveTaskIds } from '../constants/growthStages';
 import { storage, DailyRecord, MemorySummary } from '../store/storage';
 import { isSupportedTask, isTaskDueFor, isObservationDue, PlantTask, PLANT_TASKS } from '../constants/plants';
-import { getPlantMessages, getTaskChoices } from '../constants/chatMessages';
+import { getPlantMessages, getTaskChoices, getChecklistLabel, formatClock, FollowupKind } from '../constants/chatMessages';
 import { generateQuestion, generatePlantResponse, summarizePlantConversation, updatePlantCharacterWithCustomPot, PlantFacePosition } from '../services/ai';
 import { reconstructDayChat } from '../utils/chatHistory';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView } from 'expo-camera';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Asset } from 'expo-asset';
-import { VASE_IMAGE } from '../constants/character';
+import { POT_REFERENCE_IMAGE } from '../constants/character';
 import EmojiText from '../components/common/EmojiText';
 import { getLocalDateString } from '../utils/date';
+import { shouldBackdateRecord } from '../utils/recordDate';
 import { getKstDayOfWeek, getDevAdjustedDate, getDevChatRounds } from '../utils/devOverrides';
-import { scheduleTaskReminder, cancelEveningNotification } from '../utils/notifications';
-import { getGuideItems, GUIDE_TITLE, GUIDE_SUBTITLE, GUIDE_BTN_LABEL, GUIDE_CAMERA_LABEL, GUIDE_EXAMPLE_OPEN } from '../constants/imageGuide';
+import { scheduleTaskReminder, cancelEveningNotification, ensureNotificationPermission } from '../utils/notifications';
+import { getGuideItems, GUIDE_TITLE, GUIDE_BTN_LABEL, GUIDE_CAMERA_LABEL, GUIDE_EXAMPLE_OPEN } from '../constants/imageGuide';
 import { persistImageUri } from '../utils/persistImage';
 
 // ─── 그라디언트 ───────────────────────────────────────────────────
@@ -58,7 +59,7 @@ function Grad({ colors, style, children }: { colors: string[]; style?: any; chil
 // ─── 에셋 ─────────────────────────────────────────────────────────
 import TopAppBar from '../components/common/TopAppBar';
 import Button from '../components/common/Button';
-import { PlusPixelIcon, ArrowRightPixelIcon, CheckboxPixelIcon } from '../components/common/PixelIcons';
+import { PlusPixelIcon, ArrowRightPixelIcon, CheckboxPixelIcon, CheckPixelIcon } from '../components/common/PixelIcons';
 import Wallpaper, { WALLPAPER_COLOR } from '../components/common/Wallpaper';
 
 // ─── 타입 ─────────────────────────────────────────────────────────
@@ -72,12 +73,10 @@ interface Message {
 type Phase =
   | 'loading'
   | 'already_done'     // 오늘 이미 완료
-  | 'stage_confirm'    // 성장 단계 USER_CONFIRMED 질문 버튼 표시
-  | 'task_check'       // 오늘의 task 확인 (task 순서대로)
-  | 'observing'        // 식물 관찰 답변 대기
+  | 'checklist'        // 오늘 한 일 체크리스트 (물주기·햇빛·관찰)
+  | 'followup'         // 체크하지 않은 항목별 후속 선택 (촉촉해/나중에/오늘은 못해)
   | 'photo_capture'    // 식물 사진 촬영 대기
-  | 'water_reminder'   // 못 했을 때 알림 선택
-  | 'reminder_done'    // 알림 설정 후 종료 (기록 미완료)
+  | 'photo_later'      // 사진을 나중에 찍겠다고 한 뒤: 2시간 뒤 알림 / 내일로 미루기 선택
   | 'answering'        // 마음 건강 질문 답변 중
   | 'done';            // 완료
 
@@ -91,8 +90,21 @@ function newId() { return String(++msgId); }
 
 const choicesFor = getTaskChoices;
 
+// 2시간 뒤 알림이 울릴 시각 (대사에 넣을 대화체 시각)
+function reminderClock() {
+  return formatClock(new Date(Date.now() + 2 * 60 * 60 * 1000));
+}
+
 // ─── 화면 ─────────────────────────────────────────────────────────
+// 자정~새벽 4시에 연 대화는 전날 기록으로 저장 (전날 기록이 없을 때). 화면의 날짜 표시는 시스템 시간 그대로
 export default function ChatScreen() {
+  const [backdate, setBackdate] = useState<boolean | null>(null);
+  useEffect(() => { shouldBackdateRecord().then(setBackdate).catch(() => setBackdate(false)); }, []);
+  if (backdate === null) return null;
+  return <ChatInner backdate={backdate} />;
+}
+
+function ChatInner({ backdate }: { backdate: boolean }) {
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>('loading');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -100,19 +112,19 @@ export default function ChatScreen() {
   const [plantNickname, setPlantNickname] = useState('');
   const [plantType, setPlantType]         = useState<PlantType>('tomato');
   const plantTypeRef = useRef<PlantType>('tomato');
-  const observationChatRef = useRef(false);
   // 오늘 기록은 있지만 미완료 task가 남은 경우 (AI 질문 건너뜀)
   const hasExistingRecordRef = useRef(false);
   const [todayQuestion, setTodayQuestion] = useState('');
   const [longBreakCheckin, setLongBreakCheckin] = useState<string | null>(null);
   const memorySummariesRef = useRef<MemorySummary[]>([]);
   const [tasks, setTasks]               = useState<PlantTask[]>([]);
-  const [taskIdx, setTaskIdx]           = useState(0);
+  // 체크리스트에서 체크한 task, 체크하지 않은 task의 후속 선택
+  const [checkedIds, setCheckedIds]     = useState<string[]>([]);
+  const [followupSel, setFollowupSel]   = useState<Record<string, FollowupKind>>({});
   const [chatDoneTaskIds, setChatDoneTaskIds] = useState<string[]>([]);
   // '흙이 촉촉해' 등 오늘은 안 해도 되는 이유를 고른 task (물주기는 water_moist로 기록해 다음 날 재확인)
   const [chatAltTaskIds, setChatAltTaskIds] = useState<string[]>([]);
   const [canEndConversation, setCanEndConversation] = useState(false);
-  const [plantStage, setPlantStage]   = useState<GrowthStage>(1);
   const [plantPhotoUri, setPlantPhotoUri] = useState<string | undefined>();
   const [generatedPlantUri, setGeneratedPlantUri] = useState<string | null>(null);
   const [generatedFacePos, setGeneratedFacePos] = useState<{ x: number; y: number; pot_width: number } | null>(null);
@@ -138,6 +150,7 @@ export default function ChatScreen() {
   const [maxRounds] = useState(() => getDevChatRounds());
 
   const today = getDevAdjustedDate();
+  if (backdate) today.setDate(today.getDate() - 1);
   const todayStr = getLocalDateString(today);
   // KST 기준 요일 (0=일, 3=수)
   const kstDow = getKstDayOfWeek();
@@ -148,17 +161,17 @@ export default function ChatScreen() {
   // ── 오늘 task 목록 계산 (daysOfWeek 필터 포함) ────────────────────
   const buildTodayTasks = (
     pType: PlantType,
-    stage: number,
     alreadyDoneToday: string[],
     completedTasks: { taskId: string; completedAt: string }[],
     plantedAt: string,
+    deferredIds: string[] = [],   // 어제 '오늘은 못할 것 같아'로 넘겨서 오늘 같이 떠야 하는 task
   ): PlantTask[] => {
-    const activeIds = getActiveTaskIds(pType, stage);
-    const observationDue = isObservationDue(pType, plantedAt, completedTasks, todayStr, stage);
+    const observationDue = isObservationDue(pType, plantedAt, completedTasks, todayStr);
     const observationDay = observationDue || alreadyDoneToday.includes('observe');
     return (PLANT_TASKS[pType] ?? []).filter(t => {
       if (!isSupportedTask(t.id)) return false;
-      if (!activeIds.includes(t.id as any)) return false;
+      // 어제 못해서 넘어온 task는 요일·주기 조건과 상관없이 오늘 목록에 포함 (이미 했거나 한 번만 하는 task를 끝낸 경우는 제외)
+      if (deferredIds.includes(t.id) && !alreadyDoneToday.includes(t.id) && !(t.oneTime && completedTasks.some(e => e.taskId === t.id))) return true;
       if (t.id === 'sunlight' && observationDay) return false;
       if (t.id === 'observe' && !observationDue) return false;
       if (t.oneTime && completedTasks.some(entry => entry.taskId === t.id)) return false;
@@ -166,61 +179,64 @@ export default function ChatScreen() {
       if (t.daysOfWeek && !t.daysOfWeek.includes(kstDow)) return false;
       if (
         (t.id === 'water' || t.id === 'sunlight' || t.id === 'observe') &&
-        !isTaskDueFor(pType, stage, t, plantedAt, completedTasks, todayStr)
+        !isTaskDueFor(pType, t, plantedAt, completedTasks, todayStr)
       ) return false;
       return true;
     });
   };
 
-  // ── task 질문 시작 헬퍼 ──────────────────────────────────────────
-  const startTaskAt = (idx: number, taskList: PlantTask[], fallbackQuestion: string) => {
-    const m = getPlantMessages(plantTypeRef.current);
-    if (idx >= taskList.length) {
-      // 기록은 있지만 미완료 task를 마저 완료한 경우 → AI 질문 없이 완료
-      if (hasExistingRecordRef.current) {
-        setPhase('done');
-        return;
-      }
-      setCanEndConversation(true);
-      // 잠깐 대기 → 로딩 점 → AI 질문
-      setPhase('loading');
-      setTimeout(() => {
-        const loadingId = newId();
-        setMessages(prev => [...prev, { id: loadingId, from: 'plant', text: '.' }]);
-        let dots = 1;
-        const dotInterval = setInterval(() => {
-          dots = (dots % 3) + 1;
-          setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: '.'.repeat(dots) } : msg));
-        }, 400);
-        const questionCategory = kstDow === 0 ? '깊은 마음 질문' : '오늘의 마음 질문';
-        generateQuestion(fallbackQuestion, '', '', plantTypeRef.current, questionCategory).then(aiQuestion => {
-          clearInterval(dotInterval);
-          setTodayQuestion(aiQuestion);
-          setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: aiQuestion } : msg));
-          setPhase('answering');
-          setTemporaryExpression('default', 2000);
-        }).catch(() => {
-          clearInterval(dotInterval);
-          setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: fallbackQuestion } : msg));
-          setPhase('answering');
-          setTemporaryExpression('default', 2000);
-        });
-      }, 800);
-    } else {
-      const task = taskList[idx];
-      if (task.id === 'observe') {
-        observationChatRef.current = true;
-        setCurrentRound(0);
-        setMessages(prev => [...prev, { id: newId(), from: 'plant', text: '지금 내 모습 어때?' }]);
-        setPhase('observing');
-      } else if (task.id === 'photo') {
-        setMessages(prev => [...prev, { id: newId(), from: 'plant', text: m.photoAsk }]);
-        setPhase('photo_capture');
-      } else {
-        setMessages(prev => [...prev, { id: newId(), from: 'plant', text: m.taskAsk(task.id, task.label) }]);
-        setPhase('task_check');
-      }
+  // ── 마음 건강 질문 시작 (모든 task 확인이 끝난 뒤) ───────────────────
+  const startQuestion = (fallbackQuestion: string) => {
+    // 기록은 있지만 미완료 task를 마저 완료한 경우 → AI 질문 없이 완료
+    if (hasExistingRecordRef.current) {
+      setPhase('done');
+      return;
     }
+    setCanEndConversation(true);
+    // 잠깐 대기 → 로딩 점 → AI 질문
+    setPhase('loading');
+    setTimeout(() => {
+      const loadingId = newId();
+      setMessages(prev => [...prev, { id: loadingId, from: 'plant', text: '.' }]);
+      let dots = 1;
+      const dotInterval = setInterval(() => {
+        dots = (dots % 3) + 1;
+        setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: '.'.repeat(dots) } : msg));
+      }, 400);
+      const questionCategory = kstDow === 0 ? '깊은 마음 질문' : '오늘의 마음 질문';
+      generateQuestion(fallbackQuestion, '', '', plantTypeRef.current, questionCategory).then(aiQuestion => {
+        clearInterval(dotInterval);
+        setTodayQuestion(aiQuestion);
+        setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: aiQuestion } : msg));
+        setPhase('answering');
+        setTemporaryExpression('default', 2000);
+      }).catch(() => {
+        clearInterval(dotInterval);
+        setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: fallbackQuestion } : msg));
+        setPhase('answering');
+        setTemporaryExpression('default', 2000);
+      });
+    }, 800);
+  };
+
+  // 체크리스트(및 후속 선택)가 끝난 뒤: 사진 task가 있으면 사진 촬영, 없으면 바로 마음 건강 질문
+  const afterChecklist = (taskList: PlantTask[], fallbackQuestion: string) => {
+    if (taskList.some(t => t.id === 'photo')) {
+      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: getPlantMessages(plantTypeRef.current).photoAsk() }]);
+      setPhase('photo_capture');
+    } else {
+      startQuestion(fallbackQuestion);
+    }
+  };
+
+  // 첫 인사 뒤: 오늘 한 일을 체크해 달라고 말하고 체크리스트를 띄운다 (체크할 항목이 없으면 건너뜀)
+  const startChecklist = (taskList: PlantTask[], fallbackQuestion: string) => {
+    if (taskList.every(t => t.id === 'photo')) {
+      afterChecklist(taskList, fallbackQuestion);
+      return;
+    }
+    setMessages(prev => [...prev, { id: newId(), from: 'plant', text: getPlantMessages(plantTypeRef.current).checklistAsk() }]);
+    setPhase('checklist');
   };
 
   // ── 초기화 ───────────────────────────────────────────────────────
@@ -246,9 +262,8 @@ export default function ChatScreen() {
       setPlantType(pType);
       memorySummariesRef.current = await storage.getRecentMemorySummaries();
 
-      // 성장 상태 먼저 확인 (task 필터링에 필요)
+      // task 완료 기록 먼저 확인 (task 필터링에 필요)
       const growthState = await getOrInitGrowthState(pType, pAt);
-      setPlantStage(growthState.currentStage as GrowthStage);   // 아바타의 대체 이미지는 현재 단계를 따라감
 
       // 오늘 완료 기록 확인
       const existingRecord = await storage.getDailyRecord(todayStr);
@@ -256,10 +271,10 @@ export default function ChatScreen() {
         const alreadyDoneIds = await getTodayCompletedTaskIds();
         const pendingTasks   = buildTodayTasks(
           pType,
-          growthState.currentStage,
           alreadyDoneIds,
           growthState.completedTasks,
           growthState.plantedAt,
+          await storage.getDeferredTasks(todayStr),
         );
 
         if (pendingTasks.length === 0) {
@@ -283,10 +298,10 @@ export default function ChatScreen() {
         const alreadyDoneToday = await getTodayCompletedTaskIds();
         const longBreakTasks = buildTodayTasks(
           pType,
-          growthState.currentStage,
           alreadyDoneToday,
           growthState.completedTasks,
           growthState.plantedAt,
+          await storage.getDeferredTasks(todayStr),
         );
         const fallbackQuestion = getTodayQuestion(pNick, new Date(pAt), qIdx, dqIdx);
         setTasks(longBreakTasks);
@@ -310,35 +325,17 @@ export default function ChatScreen() {
       // draft 복원 (미완료 세션) — hasExistingRecordRef 이미 설정된 상태일 수 있음
       const draft = await storage.getChatDraft(todayStr);
       if (draft) {
-        const draftTasks: PlantTask[] = draft.tasks ?? [];
-        const draftTaskIdx: number = draft.taskIdx ?? 0;
-        observationChatRef.current = !!draft.observationChat;
-
-        if (draft.phase === 'reminder_done') {
-          const skippedTask = draftTasks[draftTaskIdx];
-          const msgs = [...(draft.messages ?? [])];
-          if (skippedTask) {
-            const retryMsg = getPlantMessages(pType).taskRetry(skippedTask.label);
-            msgs.push({ id: newId(), from: 'plant' as const, text: retryMsg });
-          }
-          setMessages(msgs);
-          setTasks(draftTasks);
-          setTaskIdx(draftTaskIdx);
-          setChatDoneTaskIds(draft.chatDoneTaskIds ?? []);
-          setChatAltTaskIds(draft.chatAltTaskIds ?? []);
-          setCanEndConversation(!!draft.canEndConversation);
-          setTodayQuestion(draft.todayQuestion ?? '');
-          setPhase(skippedTask ? 'task_check' : 'answering');
-        } else {
-          setMessages(draft.messages ?? []);
-          setTasks(draftTasks);
-          setTaskIdx(draftTaskIdx);
-          setChatDoneTaskIds(draft.chatDoneTaskIds ?? []);
-          setChatAltTaskIds(draft.chatAltTaskIds ?? []);
-          setCanEndConversation(!!draft.canEndConversation);
-          setTodayQuestion(draft.todayQuestion ?? '');
-          setPhase(draft.phase ?? 'task_check');
-        }
+        setMessages(draft.messages ?? []);
+        setTasks(draft.tasks ?? []);
+        setChatDoneTaskIds(draft.chatDoneTaskIds ?? []);
+        setChatAltTaskIds(draft.chatAltTaskIds ?? []);
+        setCheckedIds(draft.checkedIds ?? []);
+        setFollowupSel(draft.followupSel ?? {});
+        setCanEndConversation(!!draft.canEndConversation);
+        setTodayQuestion(draft.todayQuestion ?? '');
+        // 이전 방식(task별 질문)으로 저장된 draft의 단계는 체크리스트로 되돌림
+        const resumable: Phase[] = ['checklist', 'followup', 'photo_capture', 'photo_later', 'answering'];
+        setPhase(resumable.includes(draft.phase) ? draft.phase : 'checklist');
         return;
       }
 
@@ -346,47 +343,17 @@ export default function ChatScreen() {
       const installDate = plantData?.adoptedAt ? new Date(plantData.adoptedAt) : new Date();
       const fallbackQuestion = getTodayQuestion(pNick, installDate, qIdx, dqIdx);
       setTodayQuestion(fallbackQuestion);
-      if (!hasExistingRecordRef.current) setTemporaryExpression('oh', 2000);
+      if (!hasExistingRecordRef.current) setTemporaryExpression('surprise', 2000);
 
-      const alreadyChecked = await wasStageCheckedToday();
       const alreadyDone    = await getTodayCompletedTaskIds();
       const todayTaskList  = buildTodayTasks(
         pType,
-        growthState.currentStage,
         alreadyDone,
         growthState.completedTasks,
         growthState.plantedAt,
+        await storage.getDeferredTasks(todayStr),
       );
       setTasks(todayTaskList);
-
-      let growthMsg: string | null = null;
-      let needConfirm = false;
-      let confirmQ: string | undefined;
-
-      if (!alreadyChecked) {
-        const nextCfg = getNextStageConfig(pType, growthState.currentStage);
-        if (nextCfg) {
-          if (nextCfg.triggerCondition === 'DAYS_PASSED') {
-            const days = await getDaysSinceStageEntry(growthState.currentStage);
-            if (days >= (nextCfg.daysRequired ?? 0)) {
-              await recordStageEntry(nextCfg.stage);
-              setPlantStage(nextCfg.stage as GrowthStage);
-              growthMsg = AUTO_ADVANCE_MESSAGES[pType]?.[nextCfg.stage] ?? null;
-            }
-          } else if (nextCfg.triggerCondition === 'USER_CONFIRMED') {
-            const days = await getDaysSinceStageEntry(growthState.currentStage);
-            if (days >= (nextCfg.daysRequired ?? 0)) {
-              if (!growthState.pendingConfirmQuestion) await setPendingConfirmQuestion(nextCfg.confirmQuestion);
-              needConfirm = true;
-              confirmQ    = nextCfg.confirmQuestion;
-            }
-          }
-        }
-        await setLastStageCheckDate(todayStr);
-      } else if (growthState.pendingConfirmQuestion) {
-        needConfirm = true;
-        confirmQ    = growthState.pendingConfirmQuestion;
-      }
 
       const plantMessages = getPlantMessages(plantTypeRef.current);
       const greetMsg = { id: newId(), from: 'plant' as const, text: plantMessages.greeting(pNick) };
@@ -394,15 +361,7 @@ export default function ChatScreen() {
       setMessages([greetMsg]);
 
       setTimeout(() => {
-        if (growthMsg) {
-          setMessages(prev => [...prev, { id: newId(), from: 'plant', text: growthMsg! }]);
-          setTimeout(() => startTaskAt(0, todayTaskList, fallbackQuestion), 800);
-        } else if (needConfirm && confirmQ) {
-          setMessages(prev => [...prev, { id: newId(), from: 'plant', text: confirmQ! }]);
-          setPhase('stage_confirm');
-        } else {
-          startTaskAt(0, todayTaskList, fallbackQuestion);
-        }
+        startChecklist(todayTaskList, fallbackQuestion);
       }, 500);
     })();
   }, []);
@@ -412,113 +371,140 @@ export default function ChatScreen() {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, [messages]);
 
-  // draft 자동 저장 (완료·로딩 제외, reminder_done 포함)
+  // draft 자동 저장 (완료·로딩 제외)
   useEffect(() => {
     if (phase === 'loading' || phase === 'already_done' || phase === 'done' || messages.length === 0) return;
     storage.saveChatDraft(todayStr, {
-      messages, phase, tasks, taskIdx, chatDoneTaskIds, chatAltTaskIds, todayQuestion,
+      messages, phase, tasks, chatDoneTaskIds, chatAltTaskIds, checkedIds, followupSel, todayQuestion,
       canEndConversation,
-      observationChat: observationChatRef.current,
     });
-  }, [messages, phase, canEndConversation, chatAltTaskIds]);
+  }, [messages, phase, canEndConversation, chatAltTaskIds, checkedIds, followupSel]);
 
-  // ── 성장 단계 확인 답변 ─────────────────────────────────────────
-  const handleGrowthConfirm = async (confirmed: boolean) => {
-    setPhase('loading');
-    const userText  = confirmed ? '네, 됐어요!' : '아직이요';
-    let plantText = STAGE_CONFIRM_MESSAGES[plantType].notConfirmed;
-    if (confirmed) {
-      const state = await getOrInitGrowthState(plantType, new Date().toISOString());
-      const nextCfg = getNextStageConfig(plantType, state.currentStage);
-      if (nextCfg) { await recordStageEntry(nextCfg.stage); setPlantStage(nextCfg.stage as GrowthStage); }
-      // 단계별 전용 문구가 있으면 우선 사용 (예: 큰 화분 안내)
-      plantText = nextCfg?.confirmedMessage ?? STAGE_CONFIRM_MESSAGES[plantType].confirmed;
-      setTemporaryExpression('sparkle', 3000);
-    }
-    await setPendingConfirmQuestion(undefined);
-    setMessages(prev => [
-      ...prev,
-      { id: newId(), from: 'user',  text: userText },
-      { id: newId(), from: 'plant', text: plantText },
-    ]);
-    setTimeout(() => startTaskAt(0, tasks, todayQuestion), 800);
-  };
-
-  // ── task 선택 (모든 task 공용) ──────────────────────────────────
-  const handleTaskChoice = (done: boolean) => {
-    const m = getPlantMessages(plantTypeRef.current);
-    const task = tasks[taskIdx];
-    setPhase('loading');
-    if (done) {
-      const doneText = choicesFor(task.id).done;
-      const newDone  = [...chatDoneTaskIds, task.id];
-      setChatDoneTaskIds(newDone);
-      recordTaskCompletion(task.id);
-      setMessages(prev => [...prev, { id: newId(), from: 'user', text: doneText }]);
-      setTimeout(() => {
-        setMessages(prev => [...prev, { id: newId(), from: 'plant', text: m.taskDone() }]);
-        const next = taskIdx + 1;
-        setTaskIdx(next);
-        setTimeout(() => startTaskAt(next, tasks, todayQuestion), 500);
-      }, 500);
-    } else {
-      const skipText = choicesFor(task.id).skip;
-      setMessages(prev => [...prev, { id: newId(), from: 'user', text: skipText }]);
-      const reminderMsg = m.taskSkip(task.label);
-      setTimeout(() => {
-        setMessages(prev => [...prev, { id: newId(), from: 'plant', text: reminderMsg }]);
-        setPhase('water_reminder');
-      }, 500);
-    }
-  };
-
-  // ── 대체 선택 (흙이 촉촉함 / 날씨가 흐림 → 오늘은 하지 않아도 되는 경우, 완료로 기록) ──
-  const handleTaskAlt = () => {
-    const m = getPlantMessages(plantTypeRef.current);
-    const task = tasks[taskIdx];
-    const alt = choicesFor(task.id).alt;
-    if (!alt) return;
-    setPhase('loading');
-    // 물주기는 '물 준 날'이 아니므로 water_moist로 기록 → 다음 날 다시 확인. 그 외(햇빛 등)는 완료로 기록
-    recordTaskCompletion(task.id === 'water' ? 'water_moist' : task.id);
-    setChatAltTaskIds(prev => [...prev, task.id]);
-    setMessages(prev => [...prev, { id: newId(), from: 'user', text: alt }]);
-    setTimeout(() => {
-      const plantText = task.id === 'water' ? m.waterMoist() : m.sunlightCloudy();
-      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: plantText }]);
-      const next = taskIdx + 1;
-      setTaskIdx(next);
-      setTimeout(() => startTaskAt(next, tasks, todayQuestion), 500);
-    }, 500);
-  };
-
-  // ── 알림 선택 (모든 미완료 task 공용) ──────────────────────────
-  const handleReminderChoice = (remind: boolean) => {
-    const m = getPlantMessages(plantTypeRef.current);
-    const userText  = remind ? '알림 받을게요' : '괜찮아요';
-    const plantText = remind ? m.reminderYes() : m.reminderNo();
-    if (remind) {
-      const skippedTask = tasks[taskIdx];
-      if (skippedTask) {
-        scheduleTaskReminder(skippedTask.label, plantTypeRef.current).catch(() => {});
+  // 식물이 "알려줄게"라고 말한 뒤: 알림 권한을 확인하고(없으면 허용 요청 창), 허용되면 2시간 뒤 알림을 예약.
+  // 이미 거부돼 다시 물을 수 없으면 설정에서 켜도록 안내
+  const scheduleRemindersWithPermission = async (labels: string[]) => {
+    try {
+      if (await ensureNotificationPermission()) {
+        await Promise.all(labels.map(label => scheduleTaskReminder(label, plantTypeRef.current)));
+      } else {
+        Alert.alert(
+          '알림이 꺼져 있어요',
+          '2시간 뒤에 알려주려면 알림을 허용해야 해요. 설정에서 알림을 켜 주세요.',
+          [
+            { text: '나중에', style: 'cancel' },
+            { text: '설정 열기', onPress: () => Linking.openSettings() },
+          ],
+        );
       }
+    } catch (error) {
+      console.warn('Failed to schedule reminder', error);
     }
-    setMessages(prev => [...prev, { id: newId(), from: 'user', text: userText }]);
+  };
+
+  // ── 체크리스트 (물주기·햇빛·관찰) ─────────────────────────────────
+  // 체크 대상: 사진을 뺀 오늘 task 중 아직 끝나지 않은 것
+  const openTasks = tasks.filter(t => t.id !== 'photo' && !chatDoneTaskIds.includes(t.id));
+
+  const toggleChecked = (taskId: string) =>
+    setCheckedIds(prev => prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]);
+
+  // 완료: 체크한 항목은 task 완료로 기록하고, 체크하지 않은 항목이 있으면 항목별 후속 선택으로 넘어간다
+  const handleChecklistSubmit = () => {
+    const m = getPlantMessages(plantTypeRef.current);
+    const checked   = openTasks.filter(t => checkedIds.includes(t.id));
+    const unchecked = openTasks.filter(t => !checkedIds.includes(t.id));
     setPhase('loading');
+    checked.forEach(t => recordTaskCompletion(t.id));
+    setChatDoneTaskIds(prev => [...prev, ...checked.map(t => t.id).filter(id => !prev.includes(id))]);
+    setMessages(prev => [...prev, {
+      id: newId(), from: 'user',
+      text: checked.length > 0 ? checked.map(t => `✔ ${getChecklistLabel(t.id, t.label)}`).join('\n') : '오늘은 아무것도 못 했어.',
+    }]);
+    // 전부 → all / 절반 이상 → some / 그 미만 → few
+    const kind = unchecked.length === 0 ? 'all' : checked.length / openTasks.length >= 0.5 ? 'some' : 'few';
     setTimeout(() => {
-      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: plantText }]);
-      setPhase('reminder_done');
+      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: m.checklistResult(kind, unchecked.map(t => t.label)) }]);
+      if (unchecked.length === 0) {
+        setTimeout(() => afterChecklist(tasks, todayQuestion), 600);
+      } else {
+        setPhase('followup');
+      }
     }, 500);
   };
 
+  const selectFollowup = (taskId: string, kind: FollowupKind) =>
+    setFollowupSel(prev => ({ ...prev, [taskId]: kind }));
+
+  // 후속 선택 확인: 항목마다 고른 대로 처리
+  //  - alt(촉촉해·흐림): 물주기는 water_moist로 기록(다음 날 재확인), 그 외는 완료로 기록
+  //  - remind(나중에 할게): 2시간 뒤 알림
+  //  - cantToday(오늘은 못해): 내일 task 목록에 같이 띄움
+  const handleFollowupSubmit = () => {
+    const m = getPlantMessages(plantTypeRef.current);
+    setPhase('loading');
+    const lines: string[] = [];
+    const replies: string[] = [];
+    const cantLabels: string[] = [];
+    const remindLabels: string[] = [];
+    const tomorrow = new Date(todayStr + 'T00:00:00');
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    openTasks.forEach(task => {
+      const kind = followupSel[task.id];
+      const c = choicesFor(task.id);
+      if (kind === 'alt' && c.alt) {
+        recordTaskCompletion(task.id === 'water' ? 'water_moist' : task.id);
+        setChatAltTaskIds(prev => [...prev, task.id]);
+        lines.push(`${task.label}: ${c.alt}`);
+        replies.push(task.id === 'water' ? m.waterMoist() : m.sunlightCloudy());
+      } else if (kind === 'remind') {
+        remindLabels.push(task.label);
+        lines.push(`${task.label}: ${c.remind}`);
+      } else {
+        storage.deferTask(getLocalDateString(tomorrow), task.id);
+        cantLabels.push(task.label);
+        lines.push(`${task.label}: ${c.cantToday}`);
+      }
+    });
+    if (remindLabels.length > 0) replies.push(m.reminderYes(reminderClock()));
+    if (cantLabels.length > 0) replies.push(m.taskCantToday(cantLabels.join(', ')));
+
+    setMessages(prev => [...prev, { id: newId(), from: 'user', text: lines.join('\n') }]);
+    setTimeout(() => {
+      setMessages(prev => [...prev, ...replies.map(text => ({ id: newId(), from: 'plant' as const, text }))]);
+      setTimeout(async () => {
+        if (remindLabels.length > 0) await scheduleRemindersWithPermission(remindLabels);
+        afterChecklist(tasks, todayQuestion);
+      }, 700);
+    }, 500);
+  };
+
+  // '나중에 찍을게' → 알림을 받을지 내일로 미룰지 묻는다
   const handlePhotoLater = () => {
     setPhase('loading');
-    setMessages(prev => [...prev, { id: newId(), from: 'user', text: '나중에 찍을게요' }]);
+    setMessages(prev => [...prev, { id: newId(), from: 'user', text: '나중에 찍을게' }]);
     setTimeout(() => {
-      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: getPlantMessages(plantTypeRef.current).photoLater() }]);
-      const next = taskIdx + 1;
-      setTaskIdx(next);
-      setTimeout(() => startTaskAt(next, tasks, todayQuestion), 500);
+      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: getPlantMessages(plantTypeRef.current).photoLaterAsk() }]);
+      setPhase('photo_later');
+    }, 500);
+  };
+
+  const handlePhotoLaterChoice = (remind: boolean) => {
+    const m = getPlantMessages(plantTypeRef.current);
+    const label = tasks.find(t => t.id === 'photo')?.label ?? '사진 찍기';
+    setPhase('loading');
+    if (!remind) {
+      const tomorrow = new Date(todayStr + 'T00:00:00');
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      storage.deferTask(getLocalDateString(tomorrow), 'photo');
+    }
+    setMessages(prev => [...prev, { id: newId(), from: 'user', text: remind ? '2시간 뒤에 알려줘' : '내일로 미룰게' }]);
+    setTimeout(() => {
+      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: remind ? m.reminderYes(reminderClock()) : m.taskCantToday(label) }]);
+      setTimeout(async () => {
+        if (remind) await scheduleRemindersWithPermission([label]);
+        startQuestion(todayQuestion);
+      }, 600);
     }, 500);
   };
 
@@ -594,7 +580,7 @@ export default function ChatScreen() {
       const resized = await ref.saveAsync({ compress: 0.8, format: SaveFormat.JPEG, base64: true });
       const base64DataUrl = `data:image/jpeg;base64,${resized.base64!}`;
 
-      const vaseAsset = Asset.fromModule(VASE_IMAGE);
+      const vaseAsset = Asset.fromModule(POT_REFERENCE_IMAGE);
       await vaseAsset.downloadAsync();
       const vaseRef = await ImageManipulator.manipulate(vaseAsset.localUri!).renderAsync();
       const vaseSaved = await vaseRef.saveAsync({ base64: true, format: SaveFormat.PNG });
@@ -610,7 +596,7 @@ export default function ChatScreen() {
         setPendingPhotoUri(null);
         setShowPhotoFailed(true);
       }
-    } catch (e) {
+    } catch {
       // 생성 실패 → 같은 안내 (기존 캐릭터 유지)
       setPendingPhotoUri(null);
       setShowPhotoFailed(true);
@@ -625,7 +611,7 @@ export default function ChatScreen() {
 
     const persistUri = await persistImageUri(previewPlantUri);
 
-    await storage.saveGeneratedPlant(persistUri, previewFacePos);
+    await storage.saveGeneratedPlant(persistUri, previewFacePos, todayStr);
     setGeneratedPlantUri(persistUri);
     setGeneratedFacePos(previewFacePos);
     setPreviewPlantUri(null);
@@ -640,9 +626,7 @@ export default function ChatScreen() {
     recordTaskCompletion('photo');
     setTimeout(() => {
       setMessages(prev => [...prev, { id: newId(), from: 'plant', text: getPlantMessages(plantTypeRef.current).photoUploaded() }]);
-      const next = taskIdx + 1;
-      setTaskIdx(next);
-      setTimeout(() => startTaskAt(next, tasks, todayQuestion), 500);
+      setTimeout(() => startQuestion(todayQuestion), 500);
     }, 500);
   };
 
@@ -663,7 +647,7 @@ export default function ChatScreen() {
     // 마음건강 질문 이미지 답변
     setMessages(prev => [...prev, { id: newId(), from: 'user', text: '', imageUri: uri }]);
     setPhase('loading');
-    setTemporaryExpression('heart', 3000);
+    setTemporaryExpression('default', 3000);
     const loadingId = newId();
     setMessages(prev => [...prev, { id: loadingId, from: 'plant', text: '.' }]);
     let dots = 1;
@@ -713,7 +697,7 @@ export default function ChatScreen() {
     setInputText('');
     setPhase('loading');
     setMessages(prev => [...prev, { id: newId(), from: 'user', text }]);
-    setTemporaryExpression('heart', 3000);
+    setTemporaryExpression('default', 3000);
     const loadingId = newId();
     setMessages(prev => [...prev, { id: loadingId, from: 'plant', text: '.' }]);
     let dots = 1;
@@ -723,8 +707,7 @@ export default function ChatScreen() {
     }, 400);
 
     const isLongBreakReply = !!longBreakCheckin;
-    const isObservationChat = observationChatRef.current;
-    const checkinQuestion = isObservationChat ? '지금 내 모습 어때?' : longBreakCheckin ?? todayQuestion;
+    const checkinQuestion = longBreakCheckin ?? todayQuestion;
     const isLastRound = currentRound === maxRounds - 1;
     const chatHistoryForAI = messages
       .filter(msg => msg.id !== loadingId)
@@ -746,29 +729,8 @@ export default function ChatScreen() {
     if (isLongBreakReply) {
       setLongBreakCheckin(null);
       setTimeout(() => {
-        startTaskAt(0, tasks, todayQuestion);
+        startChecklist(tasks, todayQuestion);
       }, 600);
-      return;
-    }
-
-    if (isObservationChat) {
-      const nextRound = currentRound + 1;
-      if (nextRound < maxRounds) {
-        setCurrentRound(nextRound);
-        setTimeout(() => {
-          setPhase('observing');
-          setTemporaryExpression('default', 2000);
-        }, 1000);
-        return;
-      }
-
-      observationChatRef.current = false;
-      await recordTaskCompletion('observe');
-      setChatDoneTaskIds(prev => prev.includes('observe') ? prev : [...prev, 'observe']);
-      setCurrentRound(0);
-      const next = taskIdx + 1;
-      setTaskIdx(next);
-      setTimeout(() => startTaskAt(next, tasks, todayQuestion), 700);
       return;
     }
 
@@ -860,6 +822,8 @@ export default function ChatScreen() {
   };
 
   // ── 렌더 ─────────────────────────────────────────────────────────
+  const isEnded = phase === 'already_done' || phase === 'done';
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <TopAppBar showBack showBadge={false} />
@@ -892,7 +856,6 @@ export default function ChatScreen() {
                 isGrouped={idx > 0 && messages[idx - 1].from === msg.from}
                 plantNickname={plantNickname}
                 plantType={plantType}
-                plantStage={plantStage}
                 plantExpression={plantExpression}
                 generatedPlantUri={generatedPlantUri}
                 generatedFacePos={generatedFacePos}
@@ -902,39 +865,6 @@ export default function ChatScreen() {
                 }}
               />
             ))}
-            {phase === 'already_done' && (
-              <View style={styles.doneCard}>
-                <EmojiText style={styles.doneText}>오늘 기록이 완료됐어요</EmojiText>
-                <TouchableOpacity onPress={() => router.replace('/' as any)} style={styles.doneBtn}>
-                  <Text style={styles.doneBtnText}>홈으로 돌아가기</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            {phase === 'reminder_done' && (
-              <View style={styles.doneCard}>
-                <TouchableOpacity onPress={() => router.replace('/' as any)} style={styles.doneBtn}>
-                  <Text style={styles.doneBtnText}>홈으로 돌아가기</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            {phase === 'done' && (
-              <View style={styles.doneCard}>
-                <TouchableOpacity
-                  onPress={async () => {
-                    const lastShown = await storage.getLastStreakShownDate();
-                    if (lastShown === todayStr) {
-                      router.replace('/' as any);
-                    } else {
-                      await storage.setLastStreakShownDate(todayStr);
-                      router.replace('/streak' as any);
-                    }
-                  }}
-                  style={styles.doneBtn}
-                >
-                  <Text style={styles.doneBtnText}>홈으로 가기</Text>
-                </TouchableOpacity>
-              </View>
-            )}
           </ScrollView>
 
           {/* 인라인 이미지 선택창 */}
@@ -962,28 +892,66 @@ export default function ChatScreen() {
           )}
 
           {/* 하단 패널: 선택지 + 입력 행 (Figma: 흰 배경, 상단 2px 선) */}
-          <View style={[styles.bottomPanel, { paddingBottom: 16 + insets.bottom }]}>
-            {phase === 'stage_confirm' && (
+          <View style={[styles.bottomPanel, isEnded && styles.bottomPanelEnded, { paddingBottom: 16 + insets.bottom }]}>
+            {/* 오늘 한 일 체크리스트 */}
+            {phase === 'checklist' && (
               <View style={styles.choiceContainer}>
-                <ChoiceBtn onPress={() => handleGrowthConfirm(true)}>네, 됐어요!</ChoiceBtn>
-                <ChoiceBtn onPress={() => handleGrowthConfirm(false)}>나중에 줄게!</ChoiceBtn>
+                {openTasks.map(t => {
+                  const on = checkedIds.includes(t.id);
+                  return (
+                    <TouchableOpacity key={t.id} style={styles.checkRow} activeOpacity={0.7} onPress={() => toggleChecked(t.id)}>
+                      <View style={[styles.checkBox, on && styles.checkBoxOn]}>
+                        {on && <CheckPixelIcon color="#303a1e" size={16} />}
+                      </View>
+                      <Text style={styles.checkLabel}>{getChecklistLabel(t.id, t.label)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                <ChoiceBtn onPress={handleChecklistSubmit}>완료</ChoiceBtn>
               </View>
             )}
 
-            {phase === 'task_check' && tasks[taskIdx] && (
+            {/* 체크하지 않은 항목: 항목마다 한 화면에서 하나씩 고른다 */}
+            {phase === 'followup' && (
               <View style={styles.choiceContainer}>
-                <ChoiceBtn onPress={() => handleTaskChoice(true)}>{choicesFor(tasks[taskIdx].id).done}</ChoiceBtn>
-                {choicesFor(tasks[taskIdx].id).alt && (
-                  <ChoiceBtn onPress={handleTaskAlt}>{choicesFor(tasks[taskIdx].id).alt as string}</ChoiceBtn>
-                )}
-                <ChoiceBtn onPress={() => handleTaskChoice(false)}>{choicesFor(tasks[taskIdx].id).skip}</ChoiceBtn>
+                <ScrollView style={styles.followupScroll} contentContainerStyle={styles.followupContent} showsVerticalScrollIndicator={false}>
+                  {openTasks.map(t => {
+                    const c = choicesFor(t.id);
+                    const opts: [FollowupKind, string][] = [
+                      ...(c.alt ? [['alt', c.alt] as [FollowupKind, string]] : []),
+                      ['remind', c.remind],
+                      ['cantToday', c.cantToday],
+                    ];
+                    return (
+                      <View key={t.id} style={styles.followupItem}>
+                        {openTasks.length > 1 && <Text style={styles.followupLabel}>{t.label}</Text>}
+                        <View style={styles.chipRow}>
+                          {opts.map(([kind, text]) => (
+                            <TouchableOpacity
+                              key={kind}
+                              style={[styles.chip, followupSel[t.id] === kind && styles.chipOn]}
+                              activeOpacity={0.7}
+                              onPress={() => selectFollowup(t.id, kind)}
+                            >
+                              <Text style={styles.chipText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{text}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+                <ChoiceBtn
+                  disabled={openTasks.some(t => !followupSel[t.id])}
+                  onPress={handleFollowupSubmit}
+                >확인</ChoiceBtn>
               </View>
             )}
 
-            {phase === 'water_reminder' && (
+            {phase === 'photo_later' && (
               <View style={styles.choiceContainer}>
-                <ChoiceBtn onPress={() => handleReminderChoice(true)}>알림 받을게요</ChoiceBtn>
-                <ChoiceBtn onPress={() => handleReminderChoice(false)}>괜찮아요</ChoiceBtn>
+                <ChoiceBtn onPress={() => handlePhotoLaterChoice(true)}>2시간 뒤에 알려줘</ChoiceBtn>
+                <ChoiceBtn onPress={() => handlePhotoLaterChoice(false)}>내일로 미룰게</ChoiceBtn>
               </View>
             )}
 
@@ -998,14 +966,41 @@ export default function ChatScreen() {
                 ) : (
                   <>
                     <ChoiceBtn onPress={() => { setShowGuideExample(false); setShowGuideModal(true); }}>사진 올리기</ChoiceBtn>
-                    <ChoiceBtn onPress={handlePhotoLater}>나중에 찍을게요</ChoiceBtn>
+                    <ChoiceBtn onPress={handlePhotoLater}>나중에 찍을게</ChoiceBtn>
                   </>
                 )}
               </View>
             )}
 
-            {/* 입력 행: 항상 표시, 답변 단계에서만 입력 가능 */}
-            <View style={[styles.inputRow, hasChoices(phase, tasks[taskIdx]) && styles.inputRowWithChoices]}>
+            {/* 대화 종료: 이미 오늘 기록을 마친 경우에는 입력창과 같은 모양의 완료 칸을 위에 두고, 그 아래에 홈으로 돌아가기 버튼. 둘 사이 간격은 같은 화자의 연속 말풍선 간격(8)과 같음 */}
+            {phase === 'already_done' && (
+              <View style={styles.endDoneBadge}>
+                <Text style={styles.doneBtnText}>오늘 기록 완료!</Text>
+              </View>
+            )}
+            {isEnded && (
+              <TouchableOpacity
+                style={styles.endHomeBtn}
+                activeOpacity={0.8}
+                onPress={async () => {
+                  if (phase === 'done') {
+                    const lastShown = await storage.getLastStreakShownDate();
+                    if (lastShown !== todayStr) {
+                      await storage.setLastStreakShownDate(todayStr);
+                      router.replace('/streak' as any);
+                      return;
+                    }
+                  }
+                  router.replace('/' as any);
+                }}
+              >
+                <Text style={styles.doneBtnText}>홈으로 돌아가기</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* 입력 행: 대화 중에만 표시, 답변 단계에서만 입력 가능 */}
+            {!isEnded && phase !== 'checklist' && phase !== 'followup' && (
+            <View style={[styles.inputRow, hasChoices(phase) && styles.inputRowWithChoices]}>
               <TouchableOpacity
                 onPress={handlePlusButton}
                 disabled={phase !== 'answering'}
@@ -1019,7 +1014,7 @@ export default function ChatScreen() {
                 style={styles.input}
                 value={inputText}
                 onChangeText={setInputText}
-                editable={phase === 'answering' || phase === 'observing'}
+                editable={phase === 'answering'}
                 placeholder="답장하기"
                 placeholderTextColor={COLORS.tabTextOff}
                 returnKeyType="send"
@@ -1028,12 +1023,13 @@ export default function ChatScreen() {
               <TouchableOpacity
                 style={styles.sendBtn}
                 onPress={handleSend}
-                disabled={!inputText.trim() || !(phase === 'answering' || phase === 'observing')}
+                disabled={!inputText.trim() || phase !== 'answering'}
                 activeOpacity={0.7}
               >
 <ArrowRightPixelIcon color="#1D1B20" size={10} />
               </TouchableOpacity>
             </View>
+            )}
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -1041,13 +1037,17 @@ export default function ChatScreen() {
       {/* 사진 촬영 가이드 (바텀 시트) — 설정 팝업과 같은 스타일: 라임 헤더, 반경 10, #303a1e 테두리 */}
       <Modal visible={showGuideModal} transparent animationType="slide" onRequestClose={() => setShowGuideModal(false)}>
         <View style={styles.guideOverlay}>
+          {/* 시트 바깥(어두운 배경)을 누르면 닫힘 */}
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowGuideModal(false)} />
           <View style={styles.guideSheet}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>{GUIDE_TITLE}</Text>
-              <TouchableOpacity onPress={() => setShowGuideModal(false)} hitSlop={14}>
-                <Svg width={14} height={14} viewBox="0 0 14 14" fill="none">
-                  <Path d="M2 2L12 12M12 2L2 12" stroke={COLORS.pine} strokeWidth={2} strokeLinecap="round" />
-                </Svg>
+              <TouchableOpacity
+                style={styles.exampleBtn}
+                activeOpacity={0.7}
+                onPress={() => setShowGuideExample(true)}
+              >
+                <Text style={styles.exampleBtnText}>{GUIDE_EXAMPLE_OPEN}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1056,18 +1056,6 @@ export default function ChatScreen() {
               contentContainerStyle={styles.guideBody}
               showsVerticalScrollIndicator={false}
             >
-              {/* 안내 문구 + 예시 버튼(글자 너비에 맞춤, 안내 문구 오른쪽) */}
-              <View style={styles.guideTopRow}>
-                <Text style={styles.guideSubtitle}>{GUIDE_SUBTITLE}</Text>
-                <TouchableOpacity
-                  style={styles.exampleBtn}
-                  activeOpacity={0.7}
-                  onPress={() => setShowGuideExample(true)}
-                >
-                  <Text style={styles.exampleBtnText}>{GUIDE_EXAMPLE_OPEN}</Text>
-                </TouchableOpacity>
-              </View>
-
               {/* 가이드 항목 */}
               <View style={styles.guideList}>
                 {getGuideItems(plantType).map((item, i) => (
@@ -1096,8 +1084,8 @@ export default function ChatScreen() {
 
           {/* 사진 예시 팝업 — 화면 중앙 (같은 Modal 안의 오버레이) */}
           {showGuideExample && (
-            <View style={styles.exampleOverlay}>
-              <View style={styles.exampleCard}>
+            <TouchableOpacity style={styles.exampleOverlay} activeOpacity={1} onPress={() => setShowGuideExample(false)}>
+              <View style={styles.exampleCard} onStartShouldSetResponder={() => true}>
                 <View style={styles.sheetHeader}>
                   <Text style={styles.sheetTitle}>사진 예시</Text>
                   <TouchableOpacity onPress={() => setShowGuideExample(false)} hitSlop={14}>
@@ -1108,13 +1096,13 @@ export default function ChatScreen() {
                 </View>
                 <View style={styles.exampleBody}>
                   <Image
-                    source={require('../assets/images/guide.png')}
+                    source={require('../assets/images/ui/guide.png')}
                     style={styles.exampleImage}
                     resizeMode="contain"
                   />
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           )}
         </View>
       </Modal>
@@ -1159,15 +1147,14 @@ export default function ChatScreen() {
                   resizeMode="contain"
                 />
                 {previewFacePos && (
-                  <Image
-                    source={getExpressionImage(plantType, 'sparkle')}
+                  <FaceOverlay
+                    plantType={plantType}
                     style={{
                       position: 'absolute',
                       width: 110, height: 110,
                       left: (previewFacePos.x / 100) * 220 - 55,
                       top:  (previewFacePos.y / 100) * 220 - 55,
                     }}
-                    resizeMode="contain"
                   />
                 )}
               </View>
@@ -1185,9 +1172,9 @@ export default function ChatScreen() {
 const GUIDE_ICON_COLOR = '#38D76D';
 
 // ─── 선택지 버튼 (Figma: 382x54, 회색 그라디언트, 반경 10) ──────────
-function ChoiceBtn({ onPress, children }: { onPress: () => void; children: string }) {
+function ChoiceBtn({ onPress, children, disabled }: { onPress: () => void; children: string; disabled?: boolean }) {
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7} disabled={disabled} style={disabled ? { opacity: 0.4 } : undefined}>
       <Grad colors={['#f3f4f1', '#e2e2e2']} style={styles.choiceBtn}>
         <EmojiText style={styles.choiceBtnText}>{children}</EmojiText>
       </Grad>
@@ -1195,18 +1182,17 @@ function ChoiceBtn({ onPress, children }: { onPress: () => void; children: strin
   );
 }
 
-function hasChoices(phase: Phase, task?: PlantTask) {
-  return phase === 'stage_confirm' || phase === 'water_reminder' || phase === 'photo_capture'
-    || (phase === 'task_check' && !!task);
+function hasChoices(phase: Phase) {
+  return phase === 'photo_capture' || phase === 'photo_later';
 }
 
 // ─── 말풍선 컴포넌트 ──────────────────────────────────────────────
 function MessageBubble({
-  message, isGrouped, plantNickname, plantType, plantStage, plantExpression,
+  message, isGrouped, plantNickname, plantType, plantExpression,
   generatedPlantUri, generatedFacePos, onGenImgError,
 }: {
   message: Message; isGrouped: boolean; plantNickname: string; plantType: PlantType;
-  plantStage: GrowthStage; plantExpression: Expression;
+  plantExpression: Expression;
   generatedPlantUri?: string | null;
   generatedFacePos?: { x: number; y: number; pot_width: number } | null;
   onGenImgError?: () => void;
@@ -1228,15 +1214,15 @@ function MessageBubble({
                 onError={onGenImgError}
               />
               {generatedFacePos && (
-                <Image
-                  source={getExpressionImage(plantType, plantExpression)}
+                <FaceOverlay
+                  plantType={plantType}
+                  expression={plantExpression}
                   style={{
                     position: 'absolute',
                     width: 20, height: 20,
                     left: (generatedFacePos.x / 100) * 40 - 10,
                     top: (generatedFacePos.y / 100) * 40 - 10,
                   }}
-                  resizeMode="contain"
                 />
               )}
             </View>
@@ -1244,7 +1230,7 @@ function MessageBubble({
             <View style={styles.avatarInner}>
               <PlantCharacter
                 plantType={plantType}
-                stage={plantStage}
+                stage={1}
                 expression={plantExpression}
                 width={37}
               />
@@ -1286,9 +1272,9 @@ const styles = StyleSheet.create({
   // 날짜 — 채팅 상단 중앙
   chatDate: {
     textAlign: 'center',
-    fontFamily: FONTS.extraBold,
-    fontSize: 15,
-    lineHeight: 20,
+    fontFamily: FONTS.bold,
+    fontSize: fs(15),
+    lineHeight: fs(20),
     color: COLORS.green,
     marginBottom: -9,   // 날짜 하단 → 첫 말풍선 31
   },
@@ -1336,7 +1322,7 @@ const styles = StyleSheet.create({
   bubbleUser: { alignSelf: 'flex-end', paddingHorizontal: 10.5 },
 
   bubbleSender: {
-    fontFamily: FONTS.semiBold, fontSize: 17, lineHeight: 16.5,
+    fontFamily: FONTS.medium, fontSize: fs(17), lineHeight: fs(16.5),
     letterSpacing: -0.275, color: COLORS.forest,
   },
   bubbleImage: {
@@ -1347,37 +1333,47 @@ const styles = StyleSheet.create({
     borderColor: '#2a2a2a',
   },
   bubbleText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 15,
-    lineHeight: 23,
+    fontFamily: FONTS.medium,
+    fontSize: fs(15),
+    lineHeight: fs(23),
     letterSpacing: -0.275,
     color: '#424343',
   },
   bubbleTextUser: { textAlign: 'right' },
 
   // 완료 카드
-  doneCard: {
-    alignItems: 'center',
-    padding: 24,
-    gap: 12,
-    backgroundColor: COLORS.bg,
+  // 이미 기록을 마친 경우의 완료 표시: 입력창(높이 46, 흰 배경, 반경 10, 1.5 테두리)과 같은 모양·세로 위치.
+  // 가로는 화면 전체(좌우 16 여백)
+  endDoneBadge: {
+    marginHorizontal: 16,
+    marginTop: 13,
+    height: 46,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#2a2a2a',
+    borderColor: '#303a1e',
+    backgroundColor: COLORS.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#101828',
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
   },
-  doneText: { fontFamily: FONTS.bold, fontSize: 18, color: COLORS.green },
-  doneBtn: {
-    marginTop: 4,
-    paddingHorizontal: 28,
-    paddingVertical: 12,
+  endHomeBtn: {
+    marginHorizontal: 16,
+    marginTop: 8,          // 같은 화자의 연속 말풍선 사이 간격(40 − 32 = 8)과 같음 — 완료 칸과 이 버튼 사이에도 그대로 적용
+    height: 48,
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: '#303a1e',
     backgroundColor: COLORS.lime,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  doneBtnText: { fontFamily: FONTS.bold, fontSize: 16, color: COLORS.outline },
+  doneBtnText: { fontFamily: FONTS.bold, fontSize: fs(16), color: COLORS.outline },
 
   // 하단 패널: 흰 배경 + 상단 2px 선
+  bottomPanelEnded: { backgroundColor: 'transparent', borderTopWidth: 0 },
   bottomPanel: {
     backgroundColor: COLORS.bg,
     borderTopWidth: 2,
@@ -1402,8 +1398,52 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
   },
+  // 체크리스트 행
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    height: 54,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#303a1e',
+    backgroundColor: COLORS.bg,
+  },
+  checkBox: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#303a1e',
+    backgroundColor: COLORS.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkBoxOn: { backgroundColor: COLORS.lime },
+  checkLabel: { fontFamily: FONTS.medium, fontSize: fs(15), lineHeight: fs(23), letterSpacing: -0.275, color: '#424343' },
+  // 후속 선택 (항목별 칩)
+  followupScroll: { maxHeight: 300 },
+  followupContent: { gap: 12 },   // 항목 사이 간격 (마지막 항목 아래에는 여백 없음 → 확인 버튼과는 다른 선택지와 같은 7)
+  followupItem: { gap: 6 },
+  followupLabel: { fontFamily: FONTS.bold, fontSize: fs(14), color: COLORS.pine },
+  chipRow: { flexDirection: 'row', gap: 6 },
+  chip: {
+    flex: 1,
+    minHeight: 40,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#303a1e',
+    backgroundColor: COLORS.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipOn: { backgroundColor: COLORS.lime },
+  chipText: { fontFamily: FONTS.medium, fontSize: fs(13), lineHeight: fs(18), alignSelf: 'stretch', color: '#424343', textAlign: 'center' },
   choiceBtnText: {
-    fontFamily: FONTS.semiBold, fontSize: 15, lineHeight: 23,
+    fontFamily: FONTS.medium, fontSize: fs(15), lineHeight: fs(23),
     letterSpacing: -0.275, color: '#424343',
   },
 
@@ -1435,9 +1475,9 @@ const styles = StyleSheet.create({
     borderColor: '#303a1e',
     paddingHorizontal: 12,
     paddingVertical: 0,
-    fontFamily: FONTS.semiBold,
-    fontSize: 13,
-    lineHeight: 22,
+    fontFamily: FONTS.medium,
+    fontSize: fs(13),
+    lineHeight: fs(22),
     color: '#424343',
     shadowColor: '#101828',
     shadowOpacity: 0.05,
@@ -1477,8 +1517,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   imagePickerBtnText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 15,
+    fontFamily: FONTS.medium,
+    fontSize: fs(15),
     color: '#424343',
   },
 
@@ -1490,12 +1530,12 @@ const styles = StyleSheet.create({
   },
   transformingText: {
     fontFamily: 'SUITE-Bold',
-    fontSize: 16,
+    fontSize: fs(16),
     color: COLORS.textTertiary,
   },
   transformingSubText: {
     fontFamily: 'SUITE-Regular',
-    fontSize: 13,
+    fontSize: fs(13),
     color: COLORS.textTertiary,
   },
 
@@ -1510,7 +1550,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: COLORS.line,
   },
-  sheetTitle: { fontFamily: FONTS.extraBold, fontSize: 18, lineHeight: 26, color: COLORS.outline },
+  sheetTitle: { fontFamily: FONTS.bold, fontSize: fs(18), lineHeight: fs(26), color: COLORS.outline },
 
   // 사진 촬영 가이드 (바텀 시트)
   guideOverlay: {
@@ -1530,16 +1570,6 @@ const styles = StyleSheet.create({
   },
   guideScroll: { flexGrow: 0 },
   guideBody: { padding: 20, gap: 16 },
-  // 안내 문구(왼쪽) + 예시 버튼(오른쪽, 글자 너비)
-  guideTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  guideSubtitle: {
-    flex: 1,
-    fontFamily: FONTS.bold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: COLORS.forest,
-    textAlign: 'left',
-  },
   // 항목 목록 (박스 없음)
   guideList: { gap: 14 },
   guideItem: {
@@ -1550,9 +1580,9 @@ const styles = StyleSheet.create({
   guideIconBox: { width: 28, alignItems: 'center', justifyContent: 'center' },
   guideText: {
     flex: 1,
-    fontFamily: FONTS.semiBold,
-    fontSize: 14,
-    lineHeight: 20,
+    fontFamily: FONTS.medium,
+    fontSize: fs(14),
+    lineHeight: fs(20),
     color: '#191C1B',
   },
   guideFooter: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 28, gap: 10 },
@@ -1567,7 +1597,7 @@ const styles = StyleSheet.create({
     borderColor: '#303a1e',
     backgroundColor: COLORS.bg,
   },
-  exampleBtnText: { fontFamily: FONTS.bold, fontSize: 14, color: COLORS.pine },
+  exampleBtnText: { fontFamily: FONTS.bold, fontSize: fs(14), color: COLORS.pine },
 
   // 사진 예시 팝업 (화면 중앙)
   exampleOverlay: {
@@ -1605,5 +1635,5 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   previewBody: { padding: 20, gap: 12, alignItems: 'stretch' },
-  failedText: { fontFamily: FONTS.bold, fontSize: 15, lineHeight: 23, color: COLORS.forest, textAlign: 'center', marginBottom: 4 },
+  failedText: { fontFamily: FONTS.bold, fontSize: fs(15), lineHeight: fs(23), color: COLORS.forest, textAlign: 'center', marginBottom: 4 },
 });
