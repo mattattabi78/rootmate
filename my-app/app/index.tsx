@@ -285,9 +285,9 @@ export default function HomeScreen() {
                   animated
                   style={{
                     position: 'absolute',
-                    width: 110 * f, height: 110 * f,
-                    left: (generatedFacePos.x / 100) * 220 * f - 55 * f,
-                    top: (generatedFacePos.y / 100) * 220 * f - 55 * f,
+                    width: 121 * f, height: 121 * f,
+                    left: (generatedFacePos.x / 100) * 220 * f - 60.5 * f,
+                    top: (generatedFacePos.y / 100) * 220 * f - 60.5 * f,
                   }}
                 />
               )}

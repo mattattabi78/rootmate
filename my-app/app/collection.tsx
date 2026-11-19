@@ -156,9 +156,9 @@ function CardFront({ plantType, unlocked, live }: { plantType: PlantType; unlock
               plantType={plantType}
               expression={live!.expression}
               style={{
-                position: 'absolute', width: GEN / 2, height: GEN / 2,
-                left: (live!.generated!.facePos.x / 100) * GEN - GEN / 4,
-                top: (live!.generated!.facePos.y / 100) * GEN - GEN / 4,
+                position: 'absolute', width: GEN * 0.55, height: GEN * 0.55,
+                left: (live!.generated!.facePos.x / 100) * GEN - GEN * 0.275,
+                top: (live!.generated!.facePos.y / 100) * GEN - GEN * 0.275,
               }}
             />
           </View>

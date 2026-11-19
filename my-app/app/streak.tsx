@@ -201,9 +201,9 @@ export default function StreakScreen() {
                   plantType={plantType}
                   style={{
                     position: 'absolute',
-                    width: GEN_RATIO * plantW * 0.5, height: GEN_RATIO * plantW * 0.5,
-                    left: (generatedFacePos.x / 100) * GEN_RATIO * plantW - GEN_RATIO * plantW * 0.25,
-                    top:  (generatedFacePos.y / 100) * GEN_RATIO * plantW - GEN_RATIO * plantW * 0.25,
+                    width: GEN_RATIO * plantW * 0.55, height: GEN_RATIO * plantW * 0.55,
+                    left: (generatedFacePos.x / 100) * GEN_RATIO * plantW - GEN_RATIO * plantW * 0.275,
+                    top:  (generatedFacePos.y / 100) * GEN_RATIO * plantW - GEN_RATIO * plantW * 0.275,
                   }}
                 />
               )}

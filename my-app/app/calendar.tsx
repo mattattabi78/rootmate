@@ -254,9 +254,9 @@ function DayRecordCard({ label, record, plantType, generated }: {
                 plantType={plantType}
                 style={{
                   position: 'absolute',
-                  width: GEN_SIZE / 2, height: GEN_SIZE / 2,
-                  left: (generated.facePos.x / 100) * GEN_SIZE - GEN_SIZE / 4,
-                  top:  (generated.facePos.y / 100) * GEN_SIZE - GEN_SIZE / 4,
+                  width: GEN_SIZE * 0.55, height: GEN_SIZE * 0.55,
+                  left: (generated.facePos.x / 100) * GEN_SIZE - GEN_SIZE * 0.275,
+                  top:  (generated.facePos.y / 100) * GEN_SIZE - GEN_SIZE * 0.275,
                 }}
               />
             </View>

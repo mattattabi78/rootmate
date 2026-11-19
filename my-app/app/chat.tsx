@@ -1151,9 +1151,9 @@ function ChatInner({ backdate }: { backdate: boolean }) {
                     plantType={plantType}
                     style={{
                       position: 'absolute',
-                      width: 110, height: 110,
-                      left: (previewFacePos.x / 100) * 220 - 55,
-                      top:  (previewFacePos.y / 100) * 220 - 55,
+                      width: 121, height: 121,
+                      left: (previewFacePos.x / 100) * 220 - 60.5,
+                      top: (previewFacePos.y / 100) * 220 - 60.5,
                     }}
                   />
                 )}
@@ -1219,9 +1219,9 @@ function MessageBubble({
                   expression={plantExpression}
                   style={{
                     position: 'absolute',
-                    width: 20, height: 20,
-                    left: (generatedFacePos.x / 100) * 40 - 10,
-                    top: (generatedFacePos.y / 100) * 40 - 10,
+                    width: 22, height: 22,
+                    left: (generatedFacePos.x / 100) * 40 - 11,
+                    top: (generatedFacePos.y / 100) * 40 - 11,
                   }}
                 />
               )}
