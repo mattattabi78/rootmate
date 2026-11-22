@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { COLORS, FONTS, fs } from '../../constants';
+import { COLORS, FONTS, fs, BTN_H, BTN_FONT, INPUT_H, INPUT_FONT, FONT_SIZE } from '../../constants';
 import { storage, DEFAULT_NOTIFICATION_TIMES, NotificationTimes } from '../../store/storage';
 import { applyNotificationSettings } from '../../utils/notifications';
 import Button from '../common/Button';
@@ -146,7 +146,7 @@ export default function SettingsModal({ visible, onClose, onSaved }: Props) {
                       <Switch
                         value={draft.times.morningEnabled}
                         onValueChange={v => patchTimes({ morningEnabled: v })}
-                        trackColor={{ false: '#C5C7C0', true: COLORS.lime }}
+                        trackColor={{ false: COLORS.tabTextOff, true: COLORS.lime }}
                         thumbColor={COLORS.outline}
                         accessibilityLabel="아침 알림"
                       />
@@ -164,7 +164,7 @@ export default function SettingsModal({ visible, onClose, onSaved }: Props) {
                       <Switch
                         value={draft.times.eveningEnabled}
                         onValueChange={v => patchTimes({ eveningEnabled: v })}
-                        trackColor={{ false: '#C5C7C0', true: COLORS.lime }}
+                        trackColor={{ false: COLORS.tabTextOff, true: COLORS.lime }}
                         thumbColor={COLORS.outline}
                         accessibilityLabel="저녁 알림"
                       />
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     overflow: 'hidden',
   },
   header: {
@@ -266,15 +266,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: COLORS.line,
   },
-  title: { fontFamily: FONTS.bold, fontSize: fs(18), lineHeight: fs(26), color: COLORS.outline },
+  title: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.title), lineHeight: fs(26), color: COLORS.outline },
   scroll: { flexGrow: 0 },
   body: { padding: 20, gap: 12 },
-  sectionTitle: { fontFamily: FONTS.bold, fontSize: fs(15), lineHeight: fs(20), color: COLORS.green },
+  sectionTitle: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.bodyL), lineHeight: fs(20), color: COLORS.green },
   sectionGap: { marginTop: 12 },
   field: { gap: 6 },
-  fieldLabel: { fontFamily: FONTS.bold, fontSize: fs(13), lineHeight: fs(18), color: COLORS.textSecondary },
+  fieldLabel: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.body), lineHeight: fs(18), color: COLORS.textSecondary },
   inputWrap: {
-    height: 48,
+    height: INPUT_H,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.inputBg,
@@ -284,8 +284,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   inputWrapError: { borderColor: COLORS.inputBorderError },
-  input: { flex: 1, fontFamily: FONTS.bold, fontSize: fs(16), color: COLORS.textPrimary, padding: 0 },
-  counter: { fontFamily: FONTS.bold, fontSize: fs(13), color: COLORS.textTertiary, marginLeft: 8 },
+  input: { flex: 1, fontFamily: FONTS.medium, fontSize: fs(INPUT_FONT), color: COLORS.textPrimary, padding: 0 },
+  counter: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.body), color: COLORS.textTertiary, marginLeft: 8 },
   box: {
     gap: 10,
     paddingVertical: 14,
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   },
   boxHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // "내 이름"·"식물 이름"(fieldLabel)과 같은 글자 스타일
-  boxTitle: { fontFamily: FONTS.bold, fontSize: fs(13), lineHeight: fs(18), color: COLORS.textSecondary },
+  boxTitle: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.body), lineHeight: fs(18), color: COLORS.textSecondary },
   footer: { paddingHorizontal: 20, paddingBottom: 20, paddingTop: 4 },
 
   // 나가기 확인 레이어 (팝업 위에 겹침)
@@ -315,14 +315,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
   },
-  confirmTitle: { fontFamily: FONTS.bold, fontSize: fs(17), lineHeight: fs(24), color: COLORS.outline, textAlign: 'center' },
-  confirmDesc: { fontFamily: FONTS.medium, fontSize: fs(14), lineHeight: fs(20), color: COLORS.textSecondary, textAlign: 'center', marginBottom: 8 },
+  confirmTitle: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.title), lineHeight: fs(24), color: COLORS.outline, textAlign: 'center' },
+  confirmDesc: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.body), lineHeight: fs(20), color: COLORS.textSecondary, textAlign: 'center', marginBottom: 8 },
   confirmRow: { flexDirection: 'row', gap: 10 },
-  confirmBtn: { flex: 1, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1.5, borderColor: '#303a1e' },
+  confirmBtn: { flex: 1, height: BTN_H, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1.5, borderColor: COLORS.borderDark },
   confirmBtnStay: { backgroundColor: COLORS.lime },
-  confirmBtnLeave: { backgroundColor: COLORS.bg, borderColor: '#d93025' },
-  confirmBtnText: { fontFamily: FONTS.bold, fontSize: fs(15), color: COLORS.outline },
-  confirmBtnLeaveText: { color: '#d93025' },
+  confirmBtnLeave: { backgroundColor: COLORS.bg, borderColor: COLORS.redStrong },
+  confirmBtnText: { fontFamily: FONTS.bold, fontSize: fs(BTN_FONT), color: COLORS.outline },
+  confirmBtnLeaveText: { color: COLORS.redStrong },
 });

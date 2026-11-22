@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { COLORS, FONTS, fs, ui } from '../../constants';
+import { COLORS, FONTS, fs, ui, FONT_SIZE } from '../../constants';
 import { storage } from '../../store/storage';
 import { getDevAdjustedDate } from '../../utils/devOverrides';
 import { HeartIcon } from './Icons';
@@ -61,7 +61,7 @@ export default function TopAppBar({
       <View style={styles.left}>
         {showBack && (
           <TouchableOpacity onPress={handleBack} hitSlop={12} style={styles.backBtn}>
-            <ChevronPixelIcon color="#41493B" size={ui(14)} />
+            <ChevronPixelIcon color={COLORS.textInk} size={ui(14)} />
           </TouchableOpacity>
         )}
         <Text style={[styles.title, showBack && styles.titleAfterBack]}>{title}</Text>
@@ -123,6 +123,9 @@ const styles = StyleSheet.create({
     lineHeight: fs(28),
     letterSpacing: 0.9,
     color: COLORS.outline,
+    textShadowColor: COLORS.bg,                    // 흰색 1px 그림자
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 0,
     marginLeft: 8,
   },
   titleAfterBack: { marginLeft: 20 },
@@ -140,7 +143,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontFamily: FONTS.bold,
-    fontSize: fs(15),
+    fontSize: fs(FONT_SIZE.bodyL),
     lineHeight: fs(17),
     color: COLORS.outline,
   },

@@ -2,7 +2,7 @@ import React from 'react';
 import { Text, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS, fs, ui } from '../../constants';
+import { COLORS, FONTS, fs, ui, FONT_SIZE } from '../../constants';
 import { HomeIcon, RecordIcon, CollectionIcon, ChatIcon } from './Icons';
 
 // Figma 하단 탭 (node 5:14): 라인(2px, 위) + 간격 3 + 흰 배경 75 = 80. 항목은 라인 아래 21px에서 시작.
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   label: {
     marginTop: ui(6),
     fontFamily: FONTS.bold,
-    fontSize: fs(14),
+    fontSize: fs(FONT_SIZE.body),
     lineHeight: fs(15),
     letterSpacing: -0.25,
     textAlign: 'center',

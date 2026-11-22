@@ -9,7 +9,7 @@ import {
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS, PLANTS, Plant, fs } from '../../constants';
+import { COLORS, FONTS, PLANTS, Plant, fs, lh, FONT_SIZE } from '../../constants';
 import { storage } from '../../store/storage';
 import ProgressDots from '../../components/common/ProgressDots';
 import Button from '../../components/common/Button';
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  backArrow: { fontFamily: FONTS.bold, fontSize: fs(22), color: COLORS.pine },
+  backArrow: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.heading), color: COLORS.pine },
   content: { flexGrow: 1, justifyContent: 'flex-start', paddingTop: 8, paddingHorizontal: 24, paddingBottom: 48 },
   illustration: {
     alignSelf: 'center',
@@ -119,14 +119,14 @@ const styles = StyleSheet.create({
   },
   plantName: {
     fontFamily: FONTS.bold,
-    fontSize: fs(24),
+    fontSize: fs(FONT_SIZE.heading), lineHeight: lh(22),
     color: COLORS.pine,
     textAlign: 'center',
     marginBottom: 4,
   },
   description: {
     fontFamily: FONTS.medium,
-    fontSize: fs(13),
+    fontSize: fs(FONT_SIZE.body),
     color: COLORS.forest,
     textAlign: 'center',
     lineHeight: fs(20),
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   careList: { alignSelf: 'center', gap: 16 },
   careRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   careIcon: { width: 22, alignItems: 'center', justifyContent: 'center' },
-  careText: { flexShrink: 1, fontFamily: FONTS.medium, fontSize: fs(13), lineHeight: fs(20), color: COLORS.textPrimary },
+  careText: { flexShrink: 1, fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.body), lineHeight: fs(20), color: COLORS.textPrimary },
   footer: { paddingHorizontal: 24, paddingBottom: 32 },
   // 버튼 바로 위로 40만큼 올라가 스크롤 내용을 덮음
   fade: { position: 'absolute', top: -40, left: 0, right: 0 },

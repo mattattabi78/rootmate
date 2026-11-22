@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS, fs } from '../../constants';
+import { COLORS, FONTS, fs, lh, FONT_SIZE } from '../../constants';
 import { storage, DEFAULT_NOTIFICATION_TIMES } from '../../store/storage';
 import ProgressDots from '../../components/common/ProgressDots';
 import Button from '../../components/common/Button';
@@ -84,7 +84,7 @@ export default function Step5() {
           <View style={styles.timeBox}>
             <View style={styles.boxHead}>
               <Text style={styles.listTitle}>아침 알림</Text>
-              <Switch value={morningOn} onValueChange={setMorningOn} trackColor={{ false: '#C5C7C0', true: COLORS.lime }} thumbColor={COLORS.outline} accessibilityLabel="아침 알림" />
+              <Switch value={morningOn} onValueChange={setMorningOn} trackColor={{ false: COLORS.tabTextOff, true: COLORS.lime }} thumbColor={COLORS.outline} accessibilityLabel="아침 알림" />
             </View>
             <TimeStepper value={morning} range={MORNING_RANGE} onChange={setMorning} disabled={!morningOn} />
             <Text style={styles.listDesc}>오늘 식물을 챙겨달라고 알려줘요</Text>
@@ -92,7 +92,7 @@ export default function Step5() {
           <View style={styles.timeBox}>
             <View style={styles.boxHead}>
               <Text style={styles.listTitle}>저녁 알림</Text>
-              <Switch value={eveningOn} onValueChange={setEveningOn} trackColor={{ false: '#C5C7C0', true: COLORS.lime }} thumbColor={COLORS.outline} accessibilityLabel="저녁 알림" />
+              <Switch value={eveningOn} onValueChange={setEveningOn} trackColor={{ false: COLORS.tabTextOff, true: COLORS.lime }} thumbColor={COLORS.outline} accessibilityLabel="저녁 알림" />
             </View>
             <TimeStepper value={evening} range={EVENING_RANGE} onChange={setEvening} disabled={!eveningOn} />
             <Text style={styles.listDesc}>아직 기록 전이라면 알려줘요</Text>
@@ -121,11 +121,11 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  backArrow: { fontFamily: FONTS.bold, fontSize: fs(22), color: COLORS.pine },
+  backArrow: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.heading), color: COLORS.pine },
   content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 48 },
   heading: {
     fontFamily: FONTS.bold,
-    fontSize: fs(28),
+    fontSize: fs(FONT_SIZE.display),
     color: COLORS.pine,
     lineHeight: fs(38),
     textAlign: 'center',
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   },
   sub: {
     fontFamily: FONTS.bold,
-    fontSize: fs(15),
+    fontSize: fs(FONT_SIZE.bodyL),
     color: COLORS.forest,
     lineHeight: fs(22),
     textAlign: 'center',
@@ -148,18 +148,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: COLORS.bg,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     borderRadius: 10,
   },
   boxHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   listTitle: {
     fontFamily: FONTS.bold,
-    fontSize: fs(16),
+    fontSize: fs(FONT_SIZE.label), lineHeight: lh(16),
     color: COLORS.pine,
     marginBottom: 2,
   },
-  listDesc: { fontFamily: FONTS.medium, fontSize: fs(13), lineHeight: fs(19), color: COLORS.textSecondary, textAlign: 'center' },
+  listDesc: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.body), lineHeight: lh(13), color: COLORS.textSecondary, textAlign: 'center' },
   footer: { paddingHorizontal: 24, paddingBottom: 32, gap: 12 },
   skipBtn: { alignItems: 'center', paddingVertical: 8 },
-  skipText: { fontFamily: 'SUITE-Regular', fontSize: fs(13), color: COLORS.textTertiary, textDecorationLine: 'underline' },
+  skipText: { fontFamily: FONTS.regular, fontSize: fs(FONT_SIZE.body), lineHeight: lh(13), color: COLORS.textTertiary, textDecorationLine: 'underline' },
 });

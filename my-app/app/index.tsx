@@ -3,6 +3,7 @@ import {
   Alert,
   Image,
   Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,18 +14,19 @@ import {
 import { PlantFacePosition } from '../services/ai';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
-import { COLORS, FONTS, fs, ui } from '../constants';
+import { COLORS, FONTS, fs, ui, FONT_SIZE } from '../constants';
 import { storage } from '../store/storage';
 import TopAppBar from '../components/common/TopAppBar';
 import FitToScreen from '../components/common/FitToScreen';
 import { compactFactor } from '../utils/layout';
 import BottomNavBar from '../components/common/BottomNavBar';
 import FaceOverlay from '../components/common/BlinkingFace';
+import { usePlantInteraction } from '../hooks/usePlantInteraction';
 import PlantCharacter from '../components/common/PlantCharacter';
 import ActionIconButton from '../components/common/ActionIconButton';
 import {
   PlantType, GrowthStage, Expression,
-  PLANT_EXPRESSIONS, getMaxStage,
+  PLANT_EXPRESSIONS, getMaxStage, CANVAS_FACE_CENTER, CANVAS_PER_FACE_PX,
 } from '../constants/character';
 import {
   PlantSituation, SITUATION_LABELS, ALL_SITUATIONS,
@@ -48,15 +50,14 @@ function formatDate(d: Date) {
 }
 
 const EXPR_LABEL: Record<Expression, string> = {
-  default: '기본', smile: '웃음', neutral: '무표정', tear: '눈물', cry: '오열', surprise: '놀람',
+  default: '기본', smile: '웃음', neutral: '무표정', tear: '눈물', cry: '오열', surprise: '놀람', wink: '윙크', happy: '기분 좋음', sleep: '자는 중',
 };
 
 export default function HomeScreen() {
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [plantType, setPlantType]         = useState<PlantType>('tomato');
   const [plantedAt, setPlantedAt]         = useState(new Date().toISOString());
-  const [streak, setStreak]               = useState(0);
-  const [lastRecordDate, setLastRecordDate] = useState<string | null>(null);
+  const [headingMain, setHeadingMain] = useState('');   // 캐릭터 아래 한 줄 대사
 
   // 개발자 메뉴 상태 (앱 재시작 시 초기화, 패널 닫아도 유지)
   const [generatedPlantUri, setGeneratedPlantUri] = useState<string | null>(null);
@@ -98,8 +99,11 @@ export default function HomeScreen() {
         ]);
         if (plantData?.id) setPlantType(plantData.id as PlantType);
         if (plantData?.adoptedAt) setPlantedAt(plantData.adoptedAt);
-        setStreak(streakCount);
-        setLastRecordDate(lastRec);
+        // 한 줄 대사는 화면에 들어올 때(탭 전환 후 돌아올 때 포함) 한 번만 고름 — 터치 반응으로 화면이 다시 그려져도 바뀌지 않게
+        const neglected = lastRec
+          ? Math.floor((new Date(todayStr + 'T00:00:00').getTime() - new Date(lastRec + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24))
+          : 0;   // 0 = 오늘, 1 = 어제, 7+ = 오랜만 복귀
+        setHeadingMain(pickSubHeading((plantData?.id ?? 'tomato') as PlantType, streakCount, neglected));
         // 저장된 생성 이미지 복원
         if (savedPlant) {
           setGeneratedPlantUri(savedPlant.uri);
@@ -128,16 +132,6 @@ export default function HomeScreen() {
       }
     });
   }, []);
-
-  // 마지막 기록일로부터 며칠이 지났는지 (0 = 오늘, 1 = 어제, 7+ = 오랜만 복귀)
-  const daysNeglected = (() => {
-    if (!lastRecordDate) return 0;
-    const last = new Date(lastRecordDate + 'T00:00:00');
-    const cur  = new Date(todayStr + 'T00:00:00');
-    return Math.floor((cur.getTime() - last.getTime()) / (1000 * 60 * 60 * 24));
-  })();
-
-  const headingMain = pickSubHeading(plantType, streak, daysNeglected);
 
   const goToChat = () => router.push('/chat' as any);
 
@@ -174,6 +168,10 @@ export default function HomeScreen() {
   const f = compactFactor(homeH, HOME_FIXED_H, HOME_FLEX_H, HOME_MIN_FACTOR);
   const displayStage = (charDevMode ? devStage : 1) as GrowthStage;
   const displayExpr  = charDevMode ? devExpr  : autoExpr;
+  // 캐릭터 터치 반응 (톡·연타·문지르기·길게 누르기, 빈 화면 두 번 탭 물방울). 반응 중에는 표정·눈·효과가 기본 모습을 덮어씀
+  const interaction = usePlantInteraction({ plantType: displayPlant, baseline: displayExpr, waterDone: growthCompletedIds.includes('water') });
+  const shownExpr = interaction.expression ?? displayExpr;
+  const fxK = (121 * f / 500) / CANVAS_PER_FACE_PX;   // 사진 캐릭터 위 효과 이미지 1캔버스 px의 크기
 
   const handleAdvanceDay = async () => {
     advanceDevDay();
@@ -258,9 +256,15 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.scroll}
         onLayout={e => setHomeH(e.nativeEvent.layout.height)}
-        contentContainerStyle={[styles.content, { paddingTop: 92 * f, paddingBottom: 24 * f }]}
+        contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* 빈 화면 두 번 탭: 오늘 물주기를 끝냈을 때만 물방울. 버튼·캐릭터가 터치를 가져가고 남은 빈 곳의 터치만 이 바깥 영역이 받음 */}
+        <Pressable
+          style={[styles.content, { paddingTop: 92 * f, paddingBottom: 24 * f }]}
+          onPress={interaction.onBackgroundPress}
+        >
+
         {/* 날짜 (길게 누르면 개발자 메뉴) */}
         <View style={styles.dateRow}>
           <TouchableOpacity onLongPress={() => { storage.isMemoryEnabled().then(setMemoryEnabled); setDevMenuVisible(true); }} delayLongPress={1500} activeOpacity={1}>
@@ -269,7 +273,9 @@ export default function HomeScreen() {
         </View>
 
         {/* 식물 캐릭터 */}
-        <View style={[styles.plantZone, { height: 340 * f, marginTop: 51 * f }]} pointerEvents="none">
+        <View style={[styles.plantZone, { height: 340 * f, marginTop: 51 * f }]}>
+          {/* 터치 반응 영역은 캐릭터(화분과 식물 전체)만. 양옆 빈 곳은 '빈 화면'으로 취급 */}
+          <View {...interaction.panHandlers}>
           {showGenerated ? (
             // 합성 이미지(식물+화분) + 감지된 화분 위치에 표정 오버레이
             <View style={{ width: 220 * f, height: 220 * f }}>
@@ -281,7 +287,8 @@ export default function HomeScreen() {
               {generatedFacePos && (
                 <FaceOverlay
                   plantType={displayPlant}
-                  expression={displayExpr}
+                  expression={shownExpr}
+                  eye={interaction.eye ?? undefined}
                   animated
                   style={{
                     position: 'absolute',
@@ -291,16 +298,32 @@ export default function HomeScreen() {
                   }}
                 />
               )}
+              {/* 효과(하트·음표·물방울): 레이어 캔버스 기준 이미지를 얼굴 오버레이와 같은 비율로 줄여 얼굴 위치에 맞춤 */}
+              {interaction.effect && generatedFacePos && (
+                <Image
+                  source={interaction.effect}
+                  resizeMode="contain"
+                  style={{
+                    position: 'absolute',
+                    width: 846 * fxK, height: 1254 * fxK,
+                    left: (generatedFacePos.x / 100) * 220 * f - CANVAS_FACE_CENTER[displayPlant].x * fxK,
+                    top: (generatedFacePos.y / 100) * 220 * f - CANVAS_FACE_CENTER[displayPlant].y * fxK,
+                  }}
+                />
+              )}
             </View>
           ) : (
             <PlantCharacter
               plantType={displayPlant}
               stage={displayStage}
-              expression={displayExpr}
+              expression={shownExpr}
+              eye={interaction.eye ?? undefined}
+              effect={interaction.effect}
               width={230 * f}
               animated
             />
           )}
+          </View>
         </View>
 
         {/* 캐릭터 대사 */}
@@ -315,6 +338,7 @@ export default function HomeScreen() {
           <ActionIconButton kind="camera" active={isTaskPending('photo')}    onPress={goToChat} />
           <ActionIconButton kind="search" active={isTaskPending('observe')}  onPress={goToChat} />
         </View>
+        </Pressable>
       </ScrollView>
       </FitToScreen>
       </View>
@@ -454,7 +478,7 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1, alignItems: 'center', paddingTop: 92, paddingBottom: 24 },   // 날짜 top 161
 
   dateRow: { width: '100%', alignItems: 'center', justifyContent: 'center' },
-  date: { fontFamily: FONTS.bold, fontSize: fs(15), lineHeight: fs(20), color: COLORS.green },
+  date: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.bodyL), lineHeight: fs(20), color: COLORS.green },
 
   // 캐릭터 영역 230x340 (top 232 = 날짜 하단 181 + 51)
   plantZone: { height: 340, marginTop: 51, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
@@ -477,6 +501,6 @@ const styles = StyleSheet.create({
   },
   devHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 18 },
   devTitle: { fontFamily: FONTS.bold, fontSize: fs(20), lineHeight: fs(28), color: COLORS.outline },
-  devClose: { fontFamily: FONTS.bold, fontSize: fs(15), lineHeight: fs(22), color: COLORS.green },
+  devClose: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.bodyL), lineHeight: fs(22), color: COLORS.green },
   devBody: { gap: 14, paddingBottom: 40 },
 });

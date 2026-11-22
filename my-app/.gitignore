@@ -44,3 +44,7 @@ app-example
 /android
 node_modules/
 .expo/
+
+# Python 캐시
+__pycache__/
+*.pyc

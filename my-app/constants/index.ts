@@ -3,3 +3,4 @@ export * from './typography';
 export * from './plants';
 export * from './questions';
 export * from './plantGuide';
+export * from './controls';

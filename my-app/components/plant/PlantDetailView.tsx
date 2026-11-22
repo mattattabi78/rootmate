@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { COLORS, FONTS, fs } from '../../constants';
+import { COLORS, FONTS, fs, FONT_SIZE } from '../../constants';
 import { ActionIcon } from '../common/ActionIconButton';
 import {
   SunPixelIcon, ThermometerPixelIcon, SproutPixelIcon, SoilPixelIcon,
@@ -28,24 +28,24 @@ const C = { sun: '#FF8E47', water: '#14B5EB', pink: '#FF5C8D', green: '#38D76D',
 //  - tips  : 제목의 단어로 선택(비료·잎·줄기 새싹 / 찬바람 온도계 / 흙 상태 흙 / 물 물방울), 없으면 반짝이
 function CardIcon({ tab, title, index }: { tab: 'info' | 'growth' | 'tips'; title: string; index: number }) {
   if (tab === 'growth') {
-    return <PlusPixelIcon color={PALETTE[index % PALETTE.length]} size={16} />;
+    return <PlusPixelIcon color={PALETTE[index % PALETTE.length]} size={14} />;
   }
   if (tab === 'info') {
-    if (title === '빛' || title === '햇빛') return <SunPixelIcon color={C.sun} size={20} />;
-    if (title === '온도') return <ThermometerPixelIcon color={C.coral} size={20} />;
-    if (title.startsWith('화분')) return <SproutPixelIcon color={C.green} size={20} />;
-    if (title === '흙') return <SoilPixelIcon color={C.soil} size={20} />;
-    if (title === '물') return <ActionIcon kind="water" height={20} />;
+    if (title === '빛' || title === '햇빛') return <SunPixelIcon color={C.sun} size={18} />;
+    if (title === '온도') return <ThermometerPixelIcon color={C.coral} size={18} />;
+    if (title.startsWith('화분')) return <SproutPixelIcon color={C.green} size={18} />;
+    if (title === '흙') return <SoilPixelIcon color={C.soil} size={18} />;
+    if (title === '물') return <ActionIcon kind="water" height={18} />;
     return null;
   }
   // tips
-  if (title.includes('비료') || title.includes('잎') || title.includes('줄기')) return <SproutPixelIcon color={C.green} size={20} />;
-  if (title.includes('찬바람') || title.includes('온도')) return <ThermometerPixelIcon color={C.coral} size={20} />;
-  if (title.includes('흙 상태')) return <SoilPixelIcon color={C.soil} size={20} />;
-  if (title.includes('물')) return <ActionIcon kind="water" height={20} />;
-  if (title.includes('햇빛') || title.includes('빛')) return <SunPixelIcon color={C.sun} size={20} />;
-  if (title.includes('관찰')) return <ActionIcon kind="search" height={20} />;
-  return <SparklePixelIcon color={PALETTE[(index + 2) % PALETTE.length]} size={20} />;
+  if (title.includes('비료') || title.includes('잎') || title.includes('줄기')) return <SproutPixelIcon color={C.green} size={18} />;
+  if (title.includes('찬바람') || title.includes('온도')) return <ThermometerPixelIcon color={C.coral} size={18} />;
+  if (title.includes('흙 상태')) return <SoilPixelIcon color={C.soil} size={18} />;
+  if (title.includes('물')) return <ActionIcon kind="water" height={18} />;
+  if (title.includes('햇빛') || title.includes('빛')) return <SunPixelIcon color={C.sun} size={18} />;
+  if (title.includes('관찰')) return <ActionIcon kind="search" height={18} />;
+  return <SparklePixelIcon color={PALETTE[(index + 2) % PALETTE.length]} size={18} />;
 }
 
 type DetailTab = 'info' | 'growth' | 'tips';
@@ -110,7 +110,7 @@ export default function PlantDetailView({ plantType, onScrollY }: Props) {
 
       {/* 카드 목록 */}
       <View style={styles.cardList}>
-        {cards.map(({ title, body }, i) => (
+        {cards.map(({ title, body, extra }, i) => (
           <View key={`${title}-${i}`} style={styles.card}>
             <View style={styles.cardHead}>
               <CardIcon tab={tab} title={title} index={i} />
@@ -118,6 +118,15 @@ export default function PlantDetailView({ plantType, onScrollY }: Props) {
             </View>
             <View style={styles.cardDivider} />
             <Text style={styles.cardBody}>{body}</Text>
+            {extra && (
+              <View style={styles.extra}>
+                <View style={styles.extraHead}>
+                  <View style={styles.extraPill}><Text style={styles.extraPillText}>{extra.label}</Text></View>
+                  <Text style={styles.extraTitle}>{extra.title}</Text>
+                </View>
+                <Text style={styles.cardBody}>{extra.body}</Text>
+              </View>
+            )}
           </View>
         ))}
       </View>
@@ -131,13 +140,13 @@ const styles = StyleSheet.create({
 
   // 식물 이름: 위아래 패딩 20, 높이 45
   nameBox: { paddingVertical: 20, alignItems: 'center' },
-  name: { fontFamily: FONTS.bold, fontSize: fs(22), lineHeight: fs(45), color: COLORS.pine },
+  name: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.heading), lineHeight: fs(45), color: COLORS.pine },
 
   // 탭: 62x45, 간격 50, 위아래 패딩 20
   tabRow: { flexDirection: 'row', justifyContent: 'center', gap: 50, paddingVertical: 20 },
   tab: { width: 62, height: 45, alignItems: 'center' },
   tabText: {
-    fontFamily: FONTS.bold, fontSize: fs(16), lineHeight: fs(45),
+    fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.label), lineHeight: fs(45),
     color: COLORS.line, width: 90, textAlign: 'center',
   },
   tabTextActive: { fontFamily: FONTS.bold, color: COLORS.pine },
@@ -159,6 +168,12 @@ const styles = StyleSheet.create({
   // 제목과 본문 사이 구분선
   cardDivider: { height: 1, backgroundColor: COLORS.line, marginTop: 4, marginBottom: 6 },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardTitle: { fontFamily: FONTS.medium, fontSize: fs(16), lineHeight: fs(25), color: '#000' },
-  cardBody: { fontFamily: FONTS.medium, fontSize: fs(14), lineHeight: fs(25), color: '#000' },
+  cardTitle: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.bodyL), lineHeight: fs(23), color: '#000' },
+  // 선택 내용(예: 키친타월 발아법): 점선 위 간격 + 알약 라벨 + 소제목, 본문은 같은 크기
+  extra: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.line, borderStyle: 'dashed' },
+  extraHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  extraPill: { backgroundColor: COLORS.lime, borderRadius: 9, paddingHorizontal: 8, height: 18, alignItems: 'center', justifyContent: 'center' },
+  extraPillText: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.caption), lineHeight: fs(15), color: COLORS.borderDark },
+  extraTitle: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.body), lineHeight: fs(23), color: '#000' },
+  cardBody: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.body), lineHeight: fs(23), color: '#000' },
 });

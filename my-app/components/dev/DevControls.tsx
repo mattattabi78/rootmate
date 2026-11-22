@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { COLORS, FONTS, fs } from '../../constants';
+import { COLORS, FONTS, fs, FONT_SIZE } from '../../constants';
 
 // 개발자 메뉴 전용 컨트롤. 박스·테두리·이모티콘 없이 글자와 여백으로 구성하고, 섹션 사이에만 가는 구분선을 둔다.
 //   - 섹션 제목은 작은 회색 글자, 선택된 항목은 굵은 초록 글자, 위험한 동작은 빨간 글자
@@ -28,7 +28,7 @@ export function DevSwitch({ value, onChange, label }: { value: boolean; onChange
     <Switch
       value={value}
       onValueChange={onChange}
-      trackColor={{ false: '#C5C7C0', true: COLORS.lime }}
+      trackColor={{ false: COLORS.tabTextOff, true: COLORS.lime }}
       thumbColor={COLORS.outline}
       accessibilityLabel={label}
     />
@@ -100,21 +100,21 @@ const styles = StyleSheet.create({
   // 섹션 사이 구분선: 가는 연한 선. 선 위쪽 여백은 시트의 gap(14), 아래쪽 여백은 paddingTop(14)으로 같게 맞춤
   sectionDivider: { borderTopWidth: StyleSheet.hairlineWidth * 2, borderTopColor: 'rgba(20,83,45,0.18)', paddingTop: 14 },
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 28 },
-  sectionTitle: { fontFamily: FONTS.bold, fontSize: fs(13), lineHeight: fs(18), color: COLORS.textSecondary },
+  sectionTitle: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.body), lineHeight: fs(18), color: COLORS.textSecondary },
 
   action: { gap: 3, paddingVertical: 4 },
-  actionLabel: { fontFamily: FONTS.bold, fontSize: fs(16), lineHeight: fs(22), color: COLORS.outline },
-  danger: { color: '#d93025' },
-  sub: { fontFamily: FONTS.medium, fontSize: fs(12), lineHeight: fs(17), color: COLORS.textTertiary },
+  actionLabel: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.label), lineHeight: fs(22), color: COLORS.outline },
+  danger: { color: COLORS.redStrong },
+  sub: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.caption), lineHeight: fs(17), color: COLORS.textTertiary },
 
-  label: { fontFamily: FONTS.medium, fontSize: fs(12), lineHeight: fs(17), color: COLORS.textTertiary, marginTop: 4 },
+  label: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.caption), lineHeight: fs(17), color: COLORS.textTertiary, marginTop: 4 },
   optRow: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 18, rowGap: 6 },
-  opt: { fontFamily: FONTS.medium, fontSize: fs(15), lineHeight: fs(24), color: COLORS.textSecondary },
+  opt: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.bodyL), lineHeight: fs(24), color: COLORS.textSecondary },
   optOn: { fontFamily: FONTS.bold, color: COLORS.green },
   disabled: { opacity: 0.3 },
 
-  info: { fontFamily: FONTS.medium, fontSize: fs(13), lineHeight: fs(19), color: COLORS.textSecondary },
+  info: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.body), lineHeight: fs(19), color: COLORS.textSecondary },
   inline: { flexDirection: 'row', alignItems: 'center', gap: 28 },
-  inlineValue: { fontFamily: FONTS.medium, fontSize: fs(18), lineHeight: fs(26), color: COLORS.textSecondary },
-  inlineText: { fontFamily: FONTS.bold, fontSize: fs(18), lineHeight: fs(26), color: COLORS.outline },
+  inlineValue: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.title), lineHeight: fs(26), color: COLORS.textSecondary },
+  inlineText: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.title), lineHeight: fs(26), color: COLORS.outline },
 });

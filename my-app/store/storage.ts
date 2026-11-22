@@ -34,6 +34,7 @@ export const KEYS = {
   QUESTION_INDEX:      '@plant/question_index',
   DEEP_Q_INDEX:        '@plant/deep_q_index',
   DAILY_RECORD:        (date: string) => `@plant/record_${date}`,
+  DAY_LOOK:            (date: string) => `@plant/day_look_${date}`,   // { plantType, expression } — 그날 마지막으로 보인 식물·표정 (Record 팝업용)
   MEMORY_SUMMARY:      (date: string) => `@rootmate/memory_summary_${date}`,
   MEMORY_ENABLED:      '@rootmate/memory_enabled',
   PLANT_PHOTOS:        (date: string) => `@plant/photos_${date}`,
@@ -174,6 +175,14 @@ export const storage = {
   async getDailyRecord(date: string): Promise<DailyRecord | null> {
     const raw = await AsyncStorage.getItem(KEYS.DAILY_RECORD(date));
     return raw ? (JSON.parse(raw) as DailyRecord) : null;
+  },
+  /** 그날 마지막으로 보인 식물 종류와 기본 표정. 오늘 날짜로만 갱신하고, 지난 날짜는 더 바꾸지 않는다. 기록(DailyRecord) 유무와는 별개로 저장 */
+  async saveDayLook(date: string, look: { plantType: string; expression: string }): Promise<void> {
+    await AsyncStorage.setItem(KEYS.DAY_LOOK(date), JSON.stringify(look));
+  },
+  async getDayLook(date: string): Promise<{ plantType: string; expression: string } | null> {
+    const raw = await AsyncStorage.getItem(KEYS.DAY_LOOK(date));
+    return raw ? JSON.parse(raw) : null;
   },
   async isRecordDoneForDate(date: string): Promise<boolean> {
     const raw = await AsyncStorage.getItem(KEYS.DAILY_RECORD(date));

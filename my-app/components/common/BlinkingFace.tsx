@@ -85,12 +85,14 @@ function useTearFrame(): number {
   return useSyncExternalStore(subscribeTear, () => tearFrame, () => 0);
 }
 
-function AnimatedLayers({ sources, tears, style }: {
+function AnimatedLayers({ sources, tears, style, eye }: {
   sources: Record<EyeState, any>;
   tears?: any[];
   style?: StyleProp<ImageStyle>;
+  eye?: EyeState;
 }) {
-  const current = useBlinkEye();
+  const blink = useBlinkEye();
+  const current = eye ?? blink;   // eye가 정해져 있으면(터치 반응) 깜빡임 타이머 대신 그 눈 모양
   return (
     <>
       {EYES.map(k => (
@@ -117,42 +119,45 @@ function AnimatedTears({ tears, style }: { tears: any[]; style?: StyleProp<Image
  * animated=false(기본)면 눈 뜬 이미지 한 장(+눈물이면 중간 프레임 한 장)만 그린다 (타이머·리렌더 없음). 홈 화면에서만 animated를 켠다.
  * sources: 눈 상태별 이미지, tears: 눈물 3프레임(눈물 얼굴일 때만)
  */
-export function BlinkingLayers({ sources, tears, staticFrame = 1, style, animated = false }: {
+export function BlinkingLayers({ sources, tears, staticFrame = 1, style, animated = false, eye }: {
   sources: Record<EyeState, any>;
   tears?: any[];
   staticFrame?: number;
   style?: StyleProp<ImageStyle>;
   animated?: boolean;
+  /** 눈 모양을 직접 지정 (지정하면 깜빡임 대신 이 모양으로 고정) */
+  eye?: EyeState;
 }) {
   if (!animated) {
     return (
       <>
-        <Image source={sources.open} style={style} resizeMode="contain" />
+        <Image source={sources[eye ?? 'open']} style={style} resizeMode="contain" />
         {tears && <Image source={tears[staticFrame]} style={style} resizeMode="contain" />}
       </>
     );
   }
-  return <AnimatedLayers sources={sources} tears={tears} style={style} />;
+  return <AnimatedLayers sources={sources} tears={tears} style={style} eye={eye} />;
 }
 
 /** 얼굴 세트(FaceSet)를 레이어용으로 그린다 (PlantCharacter에서 사용) */
-export function FaceLayers({ face, style, animated = false }: {
-  face: FaceSet; style?: StyleProp<ImageStyle>; animated?: boolean;
+export function FaceLayers({ face, style, animated = false, eye }: {
+  face: FaceSet; style?: StyleProp<ImageStyle>; animated?: boolean; eye?: EyeState;
 }) {
-  return <BlinkingLayers sources={face.layers} tears={face.tears?.layers} staticFrame={face.staticFrame} style={style} animated={animated} />;
+  return <BlinkingLayers sources={face.layers} tears={face.tears?.layers} staticFrame={face.staticFrame} style={style} animated={animated} eye={eye} />;
 }
 
 /** AI로 만든 사진 캐릭터 위에 얹는 얼굴. style로 크기·위치를 지정한다. animated=true면 깜빡임·눈물 애니메이션. */
-export default function FaceOverlay({ plantType, expression, style, animated = false }: {
+export default function FaceOverlay({ plantType, expression, style, animated = false, eye }: {
   plantType: PlantType;
   expression?: Expression;
   style?: StyleProp<ImageStyle>;
   animated?: boolean;
+  eye?: EyeState;
 }) {
   const face = getFaceSet(plantType, expression);
   return (
     <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
-      <BlinkingLayers sources={face.overlays} tears={face.tears?.overlays} staticFrame={face.staticFrame} style={style} animated={animated} />
+      <BlinkingLayers sources={face.overlays} tears={face.tears?.overlays} staticFrame={face.staticFrame} style={style} animated={animated} eye={eye} />
     </View>
   );
 }

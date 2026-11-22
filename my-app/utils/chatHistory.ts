@@ -28,8 +28,8 @@ export function reconstructDayChat(record: DailyRecord, plantNickname: string, p
     const altLabels  = altIds.filter(tid => !completedIds.includes(tid)).map(tid => getTaskLabel(plantType, tid));
     msgs.push({ id: id(), from: 'plant', text: m ? m.checklistAsk() : '오늘 한 일을 체크해 주세요.' });
     const lines = [
-      ...doneLabels.map(l => `✔ ${l}`),
-      ...altLabels.map(l => `✔ ${l}: 오늘은 안 해도 돼요`),
+      ...doneLabels.map(l => `${l} 완료`),
+      ...altLabels.map(l => `${l}: 오늘은 안 해도 돼요`),
     ];
     if (lines.length > 0) msgs.push({ id: id(), from: 'user', text: lines.join('\n') });
     if (doneLabels.length > 0) msgs.push({ id: id(), from: 'plant', text: m ? m.checklistResult('all', []) : '확인했어요. 🌿' });

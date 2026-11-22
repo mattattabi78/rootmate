@@ -1,5 +1,6 @@
 import React from 'react';
 import Svg, { Path } from 'react-native-svg';
+import { COLORS } from '../../constants/colors';
 
 // Figma '아이콘 모음 2' (node 32:99)의 픽셀 아이콘. 모두 단색 — color로 색을 지정.
 // size = 아이콘 높이(px), 가로는 원본 비율로 자동 계산.
@@ -13,7 +14,7 @@ interface IconDef {
   paths: string[];
 }
 
-const ICON_COLOR = '#052e16';
+const ICON_COLOR = COLORS.outline;
 
 function makeIcon(def: IconDef, defaultSize: number) {
   const [x, y, w, h] = def.vb;

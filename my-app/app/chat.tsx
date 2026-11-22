@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,7 +17,7 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS, fs } from '../constants';
+import { COLORS, FONTS, fs, lh, BTN_H, BTN_FONT, INPUT_H, INPUT_FONT, INPUT_LH, FONT_SIZE } from '../constants';
 import { PlantType, Expression } from '../constants/character';
 import FaceOverlay from '../components/common/BlinkingFace';
 import PlantCharacter from '../components/common/PlantCharacter';
@@ -44,6 +44,7 @@ import { getKstDayOfWeek, getDevAdjustedDate, getDevChatRounds } from '../utils/
 import { scheduleTaskReminder, cancelEveningNotification, ensureNotificationPermission } from '../utils/notifications';
 import { getGuideItems, GUIDE_TITLE, GUIDE_BTN_LABEL, GUIDE_CAMERA_LABEL, GUIDE_EXAMPLE_OPEN } from '../constants/imageGuide';
 import { persistImageUri } from '../utils/persistImage';
+import { isOnline } from '../utils/network';
 
 // ─── 그라디언트 ───────────────────────────────────────────────────
 let LinearGradient: React.ComponentType<any> | null = null;
@@ -59,7 +60,7 @@ function Grad({ colors, style, children }: { colors: string[]; style?: any; chil
 // ─── 에셋 ─────────────────────────────────────────────────────────
 import TopAppBar from '../components/common/TopAppBar';
 import Button from '../components/common/Button';
-import { PlusPixelIcon, ArrowRightPixelIcon, CheckboxPixelIcon, CheckPixelIcon } from '../components/common/PixelIcons';
+import { ArrowRightPixelIcon, CheckboxPixelIcon, CheckPixelIcon } from '../components/common/PixelIcons';
 import Wallpaper, { WALLPAPER_COLOR } from '../components/common/Wallpaper';
 
 // ─── 타입 ─────────────────────────────────────────────────────────
@@ -80,6 +81,10 @@ type Phase =
   | 'answering'        // 마음 건강 질문 답변 중
   | 'done';            // 완료
 
+// 채팅 입력창: 한 줄 높이 48, 글이 길어지면 줄바꿈되며 최대 4줄(48 + 23×3)까지 커짐
+const INPUT_MIN_H = INPUT_H;
+const INPUT_PAD = (INPUT_H - 3 - fs(INPUT_LH)) / 2;   // 한 줄일 때 글이 세로 가운데에 오는 위아래 여백
+const INPUT_MAX_H = INPUT_H + fs(INPUT_LH) * 3;
 const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
 function formatDate(d: Date) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} (${DAY_NAMES[d.getDay()]})`;
@@ -99,10 +104,59 @@ function reminderClock() {
 // 자정~새벽 4시에 연 대화는 전날 기록으로 저장 (전날 기록이 없을 때). 화면의 날짜 표시는 시스템 시간 그대로
 export default function ChatScreen() {
   const [backdate, setBackdate] = useState<boolean | null>(null);
+  const [online, setOnline] = useState<boolean | null>(null);   // null = 확인 중
+  const [checking, setChecking] = useState(false);              // '다시 확인' 진행 중
   useEffect(() => { shouldBackdateRecord().then(setBackdate).catch(() => setBackdate(false)); }, []);
+  // 대화창에 들어올 때 네트워크가 연결되어 있는지 확인 (연결이 안 된 경우에만 경고 팝업을 보여줌)
+  useEffect(() => { isOnline().then(setOnline); }, []);
+  const recheck = useCallback(() => {
+    setChecking(true);
+    isOnline().then(v => { setOnline(v); setChecking(false); });
+  }, []);
   if (backdate === null) return null;
-  return <ChatInner backdate={backdate} />;
+  return (
+    <>
+      <ChatInner backdate={backdate} />
+      <OfflineNotice visible={online === false} checking={checking} onRetry={recheck} />
+    </>
+  );
 }
+
+// 네트워크가 연결되지 않았을 때: 대화창 위에 뜨는 경고 팝업 (설정 화면의 확인 팝업과 같은 모양)
+function OfflineNotice({ visible, checking, onRetry }: { visible: boolean; checking: boolean; onRetry: () => void }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onRetry}>
+      <View style={offlineStyles.overlay}>
+        <View style={offlineStyles.box}>
+          <Text style={offlineStyles.title}>네트워크 연결을 확인해주세요</Text>
+          <Text style={offlineStyles.desc}>인터넷에 연결되어야 식물과 대화할 수 있어요.</Text>
+          <View style={offlineStyles.btnRow}>
+            <TouchableOpacity style={[offlineStyles.btn, offlineStyles.btnHome]} onPress={() => router.replace('/' as any)} activeOpacity={0.7}>
+              <Text style={offlineStyles.btnText}>홈으로</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[offlineStyles.btn, checking && { opacity: 0.6 }]} onPress={onRetry} disabled={checking} activeOpacity={0.7}>
+              <Text style={offlineStyles.btnText}>{checking ? '확인 중...' : '다시 확인'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const offlineStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
+  box: {
+    width: '100%', maxWidth: 320, gap: 8, padding: 20,
+    backgroundColor: COLORS.bg, borderRadius: 10, borderWidth: 1.5, borderColor: COLORS.borderDark,
+  },
+  title: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.title), lineHeight: fs(24), color: COLORS.outline, textAlign: 'center' },
+  desc: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.body), lineHeight: fs(20), color: COLORS.textSecondary, textAlign: 'center', marginBottom: 8 },
+  btnRow: { flexDirection: 'row', gap: 10 },
+  btn: { flex: 1, height: BTN_H, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1.5, borderColor: COLORS.borderDark, backgroundColor: COLORS.lime },
+  btnHome: { backgroundColor: COLORS.bg },
+  btnText: { fontFamily: FONTS.bold, fontSize: fs(BTN_FONT), color: COLORS.outline },
+});
 
 function ChatInner({ backdate }: { backdate: boolean }) {
   const insets = useSafeAreaInsets();
@@ -133,7 +187,8 @@ function ChatInner({ backdate }: { backdate: boolean }) {
   const [previewPlantUri, setPreviewPlantUri] = useState<string | null>(null);
   const [previewFacePos, setPreviewFacePos] = useState<PlantFacePosition | null>(null);
   const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
-  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [inputH, setInputH] = useState(INPUT_MIN_H);   // 입력창 높이 (글이 길어지면 자동 줄바꿈으로 커짐)
+  useEffect(() => { if (inputText.length === 0) setInputH(INPUT_MIN_H); }, [inputText]);   // 비우면 한 줄 높이로 복귀
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [showPhotoFailed, setShowPhotoFailed] = useState(false);   // 캐릭터 생성 실패·식물 미인식 안내
   const [showGuideExample, setShowGuideExample] = useState(false);   // 가이드 사진 예시 펼치기
@@ -409,16 +464,17 @@ function ChatInner({ backdate }: { backdate: boolean }) {
     setCheckedIds(prev => prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]);
 
   // 완료: 체크한 항목은 task 완료로 기록하고, 체크하지 않은 항목이 있으면 항목별 후속 선택으로 넘어간다
-  const handleChecklistSubmit = () => {
+  // none = true: '오늘은 못했어' (체크한 항목이 있어도 하나도 하지 못한 것으로 보냄)
+  const handleChecklistSubmit = (none = false) => {
     const m = getPlantMessages(plantTypeRef.current);
-    const checked   = openTasks.filter(t => checkedIds.includes(t.id));
-    const unchecked = openTasks.filter(t => !checkedIds.includes(t.id));
+    const checked   = none ? [] : openTasks.filter(t => checkedIds.includes(t.id));
+    const unchecked = none ? openTasks : openTasks.filter(t => !checkedIds.includes(t.id));
     setPhase('loading');
     checked.forEach(t => recordTaskCompletion(t.id));
     setChatDoneTaskIds(prev => [...prev, ...checked.map(t => t.id).filter(id => !prev.includes(id))]);
     setMessages(prev => [...prev, {
       id: newId(), from: 'user',
-      text: checked.length > 0 ? checked.map(t => `✔ ${getChecklistLabel(t.id, t.label)}`).join('\n') : '오늘은 아무것도 못 했어.',
+      text: checked.length > 0 ? checked.map(t => `${getChecklistLabel(t.id, t.label)} 완료`).join('\n') : '오늘은 못했어.',
     }]);
     // 전부 → all / 절반 이상 → some / 그 미만 → few
     const kind = unchecked.length === 0 ? 'all' : checked.length / openTasks.length >= 0.5 ? 'some' : 'few';
@@ -508,7 +564,7 @@ function ChatInner({ backdate }: { backdate: boolean }) {
     }, 500);
   };
 
-  const openCamera = async (isPlant: boolean) => {
+  const openCamera = async () => {
     try {
       const available = await CameraView.isAvailableAsync();
       if (!available) {
@@ -519,7 +575,7 @@ function ChatInner({ backdate }: { backdate: boolean }) {
             : '이 기기에서 카메라를 열 수 없어 갤러리에서 사진을 선택해 주세요.',
           [
             { text: '취소', style: 'cancel' },
-            { text: '갤러리 열기', onPress: () => openGallery(isPlant) },
+            { text: '갤러리 열기', onPress: () => openGallery() },
           ],
         );
         return;
@@ -536,7 +592,7 @@ function ChatInner({ backdate }: { backdate: boolean }) {
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
-        await handlePhotoResult(result.assets[0].uri, isPlant);
+        await handlePhotoResult(result.assets[0].uri);
       }
     } catch (error) {
       console.warn('Failed to open camera', error);
@@ -545,31 +601,29 @@ function ChatInner({ backdate }: { backdate: boolean }) {
         '시뮬레이터나 일부 환경에서는 카메라가 지원되지 않을 수 있어요. 갤러리에서 사진을 선택해 주세요.',
         [
           { text: '취소', style: 'cancel' },
-          { text: '갤러리 열기', onPress: () => openGallery(isPlant) },
+          { text: '갤러리 열기', onPress: () => openGallery() },
         ],
       );
     }
   };
 
-  const openGallery = async (isPlant: boolean) => {
+  const openGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('권한이 필요해요', '사진 접근 권한을 허용해야 갤러리에서 선택할 수 있어요.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
-    if (!result.canceled && result.assets[0]) await handlePhotoResult(result.assets[0].uri, isPlant);
+    if (!result.canceled && result.assets[0]) await handlePhotoResult(result.assets[0].uri);
   };
 
   const openPlantGallery = async () => {
-    await openGallery(true);
+    await openGallery();
   };
 
   const openPlantCamera = async () => {
-    await openCamera(true);
+    await openCamera();
   };
-
-  const handlePlusButton = () => setShowImagePicker(v => !v);
 
   // 식물 사진 변환 파이프라인
   const transformPlantPhoto = async (uri: string) => {
@@ -637,57 +691,9 @@ function ChatInner({ backdate }: { backdate: boolean }) {
     setPendingPhotoUri(null);
   };
 
-  // 사진 결과 처리
-  const handlePhotoResult = async (uri: string, isPlant: boolean) => {
-    if (isPlant) {
-      await transformPlantPhoto(uri);
-      return;
-    }
-
-    // 마음건강 질문 이미지 답변
-    setMessages(prev => [...prev, { id: newId(), from: 'user', text: '', imageUri: uri }]);
-    setPhase('loading');
-    setTemporaryExpression('default', 3000);
-    const loadingId = newId();
-    setMessages(prev => [...prev, { id: loadingId, from: 'plant', text: '.' }]);
-    let dots = 1;
-    const dotInterval = setInterval(() => {
-      dots = (dots % 3) + 1;
-      setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: '.'.repeat(dots) } : msg));
-    }, 400);
-    const isLastRound = currentRound === maxRounds - 1;
-    // 현재까지의 대화 히스토리를 AI에 전달 (답변 직전까지만)
-    const chatHistoryForAI = messages
-      .filter(msg => msg.id !== loadingId)
-      .map(msg => ({ from: msg.from as 'plant' | 'user', text: msg.text }));
-    const aiReply = await generatePlantResponse(
-      '[사진으로 답변했어요]',
-      plantNickname,
-      todayQuestion,
-      plantType,
-      currentRound === 0,
-      isLastRound,
-      chatHistoryForAI,
-      false,
-      memorySummariesRef.current,
-    );
-    clearInterval(dotInterval);
-    setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: aiReply } : msg));
-    
-    // 라운드 체크: 다음 라운드가 있으면 계속 대화
-    const nextRound = currentRound + 1;
-    if (nextRound < maxRounds) {
-      setCurrentRound(nextRound);
-      // 첫 라운드가 아니면 새로운 질문 없이 입력 필드만 활성화
-      setTimeout(() => {
-        setPhase('answering');
-        setTemporaryExpression('default', 2000);
-      }, 1000);
-    } else {
-      // 모든 라운드 완료 - 기록 저장 후 종료
-      await saveRecord('[사진으로 답변했어요]', uri, aiReply);
-      setTimeout(() => setPhase('done'), 1000);
-    }
+  // 사진 결과 처리 (식물 캐릭터용 사진)
+  const handlePhotoResult = async (uri: string) => {
+    await transformPlantPhoto(uri);
   };
 
   // ── 답변 전송 ────────────────────────────────────────────────────
@@ -867,30 +873,6 @@ function ChatInner({ backdate }: { backdate: boolean }) {
             ))}
           </ScrollView>
 
-          {/* 인라인 이미지 선택창 */}
-          {phase === 'answering' && showImagePicker && (
-            <View style={styles.imagePickerBar}>
-              <TouchableOpacity
-                style={styles.imagePickerBtn}
-                onPress={async () => {
-                  setShowImagePicker(false);
-                  await openCamera(false);
-                }}
-              >
-                <Text style={styles.imagePickerBtnText}>카메라</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.imagePickerBtn}
-                onPress={async () => {
-                  setShowImagePicker(false);
-                  await openGallery(false);
-                }}
-              >
-                <Text style={styles.imagePickerBtnText}>갤러리</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
           {/* 하단 패널: 선택지 + 입력 행 (Figma: 흰 배경, 상단 2px 선) */}
           <View style={[styles.bottomPanel, isEnded && styles.bottomPanelEnded, { paddingBottom: 16 + insets.bottom }]}>
             {/* 오늘 한 일 체크리스트 */}
@@ -901,13 +883,21 @@ function ChatInner({ backdate }: { backdate: boolean }) {
                   return (
                     <TouchableOpacity key={t.id} style={styles.checkRow} activeOpacity={0.7} onPress={() => toggleChecked(t.id)}>
                       <View style={[styles.checkBox, on && styles.checkBoxOn]}>
-                        {on && <CheckPixelIcon color="#303a1e" size={16} />}
+                        {on && <CheckPixelIcon color={COLORS.borderDark} size={16} />}
                       </View>
                       <Text style={styles.checkLabel}>{getChecklistLabel(t.id, t.label)}</Text>
                     </TouchableOpacity>
                   );
                 })}
-                <ChoiceBtn onPress={handleChecklistSubmit}>완료</ChoiceBtn>
+                {/* 보내기: 하나라도 체크해야 활성(회색 → 라임 초록) / 오늘은 못했어: 하나도 못 한 날 바로 넘어감 */}
+                <View style={styles.checklistBtnRow}>
+                  <View style={styles.checklistBtn}>
+                    <ChoiceBtn onPress={() => handleChecklistSubmit(true)}>오늘은 못했어</ChoiceBtn>
+                  </View>
+                  <View style={styles.checklistBtn}>
+                    <ChoiceBtn onPress={() => handleChecklistSubmit()} disabled={checkedIds.length === 0} active={checkedIds.length > 0}>보내기</ChoiceBtn>
+                  </View>
+                </View>
               </View>
             )}
 
@@ -1001,32 +991,39 @@ function ChatInner({ backdate }: { backdate: boolean }) {
             {/* 입력 행: 대화 중에만 표시, 답변 단계에서만 입력 가능 */}
             {!isEnded && phase !== 'checklist' && phase !== 'followup' && (
             <View style={[styles.inputRow, hasChoices(phase) && styles.inputRowWithChoices]}>
-              <TouchableOpacity
-                onPress={handlePlusButton}
-                disabled={phase !== 'answering'}
-                activeOpacity={0.7}
-              >
-                <Grad colors={['#F3F4F1', '#E2E2E2']} style={styles.addBtn}>
-<PlusPixelIcon color="#000" size={12} />
-                </Grad>
-              </TouchableOpacity>
-              <TextInput
-                style={styles.input}
-                value={inputText}
-                onChangeText={setInputText}
-                editable={phase === 'answering'}
-                placeholder="답장하기"
-                placeholderTextColor={COLORS.tabTextOff}
-                returnKeyType="send"
-                onSubmitEditing={handleSend}
-              />
+              <View style={styles.inputWrap}>
+                <TextInput
+                  style={[styles.input, { height: inputH }]}
+                  value={inputText}
+                  onChangeText={setInputText}
+                  editable={phase === 'answering'}
+                  placeholder="답장하기"
+                  placeholderTextColor={COLORS.tabTextOff}
+                  multiline
+                  submitBehavior="submit"
+                  returnKeyType="send"
+                  onSubmitEditing={handleSend}
+                />
+                {/* 보이지 않는 복사본: 입력창과 같은 폭·글자로 글이 몇 줄이 되는지 재서 입력창 높이를 정함
+                    (입력창 자신의 contentSize는 입력창 높이 이상으로만 나와 서로 키우는 문제가 있어 쓰지 않음) */}
+                <Text
+                  pointerEvents="none"
+                  style={styles.inputMirror}
+                  onLayout={e => {
+                    const h = Math.ceil(e.nativeEvent.layout.height);
+                    setInputH(inputText.length === 0 ? INPUT_MIN_H : Math.max(INPUT_MIN_H, Math.min(INPUT_MAX_H, h + INPUT_PAD * 2 + 3)));
+                  }}
+                >
+                  {inputText || ' '}
+                </Text>
+              </View>
               <TouchableOpacity
                 style={styles.sendBtn}
                 onPress={handleSend}
                 disabled={!inputText.trim() || phase !== 'answering'}
                 activeOpacity={0.7}
               >
-<ArrowRightPixelIcon color="#1D1B20" size={10} />
+<ArrowRightPixelIcon color={COLORS.textInk} size={10} />
               </TouchableOpacity>
             </View>
             )}
@@ -1172,10 +1169,10 @@ function ChatInner({ backdate }: { backdate: boolean }) {
 const GUIDE_ICON_COLOR = '#38D76D';
 
 // ─── 선택지 버튼 (Figma: 382x54, 회색 그라디언트, 반경 10) ──────────
-function ChoiceBtn({ onPress, children, disabled }: { onPress: () => void; children: string; disabled?: boolean }) {
+function ChoiceBtn({ onPress, children, disabled, active }: { onPress: () => void; children: string; disabled?: boolean; active?: boolean }) {
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7} disabled={disabled} style={disabled ? { opacity: 0.4 } : undefined}>
-      <Grad colors={['#f3f4f1', '#e2e2e2']} style={styles.choiceBtn}>
+      <Grad colors={active ? [COLORS.lime, COLORS.lime] : [COLORS.cardBg, COLORS.gradEnd]} style={styles.choiceBtn}>
         <EmojiText style={styles.choiceBtnText}>{children}</EmojiText>
       </Grad>
     </TouchableOpacity>
@@ -1273,7 +1270,7 @@ const styles = StyleSheet.create({
   chatDate: {
     textAlign: 'center',
     fontFamily: FONTS.bold,
-    fontSize: fs(15),
+    fontSize: fs(FONT_SIZE.bodyL),
     lineHeight: fs(20),
     color: COLORS.green,
     marginBottom: -9,   // 날짜 하단 → 첫 말풍선 31
@@ -1282,7 +1279,8 @@ const styles = StyleSheet.create({
   // 말풍선 행: 아바타 40 + 간격 13 + 말풍선(최대 317)
   bubbleRow: { flexDirection: 'row', gap: 13, alignItems: 'flex-start' },
   bubbleRowLeft: { alignSelf: 'stretch' },
-  bubbleRowRight: { alignSelf: 'flex-end', maxWidth: 317 },
+  // 내 말풍선: 오른쪽 정렬, 가장 길어져도 왼쪽 시작점은 식물 말풍선과 같음 (아바타 40 + 간격 13 = 53만큼 비워 둠)
+  bubbleRowRight: { alignSelf: 'stretch', paddingLeft: 40 + 13 },
 
   // 연속 메시지: 위 메시지와의 간격을 40 → 8로 좁힘 (scrollContent gap 40 상쇄)
   bubbleRowGrouped: { marginTop: -32 },
@@ -1296,7 +1294,7 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#2a2a2a',
+    borderColor: COLORS.borderDark,
     backgroundColor: COLORS.bg,
     overflow: 'hidden',
     flexShrink: 0,
@@ -1309,11 +1307,11 @@ const styles = StyleSheet.create({
   bubble: {
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#2a2a2a',
+    borderColor: COLORS.borderDark,
     backgroundColor: COLORS.bg,
     paddingHorizontal: 17.5,
     paddingVertical: 12.25,
-    shadowColor: '#101828',
+    shadowColor: COLORS.shadow,
     shadowOpacity: 0.05,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
@@ -1322,7 +1320,7 @@ const styles = StyleSheet.create({
   bubbleUser: { alignSelf: 'flex-end', paddingHorizontal: 10.5 },
 
   bubbleSender: {
-    fontFamily: FONTS.medium, fontSize: fs(17), lineHeight: fs(16.5),
+    fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.label), lineHeight: fs(16),
     letterSpacing: -0.275, color: COLORS.forest,
   },
   bubbleImage: {
@@ -1330,16 +1328,16 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#2a2a2a',
+    borderColor: COLORS.borderDark,
   },
   bubbleText: {
     fontFamily: FONTS.medium,
-    fontSize: fs(15),
+    fontSize: fs(FONT_SIZE.bodyL),
     lineHeight: fs(23),
     letterSpacing: -0.275,
-    color: '#424343',
+    color: COLORS.textBubble,
   },
-  bubbleTextUser: { textAlign: 'right' },
+  bubbleTextUser: { textAlign: 'left' },
 
   // 완료 카드
   // 이미 기록을 마친 경우의 완료 표시: 입력창(높이 46, 흰 배경, 반경 10, 1.5 테두리)과 같은 모양·세로 위치.
@@ -1347,14 +1345,14 @@ const styles = StyleSheet.create({
   endDoneBadge: {
     marginHorizontal: 16,
     marginTop: 13,
-    height: 46,
+    height: BTN_H,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     backgroundColor: COLORS.bg,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#101828',
+    shadowColor: COLORS.shadow,
     shadowOpacity: 0.05,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
@@ -1362,15 +1360,15 @@ const styles = StyleSheet.create({
   endHomeBtn: {
     marginHorizontal: 16,
     marginTop: 8,          // 같은 화자의 연속 말풍선 사이 간격(40 − 32 = 8)과 같음 — 완료 칸과 이 버튼 사이에도 그대로 적용
-    height: 48,
+    height: BTN_H,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     backgroundColor: COLORS.lime,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  doneBtnText: { fontFamily: FONTS.bold, fontSize: fs(16), color: COLORS.outline },
+  doneBtnText: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.label), color: COLORS.outline },
 
   // 하단 패널: 흰 배경 + 상단 2px 선
   bottomPanelEnded: { backgroundColor: 'transparent', borderTopWidth: 0 },
@@ -1385,15 +1383,17 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     gap: 7,
   },
+  checklistBtnRow: { flexDirection: 'row', gap: 7 },
+  checklistBtn: { flex: 1 },
   choiceBtn: {
-    height: 54,
+    height: BTN_H,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
-    shadowColor: '#101828',
+    shadowColor: COLORS.shadow,
     shadowOpacity: 0.05,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
@@ -1407,7 +1407,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     backgroundColor: COLORS.bg,
   },
   checkBox: {
@@ -1415,18 +1415,18 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     backgroundColor: COLORS.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkBoxOn: { backgroundColor: COLORS.lime },
-  checkLabel: { fontFamily: FONTS.medium, fontSize: fs(15), lineHeight: fs(23), letterSpacing: -0.275, color: '#424343' },
+  checkLabel: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.bodyL), lineHeight: fs(23), letterSpacing: -0.275, color: COLORS.textBubble },
   // 후속 선택 (항목별 칩)
   followupScroll: { maxHeight: 300 },
   followupContent: { gap: 12 },   // 항목 사이 간격 (마지막 항목 아래에는 여백 없음 → 확인 버튼과는 다른 선택지와 같은 7)
   followupItem: { gap: 6 },
-  followupLabel: { fontFamily: FONTS.bold, fontSize: fs(14), color: COLORS.pine },
+  followupLabel: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.body), lineHeight: lh(13), color: COLORS.pine },
   chipRow: { flexDirection: 'row', gap: 6 },
   chip: {
     flex: 1,
@@ -1435,51 +1435,48 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     backgroundColor: COLORS.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   chipOn: { backgroundColor: COLORS.lime },
-  chipText: { fontFamily: FONTS.medium, fontSize: fs(13), lineHeight: fs(18), alignSelf: 'stretch', color: '#424343', textAlign: 'center' },
+  chipText: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.body), lineHeight: fs(18), alignSelf: 'stretch', color: COLORS.textBubble, textAlign: 'center' },
   choiceBtnText: {
-    fontFamily: FONTS.medium, fontSize: fs(15), lineHeight: fs(23),
-    letterSpacing: -0.275, color: '#424343',
+    fontFamily: FONTS.medium, fontSize: fs(BTN_FONT), lineHeight: fs(23),
+    letterSpacing: -0.275, color: COLORS.textBubble,
   },
 
-  // 입력 행: 좌우 16, 버튼 32, 입력창 높이 49
+  // 입력 행: 좌우 16, 버튼 32, 입력창 높이 INPUT_H(48)
   inputRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',   // 입력창이 여러 줄로 커져도 버튼은 맨 아래 줄에 붙어 있음
     gap: 9.5,
     paddingHorizontal: 16,
     marginTop: 13,
   },
   inputRowWithChoices: { marginTop: 27 },
-  addBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#303a1e',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+  inputWrap: { flex: 1 },
+  inputMirror: {
+    position: 'absolute', left: 0, right: 0, top: 0, opacity: 0,
+    paddingHorizontal: 12 + 1.5,   // 입력창 안쪽 좌우 여백(12) + 테두리(1.5)
+    fontFamily: FONTS.medium, fontSize: fs(INPUT_FONT), lineHeight: fs(INPUT_LH),
   },
   input: {
-    flex: 1,
-    height: 46,
+    alignSelf: 'stretch',
     backgroundColor: COLORS.bg,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     paddingHorizontal: 12,
-    paddingVertical: 0,
+    paddingTop: INPUT_PAD,
+    paddingBottom: INPUT_PAD,
+    textAlignVertical: 'center',
     fontFamily: FONTS.medium,
-    fontSize: fs(13),
-    lineHeight: fs(22),
-    color: '#424343',
-    shadowColor: '#101828',
+    fontSize: fs(INPUT_FONT),
+    lineHeight: fs(INPUT_LH),
+    color: COLORS.textBubble,
+    shadowColor: COLORS.shadow,
     shadowOpacity: 0.05,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
@@ -1487,40 +1484,16 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 32,
     height: 32,
+    marginBottom: (INPUT_H - 32) / 2,   // 한 줄일 때 입력창 세로 가운데에 오도록
     borderRadius: 16,
     backgroundColor: COLORS.lime,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
 
-  // 인라인 이미지 선택창
-  imagePickerBar: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: COLORS.bg,
-    borderTopWidth: 2,
-    borderTopColor: 'rgba(20,83,45,0.30)',
-  },
-  imagePickerBtn: {
-    flex: 1,
-    height: 46,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#303a1e',
-    backgroundColor: COLORS.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imagePickerBtnText: {
-    fontFamily: FONTS.medium,
-    fontSize: fs(15),
-    color: '#424343',
-  },
 
   // 변환 로딩
   transformingWrap: {
@@ -1529,13 +1502,13 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   transformingText: {
-    fontFamily: 'SUITE-Bold',
-    fontSize: fs(16),
+    fontFamily: FONTS.bold,
+    fontSize: fs(FONT_SIZE.label), lineHeight: lh(16),
     color: COLORS.textTertiary,
   },
   transformingSubText: {
-    fontFamily: 'SUITE-Regular',
-    fontSize: fs(13),
+    fontFamily: FONTS.regular,
+    fontSize: fs(FONT_SIZE.body), lineHeight: lh(13),
     color: COLORS.textTertiary,
   },
 
@@ -1550,7 +1523,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: COLORS.line,
   },
-  sheetTitle: { fontFamily: FONTS.bold, fontSize: fs(18), lineHeight: fs(26), color: COLORS.outline },
+  sheetTitle: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.title), lineHeight: fs(26), color: COLORS.outline },
 
   // 사진 촬영 가이드 (바텀 시트)
   guideOverlay: {
@@ -1565,7 +1538,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 10,
     borderWidth: 1.5,
     borderBottomWidth: 0,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     overflow: 'hidden',
   },
   guideScroll: { flexGrow: 0 },
@@ -1581,9 +1554,9 @@ const styles = StyleSheet.create({
   guideText: {
     flex: 1,
     fontFamily: FONTS.medium,
-    fontSize: fs(14),
+    fontSize: fs(FONT_SIZE.body),
     lineHeight: fs(20),
-    color: '#191C1B',
+    color: COLORS.textInk,
   },
   guideFooter: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 28, gap: 10 },
   // 예시 버튼: 글자 너비에 맞춤 (테두리는 시트의 다른 박스와 같은 1.5px #303a1e)
@@ -1594,10 +1567,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     backgroundColor: COLORS.bg,
   },
-  exampleBtnText: { fontFamily: FONTS.bold, fontSize: fs(14), color: COLORS.pine },
+  exampleBtnText: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.body), color: COLORS.pine },
 
   // 사진 예시 팝업 (화면 중앙)
   exampleOverlay: {
@@ -1613,7 +1586,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     overflow: 'hidden',
   },
   exampleBody: { padding: 16 },
@@ -1631,9 +1604,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     overflow: 'hidden',
   },
   previewBody: { padding: 20, gap: 12, alignItems: 'stretch' },
-  failedText: { fontFamily: FONTS.bold, fontSize: fs(15), lineHeight: fs(23), color: COLORS.forest, textAlign: 'center', marginBottom: 4 },
+  failedText: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.bodyL), lineHeight: fs(23), color: COLORS.forest, textAlign: 'center', marginBottom: 4 },
 });

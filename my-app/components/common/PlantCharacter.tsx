@@ -5,6 +5,7 @@ import {
   PlantType,
   GrowthStage,
   Expression,
+  EyeState,
   POT_IMAGE,
   getPlantImage,
   getFaceSet,
@@ -20,6 +21,10 @@ interface Props {
   showVase?: boolean;
   /** 눈 깜빡임 켜기 (홈 화면에서만 사용, 기본 꺼짐) */
   animated?: boolean;
+  /** 얼굴 위에 겹쳐 그릴 효과 이미지 한 장 (하트·음표·물방울, 846×1254 레이어 캔버스 기준) */
+  effect?: any;
+  /** 눈 모양을 직접 지정 (터치 반응에서 윙크 등을 재생할 때) */
+  eye?: EyeState;
 }
 
 // 화분·식물·표정 이미지는 모두 같은 846×1254 캔버스에 위치가 맞춰진 레이어다.
@@ -40,6 +45,8 @@ export default function PlantCharacter({
   width,
   showVase = true,
   animated = false,
+  effect,
+  eye,
 }: Props) {
   const w = width ?? SIZE_WIDTH[size];
   const h = w * CHARACTER_RATIO;
@@ -56,8 +63,10 @@ export default function PlantCharacter({
       <Image source={getPlantImage(plantType, stage)} style={[styles.abs, layer]} resizeMode="contain" />
       {/* 레이어 3: 얼굴 (화분 위에 그려진 v2 얼굴, 눈이 깜빡이고(표정에 따라 눈물이 흐름). 화분 캔버스와 위치가 맞춰져 있어 변형 없이 겹침) */}
       {showVase && (
-        <FaceLayers face={getFaceSet(plantType, expression)} style={[styles.abs, layer]} animated={animated} />
+        <FaceLayers face={getFaceSet(plantType, expression)} style={[styles.abs, layer]} animated={animated} eye={eye} />
       )}
+      {/* 레이어 4: 효과 (하트·음표·물방울) */}
+      {effect != null && <Image source={effect} style={[styles.abs, layer]} resizeMode="contain" />}
     </View>
   );
 }

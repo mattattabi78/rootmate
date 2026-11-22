@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   TouchableOpacityProps,
 } from 'react-native';
-import { COLORS, FONTS, fs } from '../../constants';
+import { COLORS, FONTS, fs, BTN_H, BTN_FONT } from '../../constants';
 
 interface Props extends TouchableOpacityProps {
   label: string;
@@ -43,7 +43,7 @@ export default function Button({
 
   const inner = loading ? (
     <ActivityIndicator
-      color={variant === 'primary' ? '#FFFFFF' : COLORS.green}
+      color={variant === 'primary' ? COLORS.bg : COLORS.green}
       size="small"
     />
   ) : (
@@ -65,10 +65,10 @@ export default function Button({
 // Figma Y2K: 라임 단색 버튼, 반경 10, 테두리 1.5px
 const styles = StyleSheet.create({
   base: {
-    height: 54,
+    height: BTN_H,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
   },
   secondary: {
     backgroundColor: COLORS.bg,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: FONTS.bold,
-    fontSize: fs(18),
+    fontSize: fs(BTN_FONT),
     color: COLORS.outline,
   },
   labelPrimary:   { color: COLORS.outline },

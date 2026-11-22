@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS, fs } from '../../constants';
+import { COLORS, FONTS, fs, INPUT_H_LARGE, FONT_SIZE } from '../../constants';
 import { storage } from '../../store/storage';
 import ProgressDots from '../../components/common/ProgressDots';
 import Button from '../../components/common/Button';
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
   content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 48 },   // 세로 중앙(버튼 영역만큼 살짝 위)
   heading: {
     fontFamily: FONTS.bold,
-    fontSize: fs(28),
+    fontSize: fs(FONT_SIZE.display),
     color: COLORS.pine,
     lineHeight: fs(38),
     textAlign: 'center',
@@ -102,14 +102,14 @@ const styles = StyleSheet.create({
   },
   sub: {
     fontFamily: FONTS.bold,
-    fontSize: fs(15),
+    fontSize: fs(FONT_SIZE.bodyL),
     color: COLORS.forest,
     lineHeight: fs(22),
     textAlign: 'center',
     marginBottom: 40,
   },
   inputWrap: {
-    height: 52,
+    height: INPUT_H_LARGE,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.inputBg,

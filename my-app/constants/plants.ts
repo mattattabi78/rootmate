@@ -70,7 +70,7 @@ export interface PlantInfo {
   tagline: string;
   totalPeriod: string;
   intro: string;
-  /** 도감 카드용 짧은 소개 (줄바꿈 포함, Figma 문구) */
+  /** 도감 카드용 짧은 소개. 줄바꿈(\n)은 카드에서 공백으로 바꿔 글상자 폭에 맞춰 자동 줄바꿈함 */
   cardIntro?: string;
 }
 

@@ -16,6 +16,7 @@ export type PlantSituation =
   | 'photo_requested'        // 사진 찍기 요청 중
   | 'photo_received'         // 사진 업로드 완료
   | 'evening_check'          // 저녁 task 확인
+  | 'sleeping'               // 밤 12시~새벽 6시 (다른 상황보다 우선)
   | 'idle';                  // 기본
 
 // ─── 상황 → 표정 매핑 테이블 ─────────────────────────────────────
@@ -38,6 +39,7 @@ const SITUATION_MAP: Record<PlantSituation, Record<PlantType, Expression>> = {
   photo_requested:     all('surprise'),
   photo_received:      D,
   evening_check:       D,
+  sleeping:            all('sleep'),     // 자는 얼굴(감은 눈) + Z가 올라감. 터치 반응은 그대로
   idle:                D,
 };
 
@@ -65,6 +67,7 @@ export const SITUATION_LABELS: Record<PlantSituation, string> = {
   photo_requested:     '사진 요청',
   photo_received:      '사진 받음',
   evening_check:       '저녁 확인',
+  sleeping:            '자는 중',
   idle:                '기본',
 };
 

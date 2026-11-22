@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONTS, PLANTS, PLANT_CODES, fs } from '../../constants';
+import { COLORS, FONTS, PLANTS, PLANT_CODES, fs, lh, INPUT_H_LARGE, FONT_SIZE } from '../../constants';
 import { storage } from '../../store/storage';
 import PlantCharacter from '../../components/common/PlantCharacter';
 import { PlantType } from '../../constants/character';
@@ -103,7 +103,7 @@ export default function Step2() {
               {/* 코드 피드백 */}
               {codeIsTyped && codeIsValid && (
                 <EmojiText style={styles.feedbackValid}>
-                  {PLANTS[resolvedId!].name}이군요! 🌿
+                  {PLANTS[resolvedId!].name}이군요!
                 </EmojiText>
               )}
               {codeIsTyped && !codeIsValid && (
@@ -189,11 +189,11 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
-  backArrow: { fontFamily: FONTS.bold, fontSize: fs(22), color: COLORS.pine },
+  backArrow: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.heading), color: COLORS.pine },
   content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingBottom: 24 },
   heading: {
     fontFamily: FONTS.bold,
-    fontSize: fs(28),
+    fontSize: fs(FONT_SIZE.display),
     color: COLORS.pine,
     lineHeight: fs(38),
     textAlign: 'center',
@@ -201,14 +201,14 @@ const styles = StyleSheet.create({
   },
   sub: {
     fontFamily: FONTS.bold,
-    fontSize: fs(15),
+    fontSize: fs(FONT_SIZE.bodyL),
     color: COLORS.forest,
     lineHeight: fs(22),
     textAlign: 'center',
     marginBottom: 32,
   },
   inputWrap: {
-    height: 52,
+    height: INPUT_H_LARGE,
     backgroundColor: COLORS.inputBg,
     borderWidth: 1,
     borderColor: COLORS.inputBorder,
@@ -223,20 +223,20 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.bold,
     textAlign: 'center',
     marginTop: 8,
-    fontSize: fs(15),
+    fontSize: fs(FONT_SIZE.bodyL), lineHeight: lh(15),
     color: COLORS.green,
   },
   feedbackError: {
     fontFamily: FONTS.bold,
     textAlign: 'center',
     marginTop: 8,
-    fontSize: fs(15),
+    fontSize: fs(FONT_SIZE.bodyL), lineHeight: lh(15),
     color: COLORS.red,
   },
   switchLink: { marginTop: 20, alignSelf: 'center' },
   switchLinkText: {
-    fontFamily: 'SUITE-Medium',
-    fontSize: fs(15),
+    fontFamily: FONTS.medium,
+    fontSize: fs(FONT_SIZE.bodyL), lineHeight: lh(15),
     color: COLORS.textTertiary,
     textDecorationLine: 'underline',
   },
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   },
   plantName: {
     fontFamily: FONTS.bold,
-    fontSize: fs(17),
+    fontSize: fs(FONT_SIZE.title), lineHeight: lh(18),
     color: COLORS.textPrimary,
     textAlign: 'center',
   },

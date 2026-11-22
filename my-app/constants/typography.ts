@@ -12,6 +12,28 @@ export const UI_SCALE = RAW_SCALE >= 0.96 ? 1 : Math.max(0.85, RAW_SCALE);
 /** 글자 크기·줄 높이용: 0.5 단위로 반올림, 10 이하의 작은 글자는 더 줄이지 않음 */
 export const fs = (n: number): number =>
   UI_SCALE === 1 ? n : Math.max(Math.min(n, 10), Math.round(n * UI_SCALE * 2) / 2);
+/**
+ * 글자 크기 7단계. 새 글자 스타일은 `fontSize: fs(FONT_SIZE.body)`처럼 이 단계에서만 고른다.
+ * 예외(단계에 넣지 않음): 도감 카드 안 글자(10·11·12·13, fs() 미사용), 헤더 로고와 홈 대사·기록 제목·온보딩 입력창의 20.
+ */
+export const FONT_SIZE = {
+  caption: 12,   // 보조 설명
+  body:    13,   // 본문, 라벨
+  bodyL:   15,   // 말풍선, 날짜, 부제
+  label:   16,   // 버튼, 강조 라벨
+  title:   18,   // 팝업·시트 제목, 이름
+  heading: 22,   // 탭, 상세 이름, 월 제목
+  display: 28,   // 온보딩·연속 관리 큰 제목
+} as const;
+
+/**
+ * 글자 크기별 기본 줄 높이 (글자 크기의 약 1.5배, 한 줄 제목은 이보다 작아도 되지만 글자 크기보다 작게는 두지 않는다).
+ * 새 글자 스타일에서 lineHeight를 따로 정하지 않을 때 `lineHeight: lh(15)`처럼 쓴다.
+ */
+export const LINE_HEIGHT: Record<number, number> = {
+  10: 14, 11: 16, 12: 18, 13: 20, 14: 21, 15: 23, 16: 24, 17: 25, 18: 27, 20: 30, 22: 33, 24: 36, 28: 42,
+};
+export const lh = (size: number): number => fs(LINE_HEIGHT[size] ?? Math.round(size * 1.5));
 /** 그래픽·간격용: 단순 비례 */
 export const ui = (n: number): number => n * UI_SCALE;
 

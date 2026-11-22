@@ -11,10 +11,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
-import { COLORS, FONTS, fs, ui } from '../constants';
+import { COLORS, FONTS, fs, ui, FONT_SIZE } from '../constants';
 import { storage, DailyRecord } from '../store/storage';
 import { loadGrowthState } from '../store/growthStore';
-import { PlantType } from '../constants/character';
+import { PlantType, Expression } from '../constants/character';
 import TopAppBar from '../components/common/TopAppBar';
 import FitToScreen from '../components/common/FitToScreen';
 import { compactFactor } from '../utils/layout';
@@ -75,6 +75,7 @@ export default function CalendarScreen() {
   const [modalDateLabel, setModalDateLabel] = useState('');
   const [modalRecord,    setModalRecord]    = useState<DailyRecord | null>(null);
   // 기록 팝업에 보여줄, 그 날짜의 사진 캐릭터(AI 생성 이미지). 그날까지 만든 것이 없으면 null → 기본 캐릭터
+  const [modalLook, setModalLook] = useState<{ plantType: PlantType; expression: Expression } | null>(null);
   const [modalGenerated, setModalGenerated] = useState<{ uri: string; facePos: { x: number; y: number } } | null>(null);
 
   const loadRecordDays = useCallback(async (y: number, m: number) => {
@@ -124,6 +125,9 @@ export default function CalendarScreen() {
     }
     const g = await storage.getGeneratedPlantForDate(dateStr);
     setModalGenerated(g ? { uri: g.uri, facePos: g.facePos } : null);
+    // 그날 마지막으로 저장된 식물·표정 (없으면 지금 식물 + 기본 표정)
+    const look = await storage.getDayLook(dateStr);
+    setModalLook(look ? { plantType: look.plantType as PlantType, expression: look.expression as Expression } : null);
     setModalDateLabel(formatDateLabel(y, m, day));
     setModalRecord(record);
     setModalVisible(true);
@@ -214,7 +218,8 @@ export default function CalendarScreen() {
               <DayRecordCard
                 label={modalDateLabel}
                 record={modalRecord}
-                plantType={plantType}
+                plantType={modalLook?.plantType ?? plantType}
+                expression={modalLook?.expression ?? 'default'}
                 generated={modalGenerated}
               />
             )}
@@ -226,8 +231,8 @@ export default function CalendarScreen() {
 }
 
 // ─── 날짜별 기록 카드 (폭 최대 362 · 높이 480, 요소는 Figma 절대 좌표) ───────
-function DayRecordCard({ label, record, plantType, generated }: {
-  label: string; record: DailyRecord; plantType: PlantType;
+function DayRecordCard({ label, record, plantType, expression, generated }: {
+  label: string; record: DailyRecord; plantType: PlantType; expression: Expression;
   generated: { uri: string; facePos: { x: number; y: number } } | null;
 }) {
   const completedIds = record.completedTaskIds ?? (record.waterDone ? ['water'] : []);
@@ -246,12 +251,13 @@ function DayRecordCard({ label, record, plantType, generated }: {
         {photoUri ? (
           <Image source={{ uri: photoUri }} style={styles.recordPhoto} resizeMode="cover" />
         ) : (
-          // 사진이 없으면 캐릭터만 표시: 그날 보이던 사진 캐릭터가 있으면 그 모습, 없으면 그날의 성장 단계 기본 캐릭터
+          // 사진이 없으면 캐릭터만 표시: 그날 보이던 사진 캐릭터가 있으면 그 모습, 없으면 그날 마지막으로 저장된 표정의 기본 캐릭터
           generated ? (
             <View style={styles.recordGenerated} pointerEvents="none">
               <Image source={{ uri: generated.uri }} style={{ width: GEN_SIZE, height: GEN_SIZE }} resizeMode="contain" />
               <FaceOverlay
                 plantType={plantType}
+                expression={expression}
                 style={{
                   position: 'absolute',
                   width: GEN_SIZE * 0.55, height: GEN_SIZE * 0.55,
@@ -262,7 +268,7 @@ function DayRecordCard({ label, record, plantType, generated }: {
             </View>
           ) : (
             <View style={styles.recordPlant} pointerEvents="none">
-              <PlantCharacter plantType={plantType} stage={1} width={101} />
+              <PlantCharacter plantType={plantType} stage={1} expression={expression} width={101} />
             </View>
           )
         )}
@@ -497,7 +503,7 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontFamily: FONTS.bold,
-    fontSize: fs(22),
+    fontSize: fs(FONT_SIZE.heading),
     lineHeight: fs(45),
     color: COLORS.tabTextOff,
     width: 80,
@@ -518,7 +524,7 @@ const styles = StyleSheet.create({
   chevronBox: { width: 15, height: 15, alignItems: 'center', justifyContent: 'center' },
   monthTitle: {
     fontFamily: FONTS.bold,
-    fontSize: fs(22),
+    fontSize: fs(FONT_SIZE.heading),
     lineHeight: fs(26),
     color: COLORS.pine,
     minWidth: 111,
@@ -531,7 +537,7 @@ const styles = StyleSheet.create({
   weekHeaderRow: { flexDirection: 'row', marginBottom: 36 },
   weekRow:       { flexDirection: 'row', height: CELL_H },
   dayCell:       { flex: 1, alignItems: 'center', justifyContent: 'flex-start' },
-  dayHeader:     { fontFamily: FONTS.bold, fontSize: fs(17), lineHeight: fs(22), paddingVertical: 8, color: '#191C1B' },
+  dayHeader:     { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.title), lineHeight: fs(22), paddingVertical: 8, color: COLORS.textInk },
   dayHeaderWeekend: { color: COLORS.weekend },
 
   dateCircle: {
@@ -540,9 +546,9 @@ const styles = StyleSheet.create({
   },
   dateCircleRecord: { backgroundColor: COLORS.lime },
   dateCircleToday:  { backgroundColor: COLORS.line },
-  dateText:     { fontFamily: FONTS.bold, fontSize: fs(16), lineHeight: fs(22), color: '#191C1B' },
+  dateText:     { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.label), lineHeight: fs(22), color: COLORS.textInk },
   prevNextText: { color: COLORS.prevMonthText },
-  todayText:    { color: '#FFFFFF' },
+  todayText:    { color: COLORS.bg },
 
   // 연속 기록 띠: 시작 원 중심 ~ 끝 원 중심
   bandRow:  { position: 'absolute', top: 0, left: 0, right: 0, height: ui(40), flexDirection: 'row' },
@@ -555,14 +561,14 @@ const styles = StyleSheet.create({
   // 앨범: 좌우 46, 사진 150x150 간격 10
   albumWrap:    { paddingHorizontal: 46, paddingTop: 27, gap: 27 },
   albumSection: { gap: 10 },
-  albumMonth:   { fontFamily: FONTS.bold, fontSize: fs(15), lineHeight: fs(20), color: COLORS.green },
+  albumMonth:   { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.bodyL), lineHeight: fs(20), color: COLORS.green },
   albumGrid:    { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   albumPhoto: {
     width: 150, height: 150, borderRadius: 4,
-    backgroundColor: '#E0E0E0', borderWidth: 1, borderColor: COLORS.line,
+    backgroundColor: COLORS.imageBg, borderWidth: 1, borderColor: COLORS.line,
   },
   emptyAlbum: { paddingVertical: 60, alignItems: 'center' },
-  emptyText:  { fontFamily: FONTS.medium, fontSize: fs(15), color: COLORS.textTertiary },
+  emptyText:  { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.bodyL), lineHeight: fs(23), color: COLORS.textTertiary },
 
   // 날짜별 기록 카드: 362x480 고정, 내부는 절대 좌표
   modalOverlay: {
@@ -586,7 +592,7 @@ const styles = StyleSheet.create({
   recordImageArea: { position: 'absolute', top: 94, left: 51, width: 260, height: 180 },
   recordPhoto: {
     width: 260, height: 180, borderRadius: 5,
-    borderWidth: 1, borderColor: COLORS.line, backgroundColor: '#E0E0E0',
+    borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.imageBg,
   },
   // 캐릭터 101×150을 사진 영역(260×180) 중앙에 배치
   // 사진으로 만든 캐릭터(정사각형)를 사진 영역(260×180) 중앙에 배치
@@ -594,8 +600,8 @@ const styles = StyleSheet.create({
   recordPlant: { position: 'absolute', left: 79.5, top: 15, width: 101, height: 150 },
   recordText: {
     position: 'absolute', top: 299, left: 51, width: 260, height: 100,
-    fontFamily: FONTS.bold, fontSize: fs(13), lineHeight: fs(20),
-    color: '#191C1B',
+    fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.body), lineHeight: fs(20),
+    color: COLORS.textInk,
   },
   recordFooter: {
     position: 'absolute', left: 0, right: 0, bottom: 0, height: 63,

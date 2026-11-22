@@ -5,11 +5,22 @@ import { storage } from '../store/storage';
 import { getLocalDateString } from '../utils/date';
 import { getDevAdjustedDate } from '../utils/devOverrides';
 
+// 오늘의 기본 표정(상황에 따른 표정)을 오늘 날짜로 저장 → 하루가 지나면 그날의 마지막 표정이 그대로 남는다 (Record 팝업이 사용)
+// 탭 반응 같은 일시적 표정은 저장하지 않는다.
+function saveTodayLook(plantType: PlantType, expression: Expression) {
+  if (expression === 'sleep') return;   // 밤새 앱을 열어도 그날의 마지막 표정을 자는 얼굴로 덮어쓰지 않는다
+  const todayStr = getLocalDateString(getDevAdjustedDate());
+  storage.saveDayLook(todayStr, { plantType, expression }).catch(() => {});
+}
+
 // 우선순위 순으로 상황 평가
 async function computeSituation(): Promise<PlantSituation> {
   const today = getDevAdjustedDate();
   const todayStr = getLocalDateString(today);
   const hour = today.getHours();
+
+  // 밤 12시~새벽 6시: 다른 상황과 상관없이 자는 표정
+  if (hour < 6) return 'sleeping';
 
   // 오늘 기록 확인
   const todayRecord = await storage.getDailyRecord(todayStr);
@@ -81,6 +92,7 @@ export function usePlantExpression(plantType: PlantType): {
     setSituation(sit);
     setExpression(exp);
     baseExprRef.current = exp;
+    saveTodayLook(plantType, exp);
   }, [plantType]);
 
   useEffect(() => {
@@ -100,6 +112,7 @@ export function usePlantExpression(plantType: PlantType): {
         setSituation(sit);
         setExpression(base);
         baseExprRef.current = base;
+        saveTodayLook(plantType, base);
         timerRef.current = null;
       }, durationMs);
     },

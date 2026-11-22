@@ -168,11 +168,11 @@ const DEFAULT_TASK_CHOICES: TaskChoices = { remind: REMIND, cantToday: CANT_TODA
 export const getTaskChoices = (taskId: string): TaskChoices =>
   TASK_CHOICES[taskId] ?? DEFAULT_TASK_CHOICES;
 
-/** 체크리스트 항목 문구 (체크한 항목은 사용자 말풍선에도 그대로 쓴다) */
+/** 체크리스트 항목 문구. 체크한 항목은 사용자 말풍선에 `{문구} 완료`로 보낸다 (예: 물주기 완료) */
 const CHECKLIST_LABELS: Record<string, string> = {
-  water: '물 줬어',
-  sunlight: '햇빛 확인했어',
-  observe: '식물 관찰했어',
+  water: '물주기',
+  sunlight: '햇빛 확인하기',
+  observe: '관찰하기',
 };
 export const getChecklistLabel = (taskId: string, taskLabel: string): string =>
-  CHECKLIST_LABELS[taskId] ?? `${taskLabel} 했어`;
+  CHECKLIST_LABELS[taskId] ?? taskLabel;

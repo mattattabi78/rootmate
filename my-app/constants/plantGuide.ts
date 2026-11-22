@@ -13,6 +13,8 @@ import { PlantType } from './character';
 export interface GuideCard {
   title: string;
   body: string;
+  /** 카드 본문 아래에 따로 구분해 보여주는 선택 내용 (예: 키친타월 발아법). label은 작은 알약 라벨, title은 소제목 */
+  extra?: { label: string; title: string; body: string };
 }
 
 export interface PlantGuide {
@@ -49,7 +51,12 @@ export const PLANT_GUIDE: Record<PlantType, PlantGuide> = {
       },
       {
         title: '2단계 발아 관리',
-        body: '20~25°C 환경에서 키우면, 5~10일 안에 싹이 올라와요.\n\n키친타월 발아법 (선택)\n키친타월 위에 씨앗을 올린 뒤 충분히 물을 분무해 주세요. 마르지 않도록 수시로 물을 뿌려주면 약 2일 내에 발아가 시작돼요. 뿌리가 0.5~1cm 정도 자라면 흙에 옮겨 심어 주세요.',
+        body: '20~25°C 환경에서 키우면, 5~10일 안에 싹이 올라와요.',
+        extra: {
+          label: '선택',
+          title: '키친타월 발아법',
+          body: '키친타월 위에 씨앗을 올린 뒤 충분히 물을 분무해 주세요. 마르지 않도록 수시로 물을 뿌려주면 약 2일 내에 발아가 시작돼요. 뿌리가 0.5~1cm 정도 자라면 흙에 옮겨 심어 주세요.',
+        },
       },
       {
         title: '3단계 성장 관리',

@@ -4,7 +4,7 @@
 export type PlantType  = 'basil' | 'tomato' | 'marigold';
 export type GrowthStage = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 // 표정 = 화분 얼굴 종류. 식물에 없는 얼굴은 getFaceKind()가 대체한다 (cry → tear, 나머지 → default)
-export type Expression = 'default' | 'smile' | 'neutral' | 'tear' | 'cry' | 'surprise';
+export type Expression = 'default' | 'smile' | 'neutral' | 'tear' | 'cry' | 'surprise' | 'wink' | 'happy' | 'sleep';
 
 // 화분 (공통)
 // 레이어용(846×1254 캔버스, 식물·표정 레이어와 위치 정렬) / 원본(500×500, AI 합성 참고용)
@@ -12,6 +12,8 @@ export const POT_IMAGE = require('../assets/images/characters/pot_layer.png');
 export const POT_REFERENCE_IMAGE = require('../assets/images/characters/pot.png');
 
 // 화분 얼굴 v2 (프레임 있는 버전). 이미지는 scripts/build_faces.py 로 만든다.
+//   - 자는 얼굴 sleep: 밤 12시~새벽 6시의 기본 표정(감은 눈 ∪∪, 깜빡이지 않음) + Z_FRAMES 효과
+//   - 터치 반응 얼굴: wink(윙크, 눈 3상태 = 오른쪽 눈 뜸·반쯤·윙크) / happy(웃는 눈 ^^). 효과(하트·음표·물방울)는 아래 FX_IMAGES
 //   - 얼굴 종류: default(기본) / smile(웃음, 바질은 기본 얼굴이 웃음이라 기본으로 대체) / neutral(무표정) / tear(눈물) / cry(더 슬픈 눈물, 메리골드) / surprise(놀람, 바질: 입 고정 + 큰 눈, 깜빡임은 비정기)
 //   - 눈 상태(open·half·closed)로 깜빡이고, tear는 눈물 3프레임(t1→t2→t3)이 흐름
 //   - 표정 이름(Expression)은 getFaceKind()로 얼굴 종류에 연결
@@ -31,134 +33,212 @@ export const FACE_SETS: Record<PlantType, Partial<Record<FaceKind, FaceSet>> & {
   basil: {
     default: {
       layers: {
-        open: require('../assets/images/characters/face_v2/basil_open.png'),
-        half: require('../assets/images/characters/face_v2/basil_half.png'),
-        closed: require('../assets/images/characters/face_v2/basil_closed.png'),
+        open: require('../assets/images/characters/face_v2/basil/layers/basil_open.png'),
+        half: require('../assets/images/characters/face_v2/basil/layers/basil_half.png'),
+        closed: require('../assets/images/characters/face_v2/basil/layers/basil_closed.png'),
       },
       overlays: {
-        open: require('../assets/images/characters/face_v2/basil_overlay_open.png'),
-        half: require('../assets/images/characters/face_v2/basil_overlay_half.png'),
-        closed: require('../assets/images/characters/face_v2/basil_overlay_closed.png'),
+        open: require('../assets/images/characters/face_v2/basil/overlays/basil_overlay_open.png'),
+        half: require('../assets/images/characters/face_v2/basil/overlays/basil_overlay_half.png'),
+        closed: require('../assets/images/characters/face_v2/basil/overlays/basil_overlay_closed.png'),
       },
     },
+    wink: {
+      layers: { open: require('../assets/images/characters/face_v2/basil/layers/basil_wink_open.png'), half: require('../assets/images/characters/face_v2/basil/layers/basil_wink_half.png'), closed: require('../assets/images/characters/face_v2/basil/layers/basil_wink_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/basil/overlays/basil_wink_overlay_open.png'), half: require('../assets/images/characters/face_v2/basil/overlays/basil_wink_overlay_half.png'), closed: require('../assets/images/characters/face_v2/basil/overlays/basil_wink_overlay_closed.png') },
+    },
+    happy: {
+      layers: { open: require('../assets/images/characters/face_v2/basil/layers/basil_happy_open.png'), half: require('../assets/images/characters/face_v2/basil/layers/basil_happy_half.png'), closed: require('../assets/images/characters/face_v2/basil/layers/basil_happy_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/basil/overlays/basil_happy_overlay_open.png'), half: require('../assets/images/characters/face_v2/basil/overlays/basil_happy_overlay_half.png'), closed: require('../assets/images/characters/face_v2/basil/overlays/basil_happy_overlay_closed.png') },
+    },
+    sleep: {
+      layers: { open: require('../assets/images/characters/face_v2/basil/layers/basil_sleep_open.png'), half: require('../assets/images/characters/face_v2/basil/layers/basil_sleep_half.png'), closed: require('../assets/images/characters/face_v2/basil/layers/basil_sleep_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/basil/overlays/basil_sleep_overlay_open.png'), half: require('../assets/images/characters/face_v2/basil/overlays/basil_sleep_overlay_half.png'), closed: require('../assets/images/characters/face_v2/basil/overlays/basil_sleep_overlay_closed.png') },
+    },
     neutral: {
-      layers: { open: require('../assets/images/characters/face_v2/basil_neutral_open.png'), half: require('../assets/images/characters/face_v2/basil_neutral_half.png'), closed: require('../assets/images/characters/face_v2/basil_neutral_closed.png') },
-      overlays: { open: require('../assets/images/characters/face_v2/basil_neutral_overlay_open.png'), half: require('../assets/images/characters/face_v2/basil_neutral_overlay_half.png'), closed: require('../assets/images/characters/face_v2/basil_neutral_overlay_closed.png') },
+      layers: { open: require('../assets/images/characters/face_v2/basil/layers/basil_neutral_open.png'), half: require('../assets/images/characters/face_v2/basil/layers/basil_neutral_half.png'), closed: require('../assets/images/characters/face_v2/basil/layers/basil_neutral_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/basil/overlays/basil_neutral_overlay_open.png'), half: require('../assets/images/characters/face_v2/basil/overlays/basil_neutral_overlay_half.png'), closed: require('../assets/images/characters/face_v2/basil/overlays/basil_neutral_overlay_closed.png') },
     },
     tear: {
       layers: {
-        open: require('../assets/images/characters/face_v2/basil_tear_open.png'),
-        half: require('../assets/images/characters/face_v2/basil_tear_half.png'),
-        closed: require('../assets/images/characters/face_v2/basil_tear_closed.png'),
+        open: require('../assets/images/characters/face_v2/basil/layers/basil_tear_open.png'),
+        half: require('../assets/images/characters/face_v2/basil/layers/basil_tear_half.png'),
+        closed: require('../assets/images/characters/face_v2/basil/layers/basil_tear_closed.png'),
       },
       overlays: {
-        open: require('../assets/images/characters/face_v2/basil_tear_overlay_open.png'),
-        half: require('../assets/images/characters/face_v2/basil_tear_overlay_half.png'),
-        closed: require('../assets/images/characters/face_v2/basil_tear_overlay_closed.png'),
+        open: require('../assets/images/characters/face_v2/basil/overlays/basil_tear_overlay_open.png'),
+        half: require('../assets/images/characters/face_v2/basil/overlays/basil_tear_overlay_half.png'),
+        closed: require('../assets/images/characters/face_v2/basil/overlays/basil_tear_overlay_closed.png'),
       },
       tears: {
-        layers: [require('../assets/images/characters/face_v2/basil_tear_t1.png'), require('../assets/images/characters/face_v2/basil_tear_t2.png'), require('../assets/images/characters/face_v2/basil_tear_t3.png')],
-        overlays: [require('../assets/images/characters/face_v2/basil_tear_overlay_t1.png'), require('../assets/images/characters/face_v2/basil_tear_overlay_t2.png'), require('../assets/images/characters/face_v2/basil_tear_overlay_t3.png')],
+        layers: [require('../assets/images/characters/face_v2/basil/layers/basil_tear_t1.png'), require('../assets/images/characters/face_v2/basil/layers/basil_tear_t2.png'), require('../assets/images/characters/face_v2/basil/layers/basil_tear_t3.png')],
+        overlays: [require('../assets/images/characters/face_v2/basil/overlays/basil_tear_overlay_t1.png'), require('../assets/images/characters/face_v2/basil/overlays/basil_tear_overlay_t2.png'), require('../assets/images/characters/face_v2/basil/overlays/basil_tear_overlay_t3.png')],
       },
     },
     surprise: {
-      layers: { open: require('../assets/images/characters/face_v2/basil_surprise_open.png'), half: require('../assets/images/characters/face_v2/basil_surprise_half.png'), closed: require('../assets/images/characters/face_v2/basil_surprise_closed.png') },
-      overlays: { open: require('../assets/images/characters/face_v2/basil_surprise_overlay_open.png'), half: require('../assets/images/characters/face_v2/basil_surprise_overlay_half.png'), closed: require('../assets/images/characters/face_v2/basil_surprise_overlay_closed.png') },
+      layers: { open: require('../assets/images/characters/face_v2/basil/layers/basil_surprise_open.png'), half: require('../assets/images/characters/face_v2/basil/layers/basil_surprise_half.png'), closed: require('../assets/images/characters/face_v2/basil/layers/basil_surprise_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/basil/overlays/basil_surprise_overlay_open.png'), half: require('../assets/images/characters/face_v2/basil/overlays/basil_surprise_overlay_half.png'), closed: require('../assets/images/characters/face_v2/basil/overlays/basil_surprise_overlay_closed.png') },
     },
   },
   tomato: {
     default: {
       layers: {
-        open: require('../assets/images/characters/face_v2/tomato_open.png'),
-        half: require('../assets/images/characters/face_v2/tomato_half.png'),
-        closed: require('../assets/images/characters/face_v2/tomato_closed.png'),
+        open: require('../assets/images/characters/face_v2/tomato/layers/tomato_open.png'),
+        half: require('../assets/images/characters/face_v2/tomato/layers/tomato_half.png'),
+        closed: require('../assets/images/characters/face_v2/tomato/layers/tomato_closed.png'),
       },
       overlays: {
-        open: require('../assets/images/characters/face_v2/tomato_overlay_open.png'),
-        half: require('../assets/images/characters/face_v2/tomato_overlay_half.png'),
-        closed: require('../assets/images/characters/face_v2/tomato_overlay_closed.png'),
+        open: require('../assets/images/characters/face_v2/tomato/overlays/tomato_overlay_open.png'),
+        half: require('../assets/images/characters/face_v2/tomato/overlays/tomato_overlay_half.png'),
+        closed: require('../assets/images/characters/face_v2/tomato/overlays/tomato_overlay_closed.png'),
       },
+    },
+    wink: {
+      layers: { open: require('../assets/images/characters/face_v2/tomato/layers/tomato_wink_open.png'), half: require('../assets/images/characters/face_v2/tomato/layers/tomato_wink_half.png'), closed: require('../assets/images/characters/face_v2/tomato/layers/tomato_wink_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/tomato/overlays/tomato_wink_overlay_open.png'), half: require('../assets/images/characters/face_v2/tomato/overlays/tomato_wink_overlay_half.png'), closed: require('../assets/images/characters/face_v2/tomato/overlays/tomato_wink_overlay_closed.png') },
+    },
+    happy: {
+      layers: { open: require('../assets/images/characters/face_v2/tomato/layers/tomato_happy_open.png'), half: require('../assets/images/characters/face_v2/tomato/layers/tomato_happy_half.png'), closed: require('../assets/images/characters/face_v2/tomato/layers/tomato_happy_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/tomato/overlays/tomato_happy_overlay_open.png'), half: require('../assets/images/characters/face_v2/tomato/overlays/tomato_happy_overlay_half.png'), closed: require('../assets/images/characters/face_v2/tomato/overlays/tomato_happy_overlay_closed.png') },
+    },
+    sleep: {
+      layers: { open: require('../assets/images/characters/face_v2/tomato/layers/tomato_sleep_open.png'), half: require('../assets/images/characters/face_v2/tomato/layers/tomato_sleep_half.png'), closed: require('../assets/images/characters/face_v2/tomato/layers/tomato_sleep_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/tomato/overlays/tomato_sleep_overlay_open.png'), half: require('../assets/images/characters/face_v2/tomato/overlays/tomato_sleep_overlay_half.png'), closed: require('../assets/images/characters/face_v2/tomato/overlays/tomato_sleep_overlay_closed.png') },
     },
     neutral: {
       layers: {
-        open: require('../assets/images/characters/face_v2/tomato_neutral_open.png'),
-        half: require('../assets/images/characters/face_v2/tomato_neutral_half.png'),
-        closed: require('../assets/images/characters/face_v2/tomato_neutral_closed.png'),
+        open: require('../assets/images/characters/face_v2/tomato/layers/tomato_neutral_open.png'),
+        half: require('../assets/images/characters/face_v2/tomato/layers/tomato_neutral_half.png'),
+        closed: require('../assets/images/characters/face_v2/tomato/layers/tomato_neutral_closed.png'),
       },
       overlays: {
-        open: require('../assets/images/characters/face_v2/tomato_neutral_overlay_open.png'),
-        half: require('../assets/images/characters/face_v2/tomato_neutral_overlay_half.png'),
-        closed: require('../assets/images/characters/face_v2/tomato_neutral_overlay_closed.png'),
+        open: require('../assets/images/characters/face_v2/tomato/overlays/tomato_neutral_overlay_open.png'),
+        half: require('../assets/images/characters/face_v2/tomato/overlays/tomato_neutral_overlay_half.png'),
+        closed: require('../assets/images/characters/face_v2/tomato/overlays/tomato_neutral_overlay_closed.png'),
       },
     },
     tear: {
       layers: {
-        open: require('../assets/images/characters/face_v2/tomato_tear_open.png'),
-        half: require('../assets/images/characters/face_v2/tomato_tear_half.png'),
-        closed: require('../assets/images/characters/face_v2/tomato_tear_closed.png'),
+        open: require('../assets/images/characters/face_v2/tomato/layers/tomato_tear_open.png'),
+        half: require('../assets/images/characters/face_v2/tomato/layers/tomato_tear_half.png'),
+        closed: require('../assets/images/characters/face_v2/tomato/layers/tomato_tear_closed.png'),
       },
       overlays: {
-        open: require('../assets/images/characters/face_v2/tomato_tear_overlay_open.png'),
-        half: require('../assets/images/characters/face_v2/tomato_tear_overlay_half.png'),
-        closed: require('../assets/images/characters/face_v2/tomato_tear_overlay_closed.png'),
+        open: require('../assets/images/characters/face_v2/tomato/overlays/tomato_tear_overlay_open.png'),
+        half: require('../assets/images/characters/face_v2/tomato/overlays/tomato_tear_overlay_half.png'),
+        closed: require('../assets/images/characters/face_v2/tomato/overlays/tomato_tear_overlay_closed.png'),
       },
       tears: {
-        layers: [require('../assets/images/characters/face_v2/tomato_tear_t1.png'), require('../assets/images/characters/face_v2/tomato_tear_t2.png'), require('../assets/images/characters/face_v2/tomato_tear_t3.png')],
-        overlays: [require('../assets/images/characters/face_v2/tomato_tear_overlay_t1.png'), require('../assets/images/characters/face_v2/tomato_tear_overlay_t2.png'), require('../assets/images/characters/face_v2/tomato_tear_overlay_t3.png')],
+        layers: [require('../assets/images/characters/face_v2/tomato/layers/tomato_tear_t1.png'), require('../assets/images/characters/face_v2/tomato/layers/tomato_tear_t2.png'), require('../assets/images/characters/face_v2/tomato/layers/tomato_tear_t3.png')],
+        overlays: [require('../assets/images/characters/face_v2/tomato/overlays/tomato_tear_overlay_t1.png'), require('../assets/images/characters/face_v2/tomato/overlays/tomato_tear_overlay_t2.png'), require('../assets/images/characters/face_v2/tomato/overlays/tomato_tear_overlay_t3.png')],
       },
     },
   },
   marigold: {
     default: {
       layers: {
-        open: require('../assets/images/characters/face_v2/marigold_open.png'),
-        half: require('../assets/images/characters/face_v2/marigold_half.png'),
-        closed: require('../assets/images/characters/face_v2/marigold_closed.png'),
+        open: require('../assets/images/characters/face_v2/marigold/layers/marigold_open.png'),
+        half: require('../assets/images/characters/face_v2/marigold/layers/marigold_half.png'),
+        closed: require('../assets/images/characters/face_v2/marigold/layers/marigold_closed.png'),
       },
       overlays: {
-        open: require('../assets/images/characters/face_v2/marigold_overlay_open.png'),
-        half: require('../assets/images/characters/face_v2/marigold_overlay_half.png'),
-        closed: require('../assets/images/characters/face_v2/marigold_overlay_closed.png'),
+        open: require('../assets/images/characters/face_v2/marigold/overlays/marigold_overlay_open.png'),
+        half: require('../assets/images/characters/face_v2/marigold/overlays/marigold_overlay_half.png'),
+        closed: require('../assets/images/characters/face_v2/marigold/overlays/marigold_overlay_closed.png'),
       },
+    },
+    wink: {
+      layers: { open: require('../assets/images/characters/face_v2/marigold/layers/marigold_wink_open.png'), half: require('../assets/images/characters/face_v2/marigold/layers/marigold_wink_half.png'), closed: require('../assets/images/characters/face_v2/marigold/layers/marigold_wink_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/marigold/overlays/marigold_wink_overlay_open.png'), half: require('../assets/images/characters/face_v2/marigold/overlays/marigold_wink_overlay_half.png'), closed: require('../assets/images/characters/face_v2/marigold/overlays/marigold_wink_overlay_closed.png') },
+    },
+    happy: {
+      layers: { open: require('../assets/images/characters/face_v2/marigold/layers/marigold_happy_open.png'), half: require('../assets/images/characters/face_v2/marigold/layers/marigold_happy_half.png'), closed: require('../assets/images/characters/face_v2/marigold/layers/marigold_happy_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/marigold/overlays/marigold_happy_overlay_open.png'), half: require('../assets/images/characters/face_v2/marigold/overlays/marigold_happy_overlay_half.png'), closed: require('../assets/images/characters/face_v2/marigold/overlays/marigold_happy_overlay_closed.png') },
+    },
+    sleep: {
+      layers: { open: require('../assets/images/characters/face_v2/marigold/layers/marigold_sleep_open.png'), half: require('../assets/images/characters/face_v2/marigold/layers/marigold_sleep_half.png'), closed: require('../assets/images/characters/face_v2/marigold/layers/marigold_sleep_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/marigold/overlays/marigold_sleep_overlay_open.png'), half: require('../assets/images/characters/face_v2/marigold/overlays/marigold_sleep_overlay_half.png'), closed: require('../assets/images/characters/face_v2/marigold/overlays/marigold_sleep_overlay_closed.png') },
     },
     neutral: {
       layers: {
-        open: require('../assets/images/characters/face_v2/marigold_neutral_open.png'),
-        half: require('../assets/images/characters/face_v2/marigold_neutral_half.png'),
-        closed: require('../assets/images/characters/face_v2/marigold_neutral_closed.png'),
+        open: require('../assets/images/characters/face_v2/marigold/layers/marigold_neutral_open.png'),
+        half: require('../assets/images/characters/face_v2/marigold/layers/marigold_neutral_half.png'),
+        closed: require('../assets/images/characters/face_v2/marigold/layers/marigold_neutral_closed.png'),
       },
       overlays: {
-        open: require('../assets/images/characters/face_v2/marigold_neutral_overlay_open.png'),
-        half: require('../assets/images/characters/face_v2/marigold_neutral_overlay_half.png'),
-        closed: require('../assets/images/characters/face_v2/marigold_neutral_overlay_closed.png'),
+        open: require('../assets/images/characters/face_v2/marigold/overlays/marigold_neutral_overlay_open.png'),
+        half: require('../assets/images/characters/face_v2/marigold/overlays/marigold_neutral_overlay_half.png'),
+        closed: require('../assets/images/characters/face_v2/marigold/overlays/marigold_neutral_overlay_closed.png'),
       },
     },
     tear: {
       layers: {
-        open: require('../assets/images/characters/face_v2/marigold_tear_open.png'),
-        half: require('../assets/images/characters/face_v2/marigold_tear_half.png'),
-        closed: require('../assets/images/characters/face_v2/marigold_tear_closed.png'),
+        open: require('../assets/images/characters/face_v2/marigold/layers/marigold_tear_open.png'),
+        half: require('../assets/images/characters/face_v2/marigold/layers/marigold_tear_half.png'),
+        closed: require('../assets/images/characters/face_v2/marigold/layers/marigold_tear_closed.png'),
       },
       overlays: {
-        open: require('../assets/images/characters/face_v2/marigold_tear_overlay_open.png'),
-        half: require('../assets/images/characters/face_v2/marigold_tear_overlay_half.png'),
-        closed: require('../assets/images/characters/face_v2/marigold_tear_overlay_closed.png'),
+        open: require('../assets/images/characters/face_v2/marigold/overlays/marigold_tear_overlay_open.png'),
+        half: require('../assets/images/characters/face_v2/marigold/overlays/marigold_tear_overlay_half.png'),
+        closed: require('../assets/images/characters/face_v2/marigold/overlays/marigold_tear_overlay_closed.png'),
       },
       tears: {
-        layers: [require('../assets/images/characters/face_v2/marigold_tear_t1.png'), require('../assets/images/characters/face_v2/marigold_tear_t2.png'), require('../assets/images/characters/face_v2/marigold_tear_t3.png')],
-        overlays: [require('../assets/images/characters/face_v2/marigold_tear_overlay_t1.png'), require('../assets/images/characters/face_v2/marigold_tear_overlay_t2.png'), require('../assets/images/characters/face_v2/marigold_tear_overlay_t3.png')],
+        layers: [require('../assets/images/characters/face_v2/marigold/layers/marigold_tear_t1.png'), require('../assets/images/characters/face_v2/marigold/layers/marigold_tear_t2.png'), require('../assets/images/characters/face_v2/marigold/layers/marigold_tear_t3.png')],
+        overlays: [require('../assets/images/characters/face_v2/marigold/overlays/marigold_tear_overlay_t1.png'), require('../assets/images/characters/face_v2/marigold/overlays/marigold_tear_overlay_t2.png'), require('../assets/images/characters/face_v2/marigold/overlays/marigold_tear_overlay_t3.png')],
       },
     },
     cry: {
-      layers: { open: require('../assets/images/characters/face_v2/marigold_cry_open.png'), half: require('../assets/images/characters/face_v2/marigold_cry_half.png'), closed: require('../assets/images/characters/face_v2/marigold_cry_closed.png') },
-      overlays: { open: require('../assets/images/characters/face_v2/marigold_cry_overlay_open.png'), half: require('../assets/images/characters/face_v2/marigold_cry_overlay_half.png'), closed: require('../assets/images/characters/face_v2/marigold_cry_overlay_closed.png') },
+      layers: { open: require('../assets/images/characters/face_v2/marigold/layers/marigold_cry_open.png'), half: require('../assets/images/characters/face_v2/marigold/layers/marigold_cry_half.png'), closed: require('../assets/images/characters/face_v2/marigold/layers/marigold_cry_closed.png') },
+      overlays: { open: require('../assets/images/characters/face_v2/marigold/overlays/marigold_cry_overlay_open.png'), half: require('../assets/images/characters/face_v2/marigold/overlays/marigold_cry_overlay_half.png'), closed: require('../assets/images/characters/face_v2/marigold/overlays/marigold_cry_overlay_closed.png') },
       tears: {
-        layers: [require('../assets/images/characters/face_v2/marigold_cry_t1.png'), require('../assets/images/characters/face_v2/marigold_cry_t2.png'), require('../assets/images/characters/face_v2/marigold_cry_t3.png')],
-        overlays: [require('../assets/images/characters/face_v2/marigold_cry_overlay_t1.png'), require('../assets/images/characters/face_v2/marigold_cry_overlay_t2.png'), require('../assets/images/characters/face_v2/marigold_cry_overlay_t3.png')],
+        layers: [require('../assets/images/characters/face_v2/marigold/layers/marigold_cry_t1.png'), require('../assets/images/characters/face_v2/marigold/layers/marigold_cry_t2.png'), require('../assets/images/characters/face_v2/marigold/layers/marigold_cry_t3.png')],
+        overlays: [require('../assets/images/characters/face_v2/marigold/overlays/marigold_cry_overlay_t1.png'), require('../assets/images/characters/face_v2/marigold/overlays/marigold_cry_overlay_t2.png'), require('../assets/images/characters/face_v2/marigold/overlays/marigold_cry_overlay_t3.png')],
       },
     },
   },
 };
+
+// 터치 반응 효과 이미지 (846×1254 레이어 캔버스, 얼굴·화분과 위치 정렬). 프레임 순서대로 재생해서 하트·음표가 위로 올라가고 물방울이 떨어진다.
+export interface FxFrames { heart: any[]; note: any[] }
+const fxFrames = (heart: any[], note: any[]): FxFrames => ({ heart, note });
+export const FX_IMAGES: Record<PlantType, FxFrames> = {
+  basil: fxFrames(
+    [require('../assets/images/characters/face_v2/fx/fx_basil_heart_1.png'), require('../assets/images/characters/face_v2/fx/fx_basil_heart_2.png'), require('../assets/images/characters/face_v2/fx/fx_basil_heart_3.png')],
+    [require('../assets/images/characters/face_v2/fx/fx_basil_note_1.png'), require('../assets/images/characters/face_v2/fx/fx_basil_note_2.png'), require('../assets/images/characters/face_v2/fx/fx_basil_note_3.png')],
+  ),
+  tomato: fxFrames(
+    [require('../assets/images/characters/face_v2/fx/fx_tomato_heart_1.png'), require('../assets/images/characters/face_v2/fx/fx_tomato_heart_2.png'), require('../assets/images/characters/face_v2/fx/fx_tomato_heart_3.png')],
+    [require('../assets/images/characters/face_v2/fx/fx_tomato_note_1.png'), require('../assets/images/characters/face_v2/fx/fx_tomato_note_2.png'), require('../assets/images/characters/face_v2/fx/fx_tomato_note_3.png')],
+  ),
+  marigold: fxFrames(
+    [require('../assets/images/characters/face_v2/fx/fx_marigold_heart_1.png'), require('../assets/images/characters/face_v2/fx/fx_marigold_heart_2.png'), require('../assets/images/characters/face_v2/fx/fx_marigold_heart_3.png')],
+    [require('../assets/images/characters/face_v2/fx/fx_marigold_note_1.png'), require('../assets/images/characters/face_v2/fx/fx_marigold_note_2.png'), require('../assets/images/characters/face_v2/fx/fx_marigold_note_3.png')],
+  ),
+};
+// 사진으로 만든 캐릭터 위에 효과(하트·음표·물방울)를 올릴 때 쓰는 기준점.
+// 효과 이미지는 846×1254 레이어 캔버스 기준이라, 캔버스 안 '기본 얼굴 가운데'(CANVAS_FACE_CENTER)를 사진 캐릭터의 얼굴 위치에 맞추고,
+// 얼굴 오버레이(500×500, 폭 OVERLAY_W)와 같은 비율로 줄여서 놓는다. (build_faces.py의 default_center를 캔버스 좌표로 옮긴 값)
+export const CANVAS_FACE_CENTER: Record<PlantType, { x: number; y: number }> = {
+  basil:    { x: 430.5, y: 1016.8 },
+  tomato:   { x: 430.5, y: 1054.0 },
+  marigold: { x: 430.5, y: 1009.3 },
+};
+/** 500×500 얼굴 이미지 1px이 레이어 캔버스에서 차지하는 px (pot.png → 캔버스 변환 배율) */
+export const CANVAS_PER_FACE_PX = 641 / 430;
+
+/** 자는 얼굴(밤 12시~새벽 6시)의 Z: 작은 z → 두 개 → 큰 Z 두 개로 올라감 (식물 공통) */
+export const Z_FRAMES: any[] = [
+  require('../assets/images/characters/face_v2/fx/fx_z_1.png'),
+  require('../assets/images/characters/face_v2/fx/fx_z_2.png'),
+  require('../assets/images/characters/face_v2/fx/fx_z_3.png'),
+];
+
+/** 물방울: 떨어짐 → 화분에 닿아 튐 → 물결 (식물 공통) */
+export const DROP_FRAMES: any[] = [
+  require('../assets/images/characters/face_v2/fx/fx_drop_1.png'),
+  require('../assets/images/characters/face_v2/fx/fx_drop_2.png'),
+  require('../assets/images/characters/face_v2/fx/fx_drop_3.png'),
+];
 
 /** 표정 → 얼굴 종류. 그 식물에 없는 얼굴이면 cry는 눈물, 나머지는 웃는 얼굴로 대체한다 */
 export function getFaceKind(plantType: PlantType, expression?: Expression): FaceKind {

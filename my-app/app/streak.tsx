@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { router } from 'expo-router';
-import { COLORS, FONTS, fs } from '../constants';
+import { COLORS, FONTS, fs, BTN_H, BTN_FONT, FONT_SIZE } from '../constants';
 import { storage } from '../store/storage';
 import FaceOverlay from '../components/common/BlinkingFace';
 import PlantCharacter from '../components/common/PlantCharacter';
@@ -45,7 +45,7 @@ function hasFinalConsonant(word: string): boolean {
 
 type DayStatus = 'done' | 'missed' | 'future';
 
-const ICON_COLOR = '#303a1e';
+const ICON_COLOR = COLORS.borderDark;
 
 function CheckIcon() {
   return (
@@ -272,7 +272,7 @@ const PLANT_BASE_W = 190;
 const PLANT_BASE_H = 283;
 const GAP_BASE = 50;
 const TRACKER_H = 28 + 4 + fs(22);
-const CTA_H = 48;               // 채팅의 '홈으로 돌아가기' 버튼과 같은 높이
+const CTA_H = BTN_H;           // 채팅의 '홈으로 돌아가기' 버튼과 같은 높이
 const GEN_RATIO = 1.2;          // AI 사진 캐릭터(정사각형)를 캐릭터 영역 폭의 몇 배로 그릴지
 
 const styles = StyleSheet.create({
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
   // N일 연속 관리 중! 28px Heavy, 줄높이 45
   streakLabel: {
     fontFamily: FONTS.heavy,
-    fontSize: fs(28),
+    fontSize: fs(FONT_SIZE.display),
     lineHeight: fs(45),
     color: COLORS.pine,
     textAlign: 'center',
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
   // 함께한 지 N일째 15px, 줄높이 45
   together: {
     fontFamily: FONTS.bold,
-    fontSize: fs(15),
+    fontSize: fs(FONT_SIZE.bodyL),
     lineHeight: fs(45),
     color: COLORS.pine,
     textAlign: 'center',
@@ -321,9 +321,9 @@ const styles = StyleSheet.create({
   dayIconFuture: { backgroundColor: COLORS.bg, borderColor: COLORS.line },
   dayLabel: {
     fontFamily: FONTS.bold,
-    fontSize: fs(13),
+    fontSize: fs(FONT_SIZE.body),
     lineHeight: fs(22),
-    color: '#191C1B',
+    color: COLORS.textInk,
   },
 
   // 하단 버튼: 채팅의 '홈으로 돌아가기'와 같은 크기·위치 (좌우 16, 높이 48)
@@ -334,19 +334,19 @@ const styles = StyleSheet.create({
     height: CTA_H,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#303a1e',
+    borderColor: COLORS.borderDark,
     backgroundColor: COLORS.lime,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#101828',
+    shadowColor: COLORS.shadow,
     shadowOpacity: 0.05,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
   },
   ctaText: {
     fontFamily: FONTS.bold,
-    fontSize: fs(16),
+    fontSize: fs(BTN_FONT),
     lineHeight: fs(22),
-    color: '#191C1B',
+    color: COLORS.textInk,
   },
 });

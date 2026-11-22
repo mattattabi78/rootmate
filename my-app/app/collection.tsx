@@ -14,7 +14,7 @@ import {
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
-import { COLORS, FONTS, fs, ui } from '../constants';
+import { COLORS, FONTS, fs, ui, BTN_H, BTN_FONT, FONT_SIZE } from '../constants';
 import { storage } from '../store/storage';
 import TopAppBar from '../components/common/TopAppBar';
 import FitToScreen from '../components/common/FitToScreen';
@@ -37,11 +37,14 @@ const CANVAS_W = 846;               // 캐릭터 레이어 캔버스 폭 (높이
 // Figma 덱 수치 (402x874 프레임)
 // Figma 덱 수치 (402x874 프레임, 본문은 y=69부터)
 // 카드 크기는 작은 화면에서 글자와 같은 비율(ui)로 줄임 (큰 화면에서는 ui(n) = n)
-const CHAR_W = 120;   // 카드 앞면 아치 속 캐릭터 영역 폭 (높이는 폭 × 5/3)
-const CARD_W = ui(240);
-const CARD_H = ui(360);
-const SIDE_W = ui(167);
-const SIDE_H = ui(250);
+const CS = 0.85;      // 카드 전체 크기 배율 (비율 유지). 카드 안의 길이는 모두 cu()로 줄임
+const cu = (n: number) => ui(n * CS);
+const CHAR_W = 120 * 0.95;   // 카드 속 캐릭터 폭 (카드 배율 0.85보다 한 단계 크게)
+const CHAR_DROP = cu(6);     // 캐릭터를 아치 창 가운데보다 살짝 아래로   // 카드 앞면 아치 속 캐릭터 영역 폭 (높이는 폭 × 5/3)
+const CARD_W = cu(240);
+const CARD_H = cu(360);
+const SIDE_W = cu(167);
+const SIDE_H = cu(250);
 // 카드 덱의 세로 배치: 카드(+ 간격 + 더 알아보기) 묶음을 본문 영역의 세로 가운데에 둔다.
 // 그래서 "헤더 ~ 카드 위"와 "더 알아보기 아래 ~ 하단 탭바"의 여백이 어떤 화면 높이에서도 항상 같다.
 // 글자가 들어 있는 카드와 더 알아보기는 크기를 줄이지 않고, 남는 높이에 따라 카드↔더 알아보기 간격(GAP)만 55 ~ 18 사이에서 조정한다.
@@ -54,8 +57,8 @@ const DECK_MIN_H = DECK_MARGIN_MIN + CARD_H + DECK_GAP_MIN + MORE_H + DECK_MARGI
 const SWIPE_THRESHOLD = 60;
 const SWIPE_OUT = 360;       // 메인 카드가 완전히 나가는 이동량(px). 이때 뒤 카드가 중앙의 메인 자리에 도착함
 const BACK_TO_MAIN = CARD_W / SIDE_W;   // 뒤 카드가 메인 카드 크기가 되는 확대 배율
-const SIDE_CENTER_L = ui(63);     // 뒤 카드 중심의 기본 위치 (프레임 중앙 기준, 왼쪽 −63 / 오른쪽 +54) — 중앙으로 올 때 이동량
-const SIDE_CENTER_R = ui(54);
+const SIDE_CENTER_L = cu(63);     // 뒤 카드 중심의 기본 위치 (프레임 중앙 기준, 왼쪽 −63 / 오른쪽 +54) — 중앙으로 올 때 이동량
+const SIDE_CENTER_R = cu(54);
 const ARROW_D = 'M19.8273 0.0101666C20.387 -0.0260831 20.6271 0.018287 21.0594 0.415336C22.327 1.58042 23.5272 2.83801 24.7434 4.05886C27.1892 6.48735 29.5983 8.95208 31.9694 11.4521L32 13.0534C30.7238 14.6411 21.4783 25.8289 20.8953 25.9637C20.7287 26.0023 20.316 26.0296 20.18 25.9406C19.5787 25.5463 16.6626 22.6078 16.5732 22.0076C16.3846 20.7372 19.0288 18.4632 19.8004 17.4271L19.9902 17.1574L19.9228 17.0212C19.0839 16.9199 14.8291 16.9873 13.7991 16.9815L0.306174 16.879C-0.0343036 15.4693 -0.112673 10.7785 0.182489 9.34526L20.0098 8.93571C15.6901 3.62725 14.1702 5.62196 19.8273 0.0101666Z';
 
 // 받침이 있으면 true (을/를 구분용)
@@ -65,42 +68,46 @@ function hasFinalConsonant(word: string): boolean {
 }
 
 // ─── 카드 한 장 (앞면 / 뒷면) ───────────────────────────────────────
-// 카드 크기 CARD_W×CARD_H 기준 좌표. 키운 적 있는 식물은 모두 초록 테마(파스텔 연두 배경 + 진한 초록 포인트색), 키운 적 없는 식물은 회색 테마.
-const GREEN_THEME = { bg: '#D6F2A0', accent: '#286905', soft: '#EEF9D5' };
-const LOCKED_THEME = { bg: '#E6E6E6', accent: LOCKED_GRAY, soft: '#F5F5F5' };
+// 카드 크기 CARD_W×CARD_H 기준 좌표. 카드 바탕은 흰색 단색.
+// 식물별 색: 앱에서 이미 쓰던 색 중, 다 자란 모습의 대표색(바질 잎 #2F9305 / 토마토 열매 #CF290D / 메리골드 꽃 #F17001)과 가장 비슷한 색을 골라
+//   불투명도만 바꿔서 쓴다 (색 자체는 그대로).
+//   바질 #7AB10B(활성 탭 초록) / 토마토 #D93025(빨강) / 메리골드 #FF8E47(해 아이콘 주황) — constants/colors.ts, PlantDetailView 등에서 쓰는 색
+//   soft(뒷면 본문 상자) = 15% 불투명도. 글자·자물쇠(text)는 같은 색에서 명도만 살짝 낮춘 색(RGB × 0.8). 앞면 이름은 이름표 배경 없이 글자만.
+// 키운 적 있든 없든 같은 색이고, 안 키운 식물은 자물쇠·씨앗 단계 캐릭터로 구분한다.
+// 카드 위 도형이 겹쳐 보이지 않도록 흰 바탕 위에서의 결과를 미리 계산한 불투명 색으로 쓴다.
+const withOpacity = (hex: string, alpha: number) => {
+  const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  return '#' + c.map(v => Math.round(255 + (v - 255) * alpha).toString(16).padStart(2, '0')).join('').toUpperCase();
+};
+const darken = (hex: string, f: number) => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * f).toString(16).padStart(2, '0')).join('').toUpperCase();
+const planTheme = (base: string) => ({ text: darken(base, 0.9), soft: withOpacity(base, 0.15) });
+// text = 카드의 모든 글자·자물쇠 색, soft = 뒷면 본문 상자
+const PLANT_THEMES: Record<PlantType, { text: string; soft: string }> = {
+  basil:    planTheme(COLORS.tabActive),
+  tomato:   planTheme(COLORS.redStrong),
+  marigold: planTheme('#FF8E47'),
+};
 // 아치 창 안에서 캐릭터를 놓는 기준점: 846×1254 캐릭터 캔버스 위의 좌표가 아치 창 가운데에 오게 한다.
 // 식물마다 가운데를 따로 재면 화분 높이가 카드마다 달라 보이므로(예: 토마토가 위로 뜸), 화분이 모든 카드에서 같은 높이에 오도록
 // 식물 3종의 이미지를 합친 영역(grown = 마지막 단계, seed = 1단계)의 가운데를 공통으로 쓴다.
 // 이미지(characters/{식물}/{식물}_N.png + pot_layer.png)의 불투명 영역 bbox에서 구한 값이라, 이미지를 바꾸면 여기도 갱신한다.
 const CONTENT_CENTER: Record<'grown' | 'seed', { x: number; y: number }> = {
-  grown: { x: 430.5, y: 612.5 },   // 합친 영역: y 0 ~ 1225 (토마토가 가장 키가 큼)
-  seed:  { x: 430.5, y: 776 },     // 합친 영역: y 327 ~ 1225
+  grown: { x: 430.5, y: 614 },     // 합친 영역: y 3 ~ 1225 (토마토가 가장 키가 큼)
+  seed:  { x: 430.5, y: 942 },     // 합친 영역: y 659 ~ 1225 (씨앗·새싹은 화분 안쪽에 있음)
 };
 // 지금 키우는 식물의 현재 모습(홈 화면과 같은 캐릭터·표정)
 export interface LiveLook {
   expression: Expression;
   generated: { uri: string; facePos: { x: number; y: number } } | null;   // 사진으로 만든 캐릭터
 }
-const ARCH_W = ui(192);
-const ARCH_H = ui(248);   // 아래 이름표 윗면(360-22-44)과 12 떨어지게
-const BOX_W = CARD_W - ui(32);   // 뒷면 본문 상자
-const BOX_H = CARD_H - ui(122);
-
-// 배경 물방울 무늬 (연하게)
-function Dots({ color }: { color: string }) {
-  const dots = [];
-  const step = ui(20);
-  for (let y = 0, r = 0; y < CARD_H + step; y += step, r++) {
-    for (let x = (r % 2) * (step / 2); x < CARD_W + step; x += step) {
-      dots.push(<Circle key={`${x}-${y}`} cx={x} cy={y} r={ui(2.2)} fill={color} />);
-    }
-  }
-  return <Svg width={CARD_W} height={CARD_H} style={StyleSheet.absoluteFill} pointerEvents="none">{dots}</Svg>;
-}
+const ARCH_W = cu(192);
+const ARCH_H = cu(248);   // 아래 이름표 윗면(360-22-44)과 12 떨어지게
+const BOX_W = CARD_W - cu(32);   // 뒷면 본문 상자
+const BOX_H = cu(208);   // 뒷면 본문 상자 높이: 가장 긴 바질 소개(약 5줄) + 재배 기간 2줄이 들어가는 크기에 맞춤. 상자 아래 간격(22)은 그대로
 
 // 가장자리가 볼록볼록한 상자 배경 (참고 카드의 본문 상자)
 function ScallopBox({ w, h, fill }: { w: number; h: number; fill: string }) {
-  const b = ui(6);
+  const b = cu(6);
   const nx = Math.max(2, Math.round((w - 2 * b) / (2 * b)));
   const ny = Math.max(2, Math.round((h - 2 * b) / (2 * b)));
   const sx = (w - 2 * b) / nx;
@@ -137,20 +144,19 @@ function formatSince(iso: string): string {
 //   키운 적 없음: 씨앗 단계(1단계) / 키운 적 있음: 다 자란 모습 / 지금 키우는 식물(live): 홈 화면과 같은 현재 모습
 function CardFront({ plantType, unlocked, live }: { plantType: PlantType; unlocked: boolean; live?: LiveLook }) {
   const info = PLANT_INFO[plantType];
-  const th = unlocked ? GREEN_THEME : LOCKED_THEME;
+  const th = PLANT_THEMES[plantType];
   const k = ui(CHAR_W) / CANVAS_W;   // 캐릭터 캔버스(846 폭) → 카드 속 크기 배율
   const showGenerated = !!live?.generated;
   const seed = !unlocked || !!live;   // 씨앗 단계 기본 캐릭터를 쓰는 경우
   const center = CONTENT_CENTER[seed ? 'seed' : 'grown'];
   const GEN = ui(CHAR_W) * 1.4;       // 사진 캐릭터(정사각형) 크기
   return (
-    <View style={[styles.faceFill, { backgroundColor: th.bg }]}>
-      <Dots color={th.soft} />
-      <Text style={[styles.cardNo, { color: th.accent }]}>No.{pad2(ALL_PLANTS.indexOf(plantType) + 1)}</Text>
-      <View style={[styles.arch, { backgroundColor: th.soft, borderColor: th.accent }]} pointerEvents="none">
+    <View style={styles.faceFill}>
+      <Text style={[styles.cardNo, { color: th.text }]}>No.{pad2(ALL_PLANTS.indexOf(plantType) + 1)}</Text>
+      <View style={styles.arch} pointerEvents="none">
         {showGenerated ? (
           // 사진으로 만든 캐릭터 + 화분 위 얼굴 (홈 화면과 같은 구성)
-          <View style={{ position: 'absolute', width: GEN, height: GEN, left: (ARCH_W - 4 - GEN) / 2, top: (ARCH_H - 4 - GEN) / 2 }}>
+          <View style={{ position: 'absolute', width: GEN, height: GEN, left: (ARCH_W - GEN) / 2, top: (ARCH_H - GEN) / 2 + CHAR_DROP }}>
             <Image source={{ uri: live!.generated!.uri }} style={{ width: GEN, height: GEN }} resizeMode="contain" />
             <FaceOverlay
               plantType={plantType}
@@ -164,7 +170,7 @@ function CardFront({ plantType, unlocked, live }: { plantType: PlantType; unlock
           </View>
         ) : (
           /* 캐릭터는 식물마다 키가 달라서 시작점을 정하지 않고, 이미지 내용(화분+식물)의 가운데가 아치 창 가운데에 오게 놓는다 */
-          <View style={{ position: 'absolute', width: ui(CHAR_W), height: ui(CHAR_W) * CHARACTER_RATIO, left: (ARCH_W - 4) / 2 - center.x * k, top: (ARCH_H - 4) / 2 - center.y * k }}>
+          <View style={{ position: 'absolute', width: ui(CHAR_W), height: ui(CHAR_W) * CHARACTER_RATIO, left: ARCH_W / 2 - center.x * k, top: ARCH_H / 2 - center.y * k + CHAR_DROP }}>
             <PlantCharacter
               plantType={plantType}
               stage={(seed ? 1 : getMaxStage(plantType)) as GrowthStage}
@@ -174,9 +180,9 @@ function CardFront({ plantType, unlocked, live }: { plantType: PlantType; unlock
           </View>
         )}
       </View>
-      <View style={[styles.banner, { backgroundColor: th.accent }]}>
-        <Text style={styles.bannerText}>{info.name}</Text>
-        {!unlocked && <LockPixelIcon color="#FFFFFF" size={16} />}
+      <View style={styles.banner}>
+        <Text style={[styles.bannerText, { color: COLORS.textPrimary }]}>{info.name}</Text>
+        {!unlocked && <LockPixelIcon color={th.text} size={16} />}
       </View>
     </View>
   );
@@ -185,28 +191,31 @@ function CardFront({ plantType, unlocked, live }: { plantType: PlantType; unlock
 // 뒷면: No. → 이름·태그라인 → 볼록볼록한 본문 상자(상세 설명, 재배 기간, 키우기 시작한 날). 모두 가운데 정렬
 function CardBack({ plantType, unlocked, since }: { plantType: PlantType; unlocked: boolean; since?: string }) {
   const info = PLANT_INFO[plantType];
-  const th = unlocked ? GREEN_THEME : LOCKED_THEME;
-  const textColor = th.accent;   // 본문 글자색도 테마색 (초록 / 회색)
-  const labelColor = unlocked ? COLORS.tabInactive : LOCKED_GRAY;
+  const th = PLANT_THEMES[plantType];
+  const textColor = COLORS.textPrimary;   // 이름·설명은 서비스 기본 글자색, 재배 기간부터 아래와 부제·No.는 포인트 컬러(th.text)
+  const labelColor = th.text;
   return (
-    <View style={[styles.faceFill, { backgroundColor: th.bg }]}>
-      <Dots color={th.soft} />
-      <Text style={[styles.cardNo, { color: th.accent }]}>No.{pad2(ALL_PLANTS.indexOf(plantType) + 1)}</Text>
+    <View style={styles.faceFill}>
+      <Text style={[styles.cardNo, { color: th.text }]}>No.{pad2(ALL_PLANTS.indexOf(plantType) + 1)}</Text>
       <View style={styles.backHead}>
-        <Text style={[styles.backName, { color: th.accent }]}>{info.name}</Text>
-        <Text style={[styles.backTagline, { color: th.accent }]}>{info.tagline}</Text>
+        <Text style={[styles.backName, { color: COLORS.textPrimary }]}>{info.name}</Text>
+        <Text style={[styles.backTagline, { color: COLORS.textPrimary }]}>{info.tagline}</Text>
       </View>
       <View style={styles.backBox}>
-        <ScallopBox w={BOX_W} h={BOX_H} fill="#FFFFFF" />
+        <ScallopBox w={BOX_W} h={BOX_H} fill={th.soft} />
         <View style={styles.backBoxInner}>
-          <Text style={[styles.backIntro, { color: textColor }]}>{info.cardIntro ?? info.intro}</Text>
+          <Text style={[styles.backIntro, { color: textColor }]} textBreakStrategy="simple">{(info.cardIntro ?? info.intro).replace(/\s*\n\s*/g, ' ')}</Text>
+          {/* 설명과 재배 기간 사이 점선 구분선 (포인트 컬러). 바깥은 높이 1로 잘라 안드로이드에서도 점선으로 보이게 함 */}
+          <View style={styles.backDivider}>
+            <View style={[styles.backDividerLine, { borderColor: th.text }]} />
+          </View>
           <View style={styles.backInfo}>
             <Text style={[styles.backInfoLine, { color: labelColor }]}>
-              재배 기간  <Text style={[styles.backInfoValue, { color: th.accent }]}>{info.totalPeriod}</Text>
+              재배 기간  <Text style={[styles.backInfoValue, { color: th.text }]}>{info.totalPeriod}</Text>
             </Text>
             {unlocked && !!since && (
               <Text style={[styles.backInfoLine, { color: labelColor }]}>
-                키우기 시작한 날  <Text style={[styles.backInfoValue, { color: th.accent }]}>{formatSince(since)}</Text>
+                키우기 시작한 날  <Text style={[styles.backInfoValue, { color: th.text }]}>{formatSince(since)}</Text>
               </Text>
             )}
           </View>
@@ -514,20 +523,15 @@ const styles = StyleSheet.create({
   // 뒤쪽 카드: 중심 (프레임 중앙 −63 / +54, y 395−69=326), 각도는 중심 기준 ±10°
   sideCard: {
     position: 'absolute',
-    top: 326 - SIDE_H / 2,
+    top: 326 * CS - SIDE_H / 2,
     width: SIDE_W,
     height: SIDE_H,
     borderRadius: 20,
     borderWidth: 1.5,
     borderColor: COLORS.line,
     backgroundColor: COLORS.bg,           // 불투명: 카드가 겹쳐도 뒤가 비쳐 보이지 않음
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 3,
   },
-  // 그림자는 바깥 카드에 두고, 안쪽 내용만 둥근 모서리로 잘라냄
+  // 안쪽 내용만 둥근 모서리로 잘라냄
   sideClip: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 18.5, overflow: 'hidden' },
   // 메인 카드 크기(240×360)로 그린 내용을 뒤 카드 크기(167×250)에 맞게 축소
   sideScaled: {
@@ -536,51 +540,51 @@ const styles = StyleSheet.create({
     left: (SIDE_W - CARD_W) / 2, top: (SIDE_H - CARD_H) / 2,
     transform: [{ scale: SIDE_W / CARD_W }],
   },
-  sideCardLeft:  { left: '50%', marginLeft: ui(-63) - SIDE_W / 2 },
-  sideCardRight: { left: '50%', marginLeft: ui(54) - SIDE_W / 2 },
+  sideCardLeft:  { left: '50%', marginLeft: cu(-63) - SIDE_W / 2 },
+  sideCardRight: { left: '50%', marginLeft: cu(54) - SIDE_W / 2 },
 
   // 메인 카드 top 215 → 146
   mainCard: { position: 'absolute', top: 146, width: CARD_W, height: CARD_H },
-  // 앞·뒷면: 겹쳐 두고 뒷면(backface)은 숨김. 그림자는 바깥, 둥근 모서리 잘라내기는 안쪽에서
+  // 앞·뒷면: 겹쳐 두고 뒷면(backface)은 숨김. 둥근 모서리 잘라내기는 안쪽에서
   faceOuter: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 20, backgroundColor: COLORS.bg,
     backfaceVisibility: 'hidden',
-    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 20, shadowOffset: { width: 0, height: 0 }, elevation: 6,
   },
   faceInner: { flex: 1, borderRadius: 20, borderWidth: 1.5, borderColor: COLORS.line, overflow: 'hidden' },
-  faceFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  faceFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: COLORS.bg },
   // 안내 팝업 (설정 화면의 '저장하지 않고 나갈까요?' 팝업과 같은 모양)
   noticeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
   noticeBox: {
     width: '100%', maxWidth: 320, gap: 8, padding: 20,
-    backgroundColor: COLORS.bg, borderRadius: 10, borderWidth: 1.5, borderColor: '#303a1e',
+    backgroundColor: COLORS.bg, borderRadius: 10, borderWidth: 1.5, borderColor: COLORS.borderDark,
   },
-  noticeTitle: { fontFamily: FONTS.bold, fontSize: fs(17), lineHeight: fs(24), color: COLORS.outline, textAlign: 'center' },
-  noticeDesc: { fontFamily: FONTS.medium, fontSize: fs(14), lineHeight: fs(20), color: COLORS.textSecondary, textAlign: 'center', marginBottom: 8 },
-  noticeBtn: { height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1.5, borderColor: '#303a1e', backgroundColor: COLORS.lime },
-  noticeBtnText: { fontFamily: FONTS.bold, fontSize: fs(15), color: COLORS.outline },
+  noticeTitle: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.title), lineHeight: fs(24), color: COLORS.outline, textAlign: 'center' },
+  noticeDesc: { fontFamily: FONTS.medium, fontSize: fs(FONT_SIZE.body), lineHeight: fs(20), color: COLORS.textSecondary, textAlign: 'center', marginBottom: 8 },
+  noticeBtn: { height: BTN_H, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1.5, borderColor: COLORS.borderDark, backgroundColor: COLORS.lime },
+  noticeBtnText: { fontFamily: FONTS.bold, fontSize: fs(BTN_FONT), color: COLORS.outline },
   lockedText: { color: LOCKED_GRAY },
   // 앞면
-  cardNo: { position: 'absolute', top: ui(14), left: ui(20), fontFamily: FONTS.bold, fontSize: 11, lineHeight: 15 },
+  cardNo: { position: 'absolute', top: cu(14), left: cu(20), fontFamily: FONTS.heavy, fontSize: 10, lineHeight: 14 },
   arch: {
-    position: 'absolute', top: ui(34), left: (CARD_W - ARCH_W) / 2, width: ARCH_W, height: ARCH_H,
+    position: 'absolute', top: cu(34), left: (CARD_W - ARCH_W) / 2, width: ARCH_W, height: ARCH_H,
     borderTopLeftRadius: ARCH_W / 2, borderTopRightRadius: ARCH_W / 2, borderBottomLeftRadius: 14, borderBottomRightRadius: 14,
-    borderWidth: 2, overflow: 'hidden',
   },
   banner: {
-    position: 'absolute', bottom: ui(22), left: ui(30), right: ui(30), height: ui(44), borderRadius: 22,
+    position: 'absolute', bottom: cu(22), left: cu(30), right: cu(30), height: cu(44),
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  bannerText: { fontFamily: FONTS.bold, fontSize: fs(18), lineHeight: fs(24), color: '#FFFFFF' },
-  // 뒷면 (모두 가운데 정렬)
-  backHead: { position: 'absolute', top: ui(34), left: ui(20), right: ui(20), alignItems: 'center', gap: 2 },
-  backName: { fontFamily: FONTS.bold, fontSize: fs(22), lineHeight: fs(28), textAlign: 'center' },
-  backTagline: { fontFamily: FONTS.bold, fontSize: 13, lineHeight: 18, textAlign: 'center' },
-  backBox: { position: 'absolute', top: ui(100), left: ui(16), width: BOX_W, height: BOX_H },
-  backBoxInner: { flex: 1, paddingHorizontal: ui(26), paddingVertical: ui(22), alignItems: 'center', justifyContent: 'center', gap: ui(16) },
-  backIntro: { fontFamily: FONTS.medium, fontSize: 11, lineHeight: 18, textAlign: 'center' },
-  backInfo: { alignItems: 'center', gap: 4 },
-  backInfoLine: { fontFamily: FONTS.medium, fontSize: 10, lineHeight: 15, textAlign: 'center' },
+  bannerText: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.title), lineHeight: fs(24) },
+  // 뒷면 (이름·태그라인은 가운데, 본문 상자 안은 왼쪽 정렬)
+  backHead: { position: 'absolute', top: cu(64), left: cu(20), right: cu(20), alignItems: 'center', gap: 2 },
+  backName: { fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.title), lineHeight: fs(24), textAlign: 'center' },
+  backTagline: { fontFamily: FONTS.medium, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  backBox: { position: 'absolute', top: cu(130), left: cu(16), width: BOX_W, height: BOX_H },
+  backBoxInner: { flex: 1, paddingHorizontal: cu(20), paddingTop: cu(20), paddingBottom: cu(16), alignItems: 'stretch', justifyContent: 'flex-start', gap: cu(10) },
+  backDivider: { height: 1, overflow: 'hidden' },
+  backDividerLine: { height: 2, borderWidth: 1, borderStyle: 'dashed', borderRadius: 0 },
+  backIntro: { fontFamily: FONTS.medium, fontSize: 11, lineHeight: 18, textAlign: 'left' },
+  backInfo: { alignItems: 'flex-start', gap: 4 },
+  backInfoLine: { fontFamily: FONTS.medium, fontSize: 10, lineHeight: 15, textAlign: 'left' },
   backInfoValue: { fontFamily: FONTS.bold, fontSize: 11 },
 
   // 더 알아보기: 화살표 top 630 (→561), 높이 58 / 텍스트 top 694 (→625)
@@ -590,6 +594,6 @@ const styles = StyleSheet.create({
   arrowDown: { position: 'absolute', left: ui(-3), top: ui(3), transform: [{ rotate: '90deg' }] },
   moreText: {
     marginTop: ui(32),             // 화살표 하단 662 → 텍스트 top 694
-    fontFamily: FONTS.bold, fontSize: fs(16), lineHeight: fs(20), color: COLORS.pine,
+    fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.label), lineHeight: fs(20), color: COLORS.pine,
   },
 });

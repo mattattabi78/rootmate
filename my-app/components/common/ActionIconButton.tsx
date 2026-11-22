@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { UI_SCALE, ui } from '../../constants';
+import { COLORS, UI_SCALE, ui } from '../../constants';
 
 // 홈 화면 액션 버튼(물주기 / 햇볕에 두기 / 식물 사진 찍기 / 식물 관찰) — 피그마 Y2K 아이콘
 export type ActionKind = 'water' | 'sun' | 'camera' | 'search';
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     height: ACTION_BTN_SIZE,
     borderRadius: 10,
     borderWidth: 2,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
