@@ -59,6 +59,15 @@ async function computeSituation(): Promise<PlantSituation> {
     }
   }
 
+  if (daysSinceWater === 999) {
+    const plantData = await storage.getPlantData();
+    if (plantData?.adoptedAt) {
+      const adopted = new Date(`${getLocalDateString(new Date(plantData.adoptedAt))}T00:00:00`);
+      const now = new Date(`${todayStr}T00:00:00`);
+      daysSinceWater = Math.max(0, Math.round((now.getTime() - adopted.getTime()) / 86400000));
+    }
+  }
+
   // 물 주기 초과 판단 (우선순위: 3일+ > 2일 > 1일 > 당일)
   if (daysSinceWater >= 3) return 'no_water_3days_plus';
   if (daysSinceWater === 2) return 'no_water_2days';
@@ -96,7 +105,10 @@ export function usePlantExpression(plantType: PlantType): {
   }, [plantType]);
 
   useEffect(() => {
-    refresh();
+    const loadExpression = async () => {
+      await refresh();
+    };
+    void loadExpression();
   }, [refresh]);
 
   // 일시적 표정 변경 — durationMs 후 상황 기반 표정으로 자동 복귀

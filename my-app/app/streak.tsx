@@ -12,13 +12,13 @@ import Svg, { Path } from 'react-native-svg';
 import { router } from 'expo-router';
 import { COLORS, FONTS, fs, BTN_H, BTN_FONT, FONT_SIZE } from '../constants';
 import { storage } from '../store/storage';
-import FaceOverlay from '../components/common/BlinkingFace';
+import FaceOverlay, { getGeneratedFaceOverlayStyle } from '../components/common/BlinkingFace';
 import PlantCharacter from '../components/common/PlantCharacter';
 import Confetti from '../components/common/Confetti';
 import HoppingText from '../components/common/HoppingText';
 import { pickStreakCtaMessage } from '../constants/streakMessages';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PlantType } from '../constants/character';
+import { isPlantType, PlantType } from '../constants/character';
 import { getLocalDateString } from '../utils/date';
 import { getDevAdjustedDate } from '../utils/devOverrides';
 import { haptics } from '../utils/haptics';
@@ -82,7 +82,7 @@ export default function StreakScreen() {
       ]);
       setStreakCount(streak);
       setNickname(nick ?? '');
-      if (plantData?.id) setPlantType(plantData.id as PlantType);
+      if (isPlantType(plantData?.id)) setPlantType(plantData.id);
       if (savedPlant) {
         setGeneratedPlantUri(savedPlant.uri);
         setGeneratedFacePos(savedPlant.facePos);
@@ -178,11 +178,6 @@ export default function StreakScreen() {
 
   return (
     <View style={styles.safe} onLayout={e => { setAreaH(e.nativeEvent.layout.height); setAreaW(e.nativeEvent.layout.width); }}>
-      {/* 축하 컨페티: 캐릭터·글자 뒤에서 터짐 (터치는 통과) */}
-      {laidOut && (
-        <Confetti play={burst} count={260} secondBurstAt={0} origin={{ x: areaW / 2, y: Math.max(insets.top + 100, areaH * 0.33) }} />
-      )}
-
       <View style={[styles.column, { top: insets.top, height: availH, opacity: areaH > 0 ? 1 : 0 }]}>
         {/* 캐릭터 (Figma 190×283) */}
         <View
@@ -199,12 +194,7 @@ export default function StreakScreen() {
               {generatedFacePos && (
                 <FaceOverlay
                   plantType={plantType}
-                  style={{
-                    position: 'absolute',
-                    width: GEN_RATIO * plantW * 0.55, height: GEN_RATIO * plantW * 0.55,
-                    left: (generatedFacePos.x / 100) * GEN_RATIO * plantW - GEN_RATIO * plantW * 0.275,
-                    top:  (generatedFacePos.y / 100) * GEN_RATIO * plantW - GEN_RATIO * plantW * 0.275,
-                  }}
+                  style={getGeneratedFaceOverlayStyle(GEN_RATIO * plantW, generatedFacePos)}
                 />
               )}
             </View>
@@ -257,6 +247,11 @@ export default function StreakScreen() {
         <HoppingText style={styles.streakLabel} text={`${streakCount}일 연속 관리 중!`} />
         <Text style={styles.together} numberOfLines={1}>{together}</Text>
       </View>
+
+      {/* 축하 컨페티는 캐릭터·글자 앞에서 터진다. pointerEvents="none"이라 터치는 통과한다. */}
+      {laidOut && (
+        <Confetti play={burst} count={260} secondBurstAt={0} origin={{ x: areaW / 2, y: Math.max(insets.top + 100, areaH * 0.33) }} />
+      )}
 
       {/* 하단 버튼: 이전 화면(채팅)의 '홈으로 돌아가기' 버튼과 같은 자리 */}
       <TouchableOpacity style={[styles.cta, { bottom: ctaBottom }]} onPress={goHome} activeOpacity={0.8}>

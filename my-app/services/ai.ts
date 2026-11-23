@@ -1,7 +1,8 @@
-import { PlantType as AppPlantType } from '../constants/character';
-import { generatePlantQuote, generatePlantReply, generateDiarySummary, PlantType as ApiPlantType, QuestionCategory, MemorySummaryInput } from './api/chat';
+import { Asset } from 'expo-asset';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import { isPlantType, PlantType as AppPlantType, POT_REFERENCE_IMAGE } from '../constants/character';
+import { generatePlantQuote, generatePlantReply, generateDiarySummary, generateReplicateText, PlantReply, PlantType as ApiPlantType, QuestionCategory, MemorySummaryInput } from './api/chat';
 import { transferImageStyle, StyleId, removePlantBackground, transferWithCustomPot } from './api/styleTransfer';
-import { ENV, validateEnv } from './config/env';
 
 export interface PlantFacePosition {
   x: number;         // 0–100, 화분 중심 x (이미지 왼쪽에서 %)
@@ -15,6 +16,14 @@ const PLANT_TYPE_MAP: Record<AppPlantType, ApiPlantType> = {
   marigold: '메리골드',
 };
 
+function getSafePlantType(plantType: unknown): AppPlantType {
+  return isPlantType(plantType) ? plantType : 'tomato';
+}
+
+function buildQuestionFallback(questionBase: string): string {
+  return questionBase.trim() || '오늘의 마음을 들려줄래?';
+}
+
 export async function generateQuestion(
   questionBase: string,
   _plantNickname: string,
@@ -23,14 +32,22 @@ export async function generateQuestion(
   category: QuestionCategory = '오늘의 마음 질문',
   memorySummaries: MemorySummaryInput[] = [],
 ): Promise<string> {
+  const safeType = getSafePlantType(plantType);
+  if (!plantType) return buildQuestionFallback(questionBase);
+
   try {
-    if (plantType) {
-      return await generatePlantQuote(PLANT_TYPE_MAP[plantType], questionBase, category, memorySummaries);
+    if (!questionBase.trim()) {
+      return await generatePlantQuote(
+        PLANT_TYPE_MAP[safeType],
+        buildQuestionFallback(''),
+        category,
+        memorySummaries,
+      );
     }
-    return questionBase;
+    return await generatePlantQuote(PLANT_TYPE_MAP[safeType], questionBase, category, memorySummaries);
   } catch (error) {
     console.warn('generateQuestion fallback:', error);
-    return questionBase;
+    return buildQuestionFallback(questionBase);
   }
 }
 
@@ -39,7 +56,8 @@ export async function summarizePlantConversation(
   plantType?: AppPlantType,
 ): Promise<string> {
   if (!plantType) return '특별히 기억할 내용 없음';
-  return generateDiarySummary(PLANT_TYPE_MAP[plantType], conversation);
+  if (!conversation.trim()) return '특별히 기억할 내용 없음';
+  return generateDiarySummary(PLANT_TYPE_MAP[getSafePlantType(plantType)], conversation);
 }
 
 interface ChatMessage {
@@ -57,10 +75,21 @@ export async function generatePlantResponse(
   chatHistory: ChatMessage[] = [],
   isCheckinReply: boolean = false,
   memorySummaries: MemorySummaryInput[] = [],
-): Promise<string> {
+  isObservationReply: boolean = false,
+): Promise<PlantReply> {
   try {
     if (plantType) {
-      return await generatePlantReply(PLANT_TYPE_MAP[plantType], question, userAnswer, isFirstRound, isLastRound, chatHistory, isCheckinReply, memorySummaries);
+      return await generatePlantReply(
+        PLANT_TYPE_MAP[getSafePlantType(plantType)],
+        question,
+        userAnswer,
+        isFirstRound,
+        isLastRound,
+        chatHistory,
+        isCheckinReply,
+        memorySummaries,
+        isObservationReply,
+      );
     }
     const responses = [
       '그렇군요. 오늘도 잘 하셨어요 🌿',
@@ -68,7 +97,11 @@ export async function generatePlantResponse(
       '그런 날도 있어요. 괜찮아요 🌿',
       '오늘도 함께해줘서 고마워요 🌱',
     ];
-    return responses[Math.floor(Math.random() * responses.length)];
+    return {
+      text: responses[Math.floor(Math.random() * responses.length)],
+      shouldContinue: false,
+      expression: 'default',
+    };
   } catch (error) {
     console.warn('generatePlantResponse fallback:', error);
     const fallbackResponses = [
@@ -77,84 +110,69 @@ export async function generatePlantResponse(
       '그 말 듣고 마음이 조금 가볍게 느껴졌어요. 고마워요 🌿',
       '잘 들어뒀어요. 그 마음도 충분히 중요해요 🌱',
     ];
-    return fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
+    return {
+      text: fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)],
+      shouldContinue: false,
+      expression: 'default',
+    };
   }
 }
 
-// 생성된 이미지 URL을 받아 Claude 비전으로 식물 얼굴 위치를 분석
+// 생성된 이미지 URL을 받아 Claude Haiku 4.5로 식물 얼굴 위치를 분석
 export async function analyzeGeneratedImageForFace(imageUrl: string): Promise<PlantFacePosition> {
-  validateEnv();
-
-  const response = await fetch(`${ENV.API_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${ENV.API_KEY}`,
+  const raw = await generateReplicateText(
+    '이미지에서 화분의 위치를 분석하는 도우미입니다.',
+    '정사각형 이미지에서 얼굴 오버레이를 붙일 화분의 앞면 위치를 찾으세요. 화분의 입구·테두리·흙이나 식물이 아니라, 화분 몸통의 평평한 앞면만 기준으로 합니다. x와 y는 화분 내부 기준이 아닌 이미지 전체 캔버스의 좌상단을 기준으로 한 백분율이어야 합니다. x=0은 이미지 왼쪽, x=100은 오른쪽이며 y=0은 위쪽, y=100은 아래쪽입니다. 픽셀 좌표나 화분 기준 상대 좌표를 출력하지 마세요. x와 y는 앞면의 중앙, pot_width는 화분 몸통의 전체 이미지 너비 대비 백분율입니다. 실제 이미지를 측정해 0에서 100 사이의 숫자를 채우세요. 반드시 {"x":<number>,"y":<number>,"pot_width":<number>} 구조의 JSON만 출력하세요.',
+    {
+      maxTokens: 1024,
+      image: imageUrl,
     },
-    body: JSON.stringify({
-      model: ENV.DEFAULT_MODEL,
-      max_tokens: 80,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image_url',
-            image_url: { url: imageUrl },
-          },
-          {
-            type: 'text',
-            text: '이 이미지에서 화분(pot) 앞면의 시각적 정중앙을 찾아주세요. 화분 바닥·테두리가 아닌 화분 몸통 앞면의 가로·세로 정중앙 지점입니다. 화분 가로 너비도 함께 알려주세요. 반드시 JSON만 출력하세요: {"x":<화분 중심 x, 왼쪽에서 0-100>,"y":<화분 앞면 정중앙 y, 위에서 0-100>,"pot_width":<화분 가로 너비 0-100>}',
-          },
-        ],
-      }],
-      temperature: 0,
-    }),
-  });
+  );
 
-  const data = await response.json();
-  if (!response.ok || !data.choices?.[0]) throw new Error('이미지 분석 실패');
-
-  const raw = data.choices[0].message.content.trim();
-
-  // 응답에서 JSON 오브젝트 추출 (모델이 설명 텍스트를 앞뒤에 붙일 수 있음)
   const jsonMatch = raw.match(/\{[\s\S]*?\}/);
   if (jsonMatch) {
     try {
-      return JSON.parse(jsonMatch[0]) as PlantFacePosition;
+      const parsed: unknown = JSON.parse(jsonMatch[0]);
+      if (parsed && typeof parsed === 'object') {
+        const { x, y, pot_width } = parsed as Record<string, unknown>;
+        const isPercentage = (value: unknown): value is number =>
+          typeof value === 'number'
+          && Number.isFinite(value)
+          && value >= 0
+          && value <= 100;
+
+        if (isPercentage(x) && isPercentage(y)) {
+          return {
+            x,
+            y,
+            pot_width: isPercentage(pot_width) ? pot_width : 60,
+          };
+        }
+      }
     } catch {}
   }
 
-  // 파싱 실패 시 화분 중앙 하단 기본값
+  console.warn('Face position analysis returned invalid coordinates; using default coordinates.');
   return { x: 50, y: 72, pot_width: 60 };
 }
 
-// 입력 이미지에 식물이 있는지 Claude 비전으로 확인 (없으면 false)
+// 입력 이미지에 식물이 있는지 Claude Haiku 4.5로 확인 (없으면 false)
 async function hasVisiblePlant(imageBase64DataUrl: string): Promise<boolean> {
+  console.info('[plant-photo] plant detection started');
   try {
-    validateEnv();
-    const res = await fetch(`${ENV.API_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ENV.API_KEY}`,
+    const answer = (await generateReplicateText(
+      'You classify images.',
+      'Does this image contain a visible plant, stem, or leaves? Reply with only "yes" or "no".',
+      {
+        maxTokens: 1024,
+        image: imageBase64DataUrl,
       },
-      body: JSON.stringify({
-        model: ENV.DEFAULT_MODEL,
-        max_tokens: 5,
-        temperature: 0,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image_url', image_url: { url: imageBase64DataUrl } },
-            { type: 'text', text: 'Does this image contain a visible plant, stem, or leaves? Reply with only "yes" or "no".' },
-          ],
-        }],
-      }),
-    });
-    const data = await res.json();
-    const answer = (data.choices?.[0]?.message?.content ?? 'yes').trim().toLowerCase();
-    return !answer.startsWith('no');
-  } catch {
+    )).trim().toLowerCase();
+    const found = !answer.startsWith('no');
+    console.info(`[plant-photo] plant detection completed: ${found ? 'found' : 'not found'}`);
+    return found;
+  } catch (error) {
+    console.warn('[plant-photo] plant detection failed; continuing without a detection result', error);
     return true; // 판단 불가 시 파이프라인 진행
   }
 }
@@ -162,6 +180,44 @@ async function hasVisiblePlant(imageBase64DataUrl: string): Promise<boolean> {
 export interface GeneratedPlantResult {
   imageUrl: string;
   facePosition: PlantFacePosition;
+}
+
+async function runPlantPhotoStage<T>(stage: string, task: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
+  console.info(`[plant-photo] ${stage} started`);
+  try {
+    const result = await task();
+    console.info(`[plant-photo] ${stage} completed (${Date.now() - startedAt}ms)`);
+    return result;
+  } catch (error) {
+    console.error(`[plant-photo] ${stage} failed`, error);
+    throw error;
+  }
+}
+
+export async function generatePlantCharacterFromPhoto(photoUri: string): Promise<GeneratedPlantResult | null> {
+  const photo = await runPlantPhotoStage('photo preparation', async () => {
+    const photoRef = await ImageManipulator.manipulate(photoUri).renderAsync();
+    const preparedPhoto = await photoRef.saveAsync({ compress: 0.8, format: SaveFormat.JPEG, base64: true });
+    if (!preparedPhoto.base64) throw new Error('선택한 사진을 읽을 수 없습니다.');
+    return preparedPhoto;
+  });
+
+  const pot = await runPlantPhotoStage('reference pot preparation', async () => {
+    const potAsset = Asset.fromModule(POT_REFERENCE_IMAGE);
+    await potAsset.downloadAsync();
+    if (!potAsset.localUri) throw new Error('화분 기준 이미지를 불러올 수 없습니다.');
+
+    const potRef = await ImageManipulator.manipulate(potAsset.localUri).renderAsync();
+    const preparedPot = await potRef.saveAsync({ base64: true, format: SaveFormat.PNG });
+    if (!preparedPot.base64) throw new Error('화분 기준 이미지를 읽을 수 없습니다.');
+    return preparedPot;
+  });
+
+  return updatePlantCharacterWithCustomPot(
+    `data:image/jpeg;base64,${photo.base64}`,
+    `data:image/png;base64,${pot.base64}`,
+  );
 }
 
 /**
@@ -175,9 +231,18 @@ export async function updatePlantCharacterWithCustomPot(
   const plantFound = await hasVisiblePlant(imageBase64DataUrl);
   if (!plantFound) return null;
 
-  const plantNoBgUrl = await removePlantBackground(imageBase64DataUrl);
-  const imageUrl = await transferWithCustomPot(plantNoBgUrl, potBase64DataUrl);
-  const facePosition = await analyzeGeneratedImageForFace(imageUrl);
+  const plantNoBgUrl = await runPlantPhotoStage(
+    'background removal',
+    () => removePlantBackground(imageBase64DataUrl),
+  );
+  const imageUrl = await runPlantPhotoStage(
+    'plant and pot composition',
+    () => transferWithCustomPot(plantNoBgUrl, potBase64DataUrl),
+  );
+  const facePosition = await runPlantPhotoStage(
+    'face position analysis',
+    () => analyzeGeneratedImageForFace(imageUrl),
+  );
   return { imageUrl, facePosition };
 }
 

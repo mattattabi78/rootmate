@@ -14,13 +14,13 @@ import { useFocusEffect } from 'expo-router';
 import { COLORS, FONTS, fs, ui, FONT_SIZE } from '../constants';
 import { storage, DailyRecord } from '../store/storage';
 import { loadGrowthState } from '../store/growthStore';
-import { PlantType, Expression } from '../constants/character';
+import { isPlantType, PlantType, Expression } from '../constants/character';
 import TopAppBar from '../components/common/TopAppBar';
 import FitToScreen from '../components/common/FitToScreen';
 import { compactFactor } from '../utils/layout';
 import BottomNavBar from '../components/common/BottomNavBar';
 import PlantCharacter from '../components/common/PlantCharacter';
-import FaceOverlay from '../components/common/BlinkingFace';
+import FaceOverlay, { getGeneratedFaceOverlayStyle } from '../components/common/BlinkingFace';
 import { ActionIcon } from '../components/common/ActionIconButton';
 import { ChevronPixelIcon } from '../components/common/PixelIcons';
 import { getDateStringForMonthDay } from '../utils/date';
@@ -91,7 +91,7 @@ export default function CalendarScreen() {
     setMonth(devToday.getMonth());
     loadRecordDays(devToday.getFullYear(), devToday.getMonth());
     storage.getPlantData().then(d => {
-      if (d?.id) setPlantType(d.id as PlantType);
+      if (isPlantType(d?.id)) setPlantType(d.id);
     });
   }, [loadRecordDays]));
 
@@ -258,12 +258,7 @@ function DayRecordCard({ label, record, plantType, expression, generated }: {
               <FaceOverlay
                 plantType={plantType}
                 expression={expression}
-                style={{
-                  position: 'absolute',
-                  width: GEN_SIZE * 0.55, height: GEN_SIZE * 0.55,
-                  left: (generated.facePos.x / 100) * GEN_SIZE - GEN_SIZE * 0.275,
-                  top:  (generated.facePos.y / 100) * GEN_SIZE - GEN_SIZE * 0.275,
-                }}
+                style={getGeneratedFaceOverlayStyle(GEN_SIZE, generated.facePos)}
               />
             </View>
           ) : (

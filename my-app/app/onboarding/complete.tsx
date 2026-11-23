@@ -6,7 +6,7 @@ import {
   View,
 } from 'react-native';
 import PlantCharacter from '../../components/common/PlantCharacter';
-import { PlantType } from '../../constants/character';
+import { isPlantType, PlantType } from '../../constants/character';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { COLORS, FONTS, fs, lh, FONT_SIZE } from '../../constants';
@@ -22,7 +22,7 @@ export default function OnboardingComplete() {
   useEffect(() => {
     storage.getPlantData().then((data) => {
       if (data?.nickname) setPlantNickname(data.nickname);
-      if (data?.id) setPlantType(data.id as PlantType);
+      if (isPlantType(data?.id)) setPlantType(data.id);
     });
 
     Animated.parallel([

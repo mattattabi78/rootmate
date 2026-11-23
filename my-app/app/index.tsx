@@ -11,7 +11,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import { PlantFacePosition } from '../services/ai';
+import { generatePlantCharacterFromPhoto, type PlantFacePosition } from '../services/ai';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { COLORS, FONTS, fs, ui, FONT_SIZE } from '../constants';
@@ -20,12 +20,12 @@ import TopAppBar from '../components/common/TopAppBar';
 import FitToScreen from '../components/common/FitToScreen';
 import { compactFactor } from '../utils/layout';
 import BottomNavBar from '../components/common/BottomNavBar';
-import FaceOverlay from '../components/common/BlinkingFace';
+import FaceOverlay, { getGeneratedFaceOverlayStyle } from '../components/common/BlinkingFace';
 import { usePlantInteraction } from '../hooks/usePlantInteraction';
 import PlantCharacter from '../components/common/PlantCharacter';
 import ActionIconButton from '../components/common/ActionIconButton';
 import {
-  PlantType, GrowthStage, Expression,
+  PlantType, GrowthStage, Expression, isPlantType,
   PLANT_EXPRESSIONS, getMaxStage, CANVAS_FACE_CENTER, CANVAS_PER_FACE_PX,
 } from '../constants/character';
 import {
@@ -41,6 +41,8 @@ import { setDevDayOfWeek, advanceDevDay, resetDevDateOffset, getDevAdjustedDate,
 import { refreshDailyNotifications } from '../utils/notifications';
 import { isSupportedTask, PLANT_TASKS, PLANT_INFO, getRandomNotification } from '../constants/plants';
 import * as Notifications from 'expo-notifications';
+import * as ImagePicker from 'expo-image-picker';
+import { persistImageUri } from '../utils/persistImage';
 
 const DAY_KOR = ['일','월','화','수','목','금','토'];
 function formatDate(d: Date) {
@@ -62,6 +64,7 @@ export default function HomeScreen() {
   // 개발자 메뉴 상태 (앱 재시작 시 초기화, 패널 닫아도 유지)
   const [generatedPlantUri, setGeneratedPlantUri] = useState<string | null>(null);
   const [generatedFacePos, setGeneratedFacePos] = useState<PlantFacePosition | null>(null);
+  const [devCharacterGenerating, setDevCharacterGenerating] = useState(false);
 
   const [devMenuVisible, setDevMenuVisible] = useState(false);
   const [memoryEnabled, setMemoryEnabled]   = useState(true);   // 대화 기억 (개발자 메뉴로 이전)
@@ -97,13 +100,13 @@ export default function HomeScreen() {
           storage.getGeneratedPlant(),
           storage.getLastRecordDate(),
         ]);
-        if (plantData?.id) setPlantType(plantData.id as PlantType);
+        if (isPlantType(plantData?.id)) setPlantType(plantData.id);
         if (plantData?.adoptedAt) setPlantedAt(plantData.adoptedAt);
         // 한 줄 대사는 화면에 들어올 때(탭 전환 후 돌아올 때 포함) 한 번만 고름 — 터치 반응으로 화면이 다시 그려져도 바뀌지 않게
         const neglected = lastRec
           ? Math.floor((new Date(todayStr + 'T00:00:00').getTime() - new Date(lastRec + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24))
           : 0;   // 0 = 오늘, 1 = 어제, 7+ = 오랜만 복귀
-        setHeadingMain(pickSubHeading((plantData?.id ?? 'tomato') as PlantType, streakCount, neglected));
+        setHeadingMain(pickSubHeading(isPlantType(plantData?.id) ? plantData.id : 'tomato', streakCount, neglected));
         // 저장된 생성 이미지 복원
         if (savedPlant) {
           setGeneratedPlantUri(savedPlant.uri);
@@ -115,7 +118,7 @@ export default function HomeScreen() {
         reloadGrowth();
         refreshExpression();
         refreshDailyNotifications(
-          (plantData?.id ?? 'tomato') as PlantType,
+          isPlantType(plantData?.id) ? plantData.id : 'tomato',
           record !== null,
         ).catch(() => {});
       })();
@@ -244,6 +247,44 @@ export default function HomeScreen() {
     );
   };
 
+  const handleGenerateDevCharacter = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('권한이 필요해요', '사진 접근 권한을 허용해야 갤러리에서 사진을 선택할 수 있어요.');
+        return;
+      }
+
+      const selection = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+      });
+      if (selection.canceled || !selection.assets[0]) return;
+
+      setDevCharacterGenerating(true);
+      const generated = await generatePlantCharacterFromPhoto(selection.assets[0].uri);
+      if (!generated) {
+        Alert.alert('식물을 찾지 못했어요', '식물이 잘 보이는 사진을 선택해 주세요.');
+        return;
+      }
+
+      const uri = await persistImageUri(generated.imageUrl);
+      await storage.saveGeneratedPlant(uri, generated.facePosition, todayStr);
+      setGeneratedPlantUri(uri);
+      setGeneratedFacePos(generated.facePosition);
+      setDevMenuVisible(false);
+      Alert.alert('캐릭터 생성 완료', '홈 캐릭터에 적용했어요. 사진 task는 완료 처리하지 않았습니다.');
+    } catch (error) {
+      console.warn('Developer character generation failed:', error);
+      Alert.alert(
+        '캐릭터 생성 실패',
+        error instanceof Error ? error.message : '사진을 처리하는 중 문제가 발생했어요.',
+      );
+    } finally {
+      setDevCharacterGenerating(false);
+    }
+  };
+
   if (!onboardingChecked) return null;
 
   return (
@@ -290,12 +331,7 @@ export default function HomeScreen() {
                   expression={shownExpr}
                   eye={interaction.eye ?? undefined}
                   animated
-                  style={{
-                    position: 'absolute',
-                    width: 121 * f, height: 121 * f,
-                    left: (generatedFacePos.x / 100) * 220 * f - 60.5 * f,
-                    top: (generatedFacePos.y / 100) * 220 * f - 60.5 * f,
-                  }}
+                  style={getGeneratedFaceOverlayStyle(220 * f, generatedFacePos)}
                 />
               )}
               {/* 효과(하트·음표·물방울): 레이어 캔버스 기준 이미지를 얼굴 오버레이와 같은 비율로 줄여 얼굴 위치에 맞춤 */}
@@ -390,6 +426,12 @@ export default function HomeScreen() {
                       />
                     }
                   >
+                    <DevAction
+                      label={devCharacterGenerating ? '캐릭터 생성 중...' : '캐릭터 생성하기'}
+                      sub="task와 같은 생성 흐름으로 홈 캐릭터에 적용 (task 완료 처리 안 함)"
+                      onPress={() => { void handleGenerateDevCharacter(); }}
+                      disabled={devCharacterGenerating}
+                    />
                     {charDevMode && (
                       <>
                         <DevInfo>

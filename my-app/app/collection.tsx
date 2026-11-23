@@ -21,12 +21,12 @@ import FitToScreen from '../components/common/FitToScreen';
 import BottomNavBar from '../components/common/BottomNavBar';
 import { LockPixelIcon } from '../components/common/PixelIcons';
 import PlantCharacter, { CHARACTER_RATIO } from '../components/common/PlantCharacter';
-import FaceOverlay from '../components/common/BlinkingFace';
+import FaceOverlay, { getGeneratedFaceOverlayStyle } from '../components/common/BlinkingFace';
 import { usePlantExpression } from '../hooks/usePlantExpression';
 import PlantDetailView from '../components/plant/PlantDetailView';
 import Wallpaper, { WALLPAPER_COLOR } from '../components/common/Wallpaper';
 import { PLANT_INFO } from '../constants/plants';
-import { PlantType, GrowthStage, Expression, getMaxStage } from '../constants/character';
+import { isPlantType, PlantType, GrowthStage, Expression, getMaxStage } from '../constants/character';
 
 const ALL_PLANTS: PlantType[] = ['basil', 'tomato', 'marigold'];
 
@@ -161,11 +161,7 @@ function CardFront({ plantType, unlocked, live }: { plantType: PlantType; unlock
             <FaceOverlay
               plantType={plantType}
               expression={live!.expression}
-              style={{
-                position: 'absolute', width: GEN * 0.55, height: GEN * 0.55,
-                left: (live!.generated!.facePos.x / 100) * GEN - GEN * 0.275,
-                top: (live!.generated!.facePos.y / 100) * GEN - GEN * 0.275,
-              }}
+              style={getGeneratedFaceOverlayStyle(GEN, live!.generated!.facePos)}
             />
           </View>
         ) : (
@@ -258,9 +254,9 @@ export default function CollectionScreen() {
   // 처음 열 때 내가 키우는 식물 카드부터 보여 줌
   useFocusEffect(useCallback(() => {
     storage.getPlantData().then(plantData => {
-      if (plantData?.id) {
-        setIndex(clampIndex(ALL_PLANTS.indexOf(plantData.id as PlantType)));
-        setCurrentPlant(plantData.id as PlantType);
+      if (isPlantType(plantData?.id)) {
+        setIndex(clampIndex(ALL_PLANTS.indexOf(plantData.id)));
+        setCurrentPlant(plantData.id);
       }
     });
     storage.getGeneratedPlant().then(g => setGenerated(g ? { uri: g.uri, facePos: g.facePos } : null));

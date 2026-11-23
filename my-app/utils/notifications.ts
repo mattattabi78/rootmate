@@ -23,9 +23,9 @@ const PLANT_NOTIF: Record<PlantType, {
     remind: (label) => ({ title: `🍅 ${label} 잊은 거 아니지?`, body: `2시간 됐는데, 이제 할 수 있어?` }),
   },
   marigold: {
-    morning: { title: '🌼 일어났어?', body: '오늘 까먹지 말고 나 챙겨줘~' },
-    evening: { title: '🌼 아직이야?', body: '아직 안 한 거 알아. 괜찮아. 지금이라도 해 줘.' },
-    remind: (label) => ({ title: `🌼 ${label}`, body: `아까 못 했다고 했잖아. 지금은?` }),
+    morning: { title: '🌼 좋은 아침이에요!', body: '오늘 저 챙기는 거 잊지 말아줘요~' },
+    evening: { title: '🌼 아직 안 했나요?', body: '아직 안 했어도 괜찮아요. 지금 해도 돼요.' },
+    remind: (label) => ({ title: `🌼 ${label}`, body: '아까 못 했다고 했죠. 지금은 어때요?' }),
   },
 
 };

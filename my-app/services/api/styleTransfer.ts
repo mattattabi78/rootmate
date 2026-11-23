@@ -1,5 +1,9 @@
 // src/api/styleTransfer.ts
-import { ENV, validateReplicateEnv } from '../config/env';
+import {
+  ENV,
+  validateReplicateBackgroundRemovalEnv,
+  validateReplicateImageEnv,
+} from '../config/env';
 
 // ─────────────────────────────────────────────
 // 스타일 정의 (외부에 노출)
@@ -69,7 +73,7 @@ export async function transferImageStyle(
   styleId: StyleId,
   aspectRatio: string = '1:1',
 ): Promise<string> {
-  validateReplicateEnv();
+  validateReplicateImageEnv();
 
   // 스타일 ID로 실제 프롬프트 찾기
   const stylePrompt = STYLE_PROMPTS[styleId];
@@ -79,11 +83,11 @@ export async function transferImageStyle(
 
   // 1) 변환 작업 시작
   const startResponse = await fetch(
-    `${ENV.REPLICATE_BASE_URL}/models/google/nano-banana-pro/predictions`,
+    `${ENV.REPLICATE_BASE_URL}/models/${ENV.REPLICATE_IMAGE_MODEL}/predictions`,
     {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${ENV.REPLICATE_API_KEY}`,
+        'Authorization': `Bearer ${ENV.REPLICATE_IMAGE_API_KEY}`,
         'Content-Type': 'application/json',
         'Prefer': 'wait',
       },
@@ -121,7 +125,7 @@ export async function transferImageStyle(
 
     const pollResponse = await fetch(prediction.urls.get, {
       headers: {
-        'Authorization': `Bearer ${ENV.REPLICATE_API_KEY}`,
+        'Authorization': `Bearer ${ENV.REPLICATE_IMAGE_API_KEY}`,
       },
     });
 
@@ -155,26 +159,40 @@ export async function transferImageStyle(
  * 식물 사진에서 배경을 제거하고 투명 PNG URL을 반환합니다.
  */
 export async function removePlantBackground(imageBase64DataUrl: string): Promise<string> {
-  validateReplicateEnv();
+  validateReplicateBackgroundRemovalEnv();
 
-  const res = await fetch(`${ENV.REPLICATE_BASE_URL}/predictions`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${ENV.REPLICATE_API_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'wait',
-    },
-    body: JSON.stringify({
-      version: 'a029dff38972b5fda4ec5d75d7d1cd25aeff621d2cf4946a41055d7db66b80bc',
-      input: {
-        image: imageBase64DataUrl,
-        background_type: 'rgba',
+  let res: Response | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    res = await fetch(`${ENV.REPLICATE_BASE_URL}/predictions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${ENV.REPLICATE_IMAGE_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'wait',
       },
-    }),
-  });
+      body: JSON.stringify({
+        version: ENV.REPLICATE_BACKGROUND_REMOVAL_VERSION,
+        input: {
+          image: imageBase64DataUrl,
+          background_type: 'rgba',
+        },
+      }),
+    });
 
+    if (res.ok) break;
+
+    const errorBody = await res.text();
+    if (res.status !== 503 || attempt === 2) {
+      const retryInfo = res.status === 503 ? ' (3회 시도 후)' : '';
+      throw new Error(`배경 제거 실패${retryInfo} (${res.status}): ${errorBody}`);
+    }
+
+    console.warn(`[plant-photo] background removal returned 503; retrying (${attempt + 2}/3)`);
+    await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+  }
+
+  if (!res?.ok) throw new Error('배경 제거 응답이 없습니다.');
   const data = await res.json();
-  if (!res.ok) throw new Error(`배경 제거 실패 (${res.status}): ${JSON.stringify(data)}`);
 
   if (data.status === 'starting' || data.status === 'processing') {
     return await pollReplicateResult(data.urls.get);
@@ -190,7 +208,7 @@ async function pollReplicateResult(pollUrl: string): Promise<string> {
   for (let i = 0; i < MAX; i++) {
     await new Promise(r => setTimeout(r, 2000));
     const res = await fetch(pollUrl, {
-      headers: { 'Authorization': `Bearer ${ENV.REPLICATE_API_KEY}` },
+      headers: { 'Authorization': `Bearer ${ENV.REPLICATE_IMAGE_API_KEY}` },
     });
     const data = await res.json();
     if (data.status === 'succeeded') {
@@ -223,14 +241,14 @@ export async function styleTransferPlantOnly(
   plantNoBgUrl: string,
   potStyleBase64DataUrl: string,
 ): Promise<string> {
-  validateReplicateEnv();
+  validateReplicateImageEnv();
 
   const startResponse = await fetch(
-    `${ENV.REPLICATE_BASE_URL}/models/google/nano-banana-pro/predictions`,
+    `${ENV.REPLICATE_BASE_URL}/models/${ENV.REPLICATE_IMAGE_MODEL}/predictions`,
     {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${ENV.REPLICATE_API_KEY}`,
+        'Authorization': `Bearer ${ENV.REPLICATE_IMAGE_API_KEY}`,
         'Content-Type': 'application/json',
         'Prefer': 'wait',
       },
@@ -265,7 +283,7 @@ export async function styleTransferPlantOnly(
   while ((prediction.status === 'starting' || prediction.status === 'processing') && attempts < MAX) {
     await new Promise(r => setTimeout(r, 2000));
     const poll = await fetch(prediction.urls.get, {
-      headers: { 'Authorization': `Bearer ${ENV.REPLICATE_API_KEY}` },
+      headers: { 'Authorization': `Bearer ${ENV.REPLICATE_IMAGE_API_KEY}` },
     });
     prediction = await poll.json();
     attempts++;
@@ -279,15 +297,12 @@ export async function styleTransferPlantOnly(
 // ─────────────────────────────────────────────
 
 const COMPOSITE_PROMPT =
-  'Image 1 is a pixel art pot/vase — this is the REFERENCE POT. ' +
-  'Image 2 is a plant with its background removed — this is the PLANT CONTENT. ' +
-  'Task: composite the plant growing naturally out of the pot opening. ' +
-  'Scale the plant so its stem base sits exactly at the pot rim, plant fills 50–70% of total image height above the pot. ' +
-  'STYLE: strict NES/Famicom 8-bit pixel art throughout. ' +
-  'Hard square pixel edges, zero anti-aliasing, zero gradients, zero blur. Maximum 16 colors. ' +
-  'Flat fills with 3 shading levels (shadow / base / highlight). ' +
-  'Render the pot exactly as it appears in Image 1. ' +
-  'Render the plant in pixel art style using its natural colors (green for leaves, brown for stem). ' +
+  'Image 1 is the finished original pixel-art pot. Treat it as a locked, unchanged layer, not as a reference to redraw. Preserve its original pixels, colors, palette, shading, texture, silhouette, proportions, and position. Do not repaint, recolor, restyle, smooth, resize, rotate, crop, move, or regenerate any part of the pot. ' +
+  'Image 2 is a plant with its background removed. Transform only this plant into pixel art, then composite it with Image 1. ' +
+  'Place the plant behind the original pot layer so the pot hides the stem below the rim. Align the stem base with the center of the pot opening; show the plant growing naturally out of the opening without covering the pot front. ' +
+  'Keep the pot front unobstructed and blank because the app adds the face overlay afterward. Do not add eyes, a mouth, text, or other objects to the pot. ' +
+  'STYLE THE PLANT ONLY: strict NES/Famicom 8-bit pixel art, hard square pixel edges, zero anti-aliasing, zero gradients, zero blur, maximum 8 colors, flat fills with 3 shading levels. ' +
+  'Keep the plant natural colors — green leaves and a brown stem. ' +
   'Pure white (#FFFFFF) background. No other elements.';
 
 /**
@@ -297,14 +312,14 @@ export async function transferWithCustomPot(
   plantNoBgUrl: string,
   potBase64DataUrl: string,
 ): Promise<string> {
-  validateReplicateEnv();
+  validateReplicateImageEnv();
 
   const startResponse = await fetch(
-    `${ENV.REPLICATE_BASE_URL}/models/google/nano-banana-pro/predictions`,
+    `${ENV.REPLICATE_BASE_URL}/models/${ENV.REPLICATE_IMAGE_MODEL}/predictions`,
     {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${ENV.REPLICATE_API_KEY}`,
+        'Authorization': `Bearer ${ENV.REPLICATE_IMAGE_API_KEY}`,
         'Content-Type': 'application/json',
         'Prefer': 'wait',
       },
@@ -345,7 +360,7 @@ export async function transferWithCustomPot(
   ) {
     await new Promise(resolve => setTimeout(resolve, 2000));
     const pollResponse = await fetch(prediction.urls.get, {
-      headers: { 'Authorization': `Bearer ${ENV.REPLICATE_API_KEY}` },
+      headers: { 'Authorization': `Bearer ${ENV.REPLICATE_IMAGE_API_KEY}` },
     });
     prediction = await pollResponse.json();
     attempts++;

@@ -70,7 +70,7 @@ rootmate/
 | 진동 | expo-haptics (연속 관리 연출, 캐릭터 터치 반응) |
 | 애니메이션 | React Native Animated + PanResponder (도감 카드·상세 전환, 컨페티, 캐릭터 얼굴 깜빡임·눈물) |
 | 스타일 | React Native StyleSheet. 폰트는 SUITE 한 종류(Regular · Medium · Bold · Heavy) |
-| AI | Mindlogic FactChat 게이트웨이(텍스트), Replicate(이미지) |
+| AI | Replicate (채팅·요약·이미지 분석·이미지 생성) |
 
 ---
 
@@ -304,9 +304,12 @@ AI는 이미 코드에 연결되어 있습니다. **이 저장소에는 API 키(
 
 | 변수 | 용도 |
 |---|---|
-| `EXPO_PUBLIC_OPENAI_API_KEY` | Mindlogic FactChat 게이트웨이 키 (텍스트 생성) |
-| `EXPO_PUBLIC_DEFAULT_MODEL` | 모델 이름 (없으면 `claude-sonnet-5`) |
-| `EXPO_PUBLIC_REPLICATE_API_KEY` | 이미지 변환(Replicate) 키 |
+| `EXPO_PUBLIC_REPLICATE_BASE_URL` | Replicate API 주소 |
+| `EXPO_PUBLIC_REPLICATE_CHAT_API_KEY` | Replicate 채팅·요약·이미지 분석 키 |
+| `EXPO_PUBLIC_REPLICATE_CHAT_MODEL` | 채팅·요약·이미지 분석 모델 |
+| `EXPO_PUBLIC_REPLICATE_IMAGE_API_KEY` | Replicate 이미지 생성 키 |
+| `EXPO_PUBLIC_REPLICATE_IMAGE_MODEL` | 이미지 생성·합성 모델 |
+| `EXPO_PUBLIC_REPLICATE_BACKGROUND_REMOVAL_VERSION` | 배경 제거 모델 버전 |
 
 > 키가 `EXPO_PUBLIC_` 변수라 앱 번들에 그대로 들어갑니다. 개발 중에는 괜찮지만 배포 전에는 서버를 거치는 구조로 바꾸는 것을 권장합니다.
 
@@ -316,7 +319,7 @@ AI는 이미 코드에 연결되어 있습니다. **이 저장소에는 API 키(
 |---|---|
 | `generateQuestion()` | 원문 질문을 식물 캐릭터 말투로 변형 (`services/api/chat.ts`의 페르소나 사용) |
 | `generatePlantResponse()` | 유저 답변에 대한 식물의 짧은 반응 (라운드, 이전 대화, 대화 기억 반영) |
-| `summarizePlantConversation()` | 하루 대화를 1~3문장(100자 이내) 일기로 요약 |
+| `summarizePlantConversation()` | 하루 대화를 식물이 사용자의 이야기를 전해 들은 관점으로 한 문장(90자 이내) 요약 |
 | `updatePlantCharacterWithCustomPot()` | 식물 사진 → 픽셀 캐릭터 생성 (Replicate) |
 | `analyzeGeneratedImageForFace()` | 생성된 이미지에서 화분 위치를 찾아 표정을 올릴 좌표 계산 |
 
@@ -327,7 +330,6 @@ AI는 이미 코드에 연결되어 있습니다. **이 저장소에는 API 키(
 - **캐릭터 이미지 규칙**: 홈, 연속 관리, 채팅 아바타는 저장된 AI 캐릭터(`@plant/generated_plant_uri`)가 있으면 그것을, 없거나 이미지가 로드되지 않으면 **1단계 기본 캐릭터**를 보여 줍니다. 단계별 기본 캐릭터는 AI 캐릭터 업데이트가 실패했을 때의 대체 이미지 역할입니다.
 - **캐릭터 생성 실패 처리**: 변환 호출이 실패하거나 식물을 인식하지 못하면 `사진을 다시 찍어주세요` 팝업(`다시 찍기` → 가이드 시트, `다음에 찍기` → 기존 캐릭터 유지하고 넘어감)을 띄웁니다. 이때 사진 task는 완료로 기록되지 않습니다.
 - 사진 촬영 → 캐릭터 생성 흐름은 **수·토 task로 진입**합니다 (§5.5). 단, 이미지 변환은 Replicate 키가 있어야 동작하며, 실제 기기에서 사진 → 캐릭터 결과물 품질은 아직 검증하지 못했습니다.
-- 기본 모델 이름(`claude-sonnet-5`)이 게이트웨이에서 인식되는 이름인지는 각자 환경에서 확인이 필요합니다.
 - 메리골드 이미지: 개화(6번)는 사람이 직접 그린 실제 메리골드 꽃 그림(격자 칸 그림)입니다. 성장 중·꽃망울(4·5번)은 그 꽃을 6번의 칸 그림에서 17×16칸·11×10칸으로 줄여 다시 만든 임시 이미지이고, 씨앗·새싹(1~3번)은 이전 그림을 6번의 11색 팔레트로 칸 그림으로 바꾼 것입니다.
 
 ---

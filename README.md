@@ -49,7 +49,7 @@
 | 아이콘 | react-native-svg (아이콘은 코드로 그린 SVG) |
 | 진동 | expo-haptics (연속 관리 화면 연출, 캐릭터 터치 반응) |
 | 애니메이션 | React Native `Animated`(네이티브 드라이버) + PanResponder (도감 카드, 연속 관리 컨페티, 캐릭터 얼굴) |
-| AI 연동 | Mindlogic FactChat 게이트웨이(텍스트), Replicate(이미지) — `services/ai.ts` |
+| AI 연동 | Replicate (채팅·요약·이미지 분석·이미지 생성) — `services/ai.ts` |
 | 빌드 / 배포 | EAS (Expo Application Services) |
 
 ---
@@ -260,7 +260,7 @@ my-app/
 | `summarizePlantConversation()` | 하루 대화를 일기로 요약 |
 | `updatePlantCharacterWithCustomPot()` | 식물 사진 → 캐릭터 이미지 생성 |
 
-- 키는 `my-app/.env`에 둡니다 (`EXPO_PUBLIC_OPENAI_API_KEY`, `EXPO_PUBLIC_REPLICATE_API_KEY`, 선택: `EXPO_PUBLIC_DEFAULT_MODEL`). 이 파일은 git에 올라가지 않습니다.
+- 키는 `my-app/.env`에 둡니다 (`EXPO_PUBLIC_REPLICATE_BASE_URL`, `EXPO_PUBLIC_REPLICATE_CHAT_API_KEY`, `EXPO_PUBLIC_REPLICATE_CHAT_MODEL`, `EXPO_PUBLIC_REPLICATE_IMAGE_API_KEY`, `EXPO_PUBLIC_REPLICATE_IMAGE_MODEL`, `EXPO_PUBLIC_REPLICATE_BACKGROUND_REMOVAL_VERSION`). 이 파일은 git에 올라가지 않습니다.
 - 키가 없거나 호출에 실패하면 미리 만든 기본 문구로 대체됩니다.
 - 캐릭터 이미지: 홈, 연속 관리, 채팅 아바타는 AI 캐릭터가 있으면 그것을, 없으면 1단계 기본 캐릭터를 보여 줍니다. 캐릭터 생성이 실패하거나 식물을 인식하지 못하면 사진을 다시 찍도록 안내하고(`다시 찍기` / `다음에 찍기`), 기존 캐릭터를 유지합니다.
 - 사진 촬영 → 캐릭터 생성은 수·토 task로 진입합니다. 이미지 변환에는 Replicate 키가 필요합니다. 자세한 내용은 `NOTICE.md`를 참고하세요.

@@ -18,8 +18,8 @@ import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { COLORS, FONTS, fs, lh, BTN_H, BTN_FONT, INPUT_H, INPUT_FONT, INPUT_LH, FONT_SIZE } from '../constants';
-import { PlantType, Expression } from '../constants/character';
-import FaceOverlay from '../components/common/BlinkingFace';
+import { PlantType, Expression, isPlantType } from '../constants/character';
+import FaceOverlay, { getGeneratedFaceOverlayStyle } from '../components/common/BlinkingFace';
 import PlantCharacter from '../components/common/PlantCharacter';
 import { getTodayQuestion, getLongBreakQuestion } from '../services/api/questionPool';
 import { usePlantExpression } from '../hooks/usePlantExpression';
@@ -30,13 +30,10 @@ import {
 import { storage, DailyRecord, MemorySummary } from '../store/storage';
 import { isSupportedTask, isTaskDueFor, isObservationDue, PlantTask, PLANT_TASKS } from '../constants/plants';
 import { getPlantMessages, getTaskChoices, getChecklistLabel, formatClock, FollowupKind } from '../constants/chatMessages';
-import { generateQuestion, generatePlantResponse, summarizePlantConversation, updatePlantCharacterWithCustomPot, PlantFacePosition } from '../services/ai';
+import { generateQuestion, generatePlantResponse, summarizePlantConversation, generatePlantCharacterFromPhoto, PlantFacePosition } from '../services/ai';
 import { reconstructDayChat } from '../utils/chatHistory';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView } from 'expo-camera';
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import { Asset } from 'expo-asset';
-import { POT_REFERENCE_IMAGE } from '../constants/character';
 import EmojiText from '../components/common/EmojiText';
 import { getLocalDateString } from '../utils/date';
 import { shouldBackdateRecord } from '../utils/recordDate';
@@ -310,7 +307,7 @@ function ChatInner({ backdate }: { backdate: boolean }) {
       }
 
       const pNick = plantData?.nickname ?? '식물';
-      const pType = (plantData?.id ?? 'tomato') as PlantType;
+      const pType: PlantType = isPlantType(plantData?.id) ? plantData.id : 'tomato';
       const pAt   = plantData?.adoptedAt ?? new Date().toISOString();
       setPlantNickname(pNick);
       plantTypeRef.current = pType;
@@ -630,19 +627,11 @@ function ChatInner({ backdate }: { backdate: boolean }) {
     setPendingPhotoUri(uri);
     setIsTransforming(true);
     try {
-      const ref = await ImageManipulator.manipulate(uri).renderAsync();
-      const resized = await ref.saveAsync({ compress: 0.8, format: SaveFormat.JPEG, base64: true });
-      const base64DataUrl = `data:image/jpeg;base64,${resized.base64!}`;
-
-      const vaseAsset = Asset.fromModule(POT_REFERENCE_IMAGE);
-      await vaseAsset.downloadAsync();
-      const vaseRef = await ImageManipulator.manipulate(vaseAsset.localUri!).renderAsync();
-      const vaseSaved = await vaseRef.saveAsync({ base64: true, format: SaveFormat.PNG });
-      const potBase64 = `data:image/png;base64,${vaseSaved.base64!}`;
-
-      const result = await updatePlantCharacterWithCustomPot(base64DataUrl, potBase64);
+      const result = await generatePlantCharacterFromPhoto(uri);
       if (result) {
+        console.info('[plant-photo] generated image persistence started');
         const previewUri = await persistImageUri(result.imageUrl);
+        console.info('[plant-photo] generated image persistence completed');
         setPreviewPlantUri(previewUri);
         setPreviewFacePos(result.facePosition);
       } else {
@@ -650,8 +639,9 @@ function ChatInner({ backdate }: { backdate: boolean }) {
         setPendingPhotoUri(null);
         setShowPhotoFailed(true);
       }
-    } catch {
+    } catch (error) {
       // 생성 실패 → 같은 안내 (기존 캐릭터 유지)
+      console.error('[plant-photo] photo flow aborted', error);
       setPendingPhotoUri(null);
       setShowPhotoFailed(true);
     } finally {
@@ -718,7 +708,7 @@ function ChatInner({ backdate }: { backdate: boolean }) {
     const chatHistoryForAI = messages
       .filter(msg => msg.id !== loadingId)
       .map(msg => ({ from: msg.from as 'plant' | 'user', text: msg.text }));
-    const aiReply = await generatePlantResponse(
+    const reply = await generatePlantResponse(
       text,
       plantNickname,
       checkinQuestion,
@@ -730,7 +720,8 @@ function ChatInner({ backdate }: { backdate: boolean }) {
       memorySummariesRef.current,
     );
     clearInterval(dotInterval);
-    setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: aiReply } : msg));
+    setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: reply.text } : msg));
+    setTemporaryExpression(reply.expression, 2000);
 
     if (isLongBreakReply) {
       setLongBreakCheckin(null);
@@ -742,14 +733,13 @@ function ChatInner({ backdate }: { backdate: boolean }) {
 
     // 라운드 체크: 다음 라운드가 있으면 계속 대화
     const nextRound = currentRound + 1;
-    if (nextRound < maxRounds) {
+    if (reply.shouldContinue && nextRound < maxRounds) {
       setCurrentRound(nextRound);
       setTimeout(() => {
         setPhase('answering');
-        setTemporaryExpression('default', 2000);
       }, 1000);
     } else {
-      await saveRecord(text, undefined, aiReply);
+      await saveRecord(text, undefined, reply.text);
       setTimeout(() => setPhase('done'), 1000);
     }
   };
@@ -1146,12 +1136,7 @@ function ChatInner({ backdate }: { backdate: boolean }) {
                 {previewFacePos && (
                   <FaceOverlay
                     plantType={plantType}
-                    style={{
-                      position: 'absolute',
-                      width: 121, height: 121,
-                      left: (previewFacePos.x / 100) * 220 - 60.5,
-                      top: (previewFacePos.y / 100) * 220 - 60.5,
-                    }}
+                    style={getGeneratedFaceOverlayStyle(220, previewFacePos)}
                   />
                 )}
               </View>
@@ -1214,12 +1199,7 @@ function MessageBubble({
                 <FaceOverlay
                   plantType={plantType}
                   expression={plantExpression}
-                  style={{
-                    position: 'absolute',
-                    width: 22, height: 22,
-                    left: (generatedFacePos.x / 100) * 40 - 11,
-                    top: (generatedFacePos.y / 100) * 40 - 11,
-                  }}
+                  style={getGeneratedFaceOverlayStyle(40, generatedFacePos)}
                 />
               )}
             </View>

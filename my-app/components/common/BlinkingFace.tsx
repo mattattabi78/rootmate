@@ -56,6 +56,9 @@ export function useBlinkEye(): EyeState {
 }
 
 const EYES: EyeState[] = ['open', 'half', 'closed'];
+const DEFAULT_POT_WIDTH_PERCENT = 60;
+const FACE_TO_POT_WIDTH_RATIO = 1.1;
+const MAX_FACE_CANVAS_RATIO = 0.7;
 
 // ─── 눈물 애니메이션 타이머 ──────────────────────────────────────────
 // 눈물·놀람 3프레임(1 → 2 → 3)을 반복 재생한다. 눈물 얼굴이 화면에 있을 때만 돈다 (구독자가 있을 때만 타이머 작동).
@@ -144,6 +147,30 @@ export function FaceLayers({ face, style, animated = false, eye }: {
   face: FaceSet; style?: StyleProp<ImageStyle>; animated?: boolean; eye?: EyeState;
 }) {
   return <BlinkingLayers sources={face.layers} tears={face.tears?.layers} staticFrame={face.staticFrame} style={style} animated={animated} eye={eye} />;
+}
+
+export function getGeneratedFaceOverlayStyle(
+  canvasSize: number,
+  facePosition: { x: number; y: number; pot_width?: number },
+): ImageStyle {
+  const potWidth = typeof facePosition.pot_width === 'number'
+    && Number.isFinite(facePosition.pot_width)
+    && facePosition.pot_width > 0
+    ? facePosition.pot_width
+    : DEFAULT_POT_WIDTH_PERCENT;
+  // Keep the face proportional to the detected pot width, with a cap to avoid oversized overlays.
+  const faceSize = Math.min(
+    canvasSize * MAX_FACE_CANVAS_RATIO,
+    canvasSize * (potWidth / 100) * FACE_TO_POT_WIDTH_RATIO,
+  );
+
+  return {
+    position: 'absolute',
+    width: faceSize,
+    height: faceSize,
+    left: (facePosition.x / 100) * canvasSize - faceSize / 2,
+    top: (facePosition.y / 100) * canvasSize - faceSize / 2,
+  };
 }
 
 /** AI로 만든 사진 캐릭터 위에 얹는 얼굴. style로 크기·위치를 지정한다. animated=true면 깜빡임·눈물 애니메이션. */

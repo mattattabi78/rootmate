@@ -3,6 +3,9 @@
 // 식물 캐릭터 이미지 상수 — 모든 require()는 정적 경로 필수
 export type PlantType  = 'basil' | 'tomato' | 'marigold';
 export type GrowthStage = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export function isPlantType(value: unknown): value is PlantType {
+  return value === 'basil' || value === 'tomato' || value === 'marigold';
+}
 // 표정 = 화분 얼굴 종류. 식물에 없는 얼굴은 getFaceKind()가 대체한다 (cry → tear, 나머지 → default)
 export type Expression = 'default' | 'smile' | 'neutral' | 'tear' | 'cry' | 'surprise' | 'wink' | 'happy' | 'sleep';
 
