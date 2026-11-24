@@ -93,7 +93,7 @@ my-app/
 │   └── types/, utils/
 ├── store/                                # storage.ts(AsyncStorage), growthStore.ts
 ├── utils/                                # chatHistory, date, devOverrides, notifications, persistImage,
-│                                         # recordDate, layout(작은 화면 압축 계산), haptics(진동), network(연결 확인)
+│                                         # layout(작은 화면 압축 계산), haptics(진동), network(연결 확인)
 ├── scripts/                              # build_faces.py: 화분 얼굴 이미지(`face_v2/{식물}/layers·overlays`, `face_v2/fx`) 생성
 │                                         # pixelate_plants.py: 식물 단계 이미지를 10단위 칸 그림으로 변환
 ├── assets/                               # 폰트(SUITE), 이미지
@@ -145,7 +145,6 @@ my-app/
 - 관찰하기는 체크리스트 항목 하나로 처리 (예전 자유 입력 관찰 대화는 제거)
 - 체크리스트 뒤: 사진 찍는 날(수·토)이면 사진 촬영 → 마음 건강 질문
 - 대화가 끝나면 입력창 자리에 같은 크기의 `오늘 기록 완료!` 안내 박스(가로 전체)가 뜨고, 말풍선 간격만큼 아래에 `홈으로 돌아가기` 버튼이 표시됨 (채팅에는 하단 탭이 없음)
-- 자정~04:00에 연 대화는 전날 기록이 없을 때 전날 기록으로 저장됨 (화면 날짜 표시는 시스템 시간 그대로)
 - 사진 찍기는 수·토에 사진 촬영/선택 → 캐릭터 생성 → 프리뷰 확정 (체크리스트와 별도 단계). `나중에 찍을게`를 고르면 `2시간 뒤에 알려줘` / `내일로 미룰게` 중 선택 (알림 예약 또는 내일 task 목록에 같이 띄움). 사진 요청 멘트는 "오늘도 돌봐줘서 고마워 / 오늘 내 모습을 사진으로도 남겨줘!"를 식물 말투로 변형
 
 **2단계: 마음 건강 질문**
