@@ -36,7 +36,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { CameraView } from 'expo-camera';
 import EmojiText from '../components/common/EmojiText';
 import { getLocalDateString } from '../utils/date';
-import { shouldBackdateRecord } from '../utils/recordDate';
 import { getKstDayOfWeek, getDevAdjustedDate, getDevChatRounds } from '../utils/devOverrides';
 import { scheduleTaskReminder, cancelEveningNotification, ensureNotificationPermission } from '../utils/notifications';
 import { getGuideItems, GUIDE_TITLE, GUIDE_BTN_LABEL, GUIDE_CAMERA_LABEL, GUIDE_EXAMPLE_OPEN } from '../constants/imageGuide';
@@ -98,22 +97,18 @@ function reminderClock() {
 }
 
 // ─── 화면 ─────────────────────────────────────────────────────────
-// 자정~새벽 4시에 연 대화는 전날 기록으로 저장 (전날 기록이 없을 때). 화면의 날짜 표시는 시스템 시간 그대로
 export default function ChatScreen() {
-  const [backdate, setBackdate] = useState<boolean | null>(null);
   const [online, setOnline] = useState<boolean | null>(null);   // null = 확인 중
   const [checking, setChecking] = useState(false);              // '다시 확인' 진행 중
-  useEffect(() => { shouldBackdateRecord().then(setBackdate).catch(() => setBackdate(false)); }, []);
   // 대화창에 들어올 때 네트워크가 연결되어 있는지 확인 (연결이 안 된 경우에만 경고 팝업을 보여줌)
   useEffect(() => { isOnline().then(setOnline); }, []);
   const recheck = useCallback(() => {
     setChecking(true);
     isOnline().then(v => { setOnline(v); setChecking(false); });
   }, []);
-  if (backdate === null) return null;
   return (
     <>
-      <ChatInner backdate={backdate} />
+      <ChatInner />
       <OfflineNotice visible={online === false} checking={checking} onRetry={recheck} />
     </>
   );
@@ -155,7 +150,7 @@ const offlineStyles = StyleSheet.create({
   btnText: { fontFamily: FONTS.bold, fontSize: fs(BTN_FONT), color: COLORS.outline },
 });
 
-function ChatInner({ backdate }: { backdate: boolean }) {
+function ChatInner() {
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>('loading');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -202,7 +197,6 @@ function ChatInner({ backdate }: { backdate: boolean }) {
   const [maxRounds] = useState(() => getDevChatRounds());
 
   const today = getDevAdjustedDate();
-  if (backdate) today.setDate(today.getDate() - 1);
   const todayStr = getLocalDateString(today);
   // KST 기준 요일 (0=일, 3=수)
   const kstDow = getKstDayOfWeek();
