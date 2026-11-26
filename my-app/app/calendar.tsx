@@ -579,9 +579,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   recordTitle: {
-    position: 'absolute', top: 51, left: 0, right: 0,
+    position: 'absolute', top: 48, left: 0, right: 0,   // 줄 높이를 늘린 만큼(3) 위로
     textAlign: 'center',
-    fontFamily: FONTS.bold, fontSize: fs(20), lineHeight: fs(20),
+    fontFamily: FONTS.bold, fontSize: fs(20), lineHeight: fs(26),
     color: COLORS.outline,
   },
   recordImageArea: { position: 'absolute', top: 94, left: 51, width: 260, height: 180 },

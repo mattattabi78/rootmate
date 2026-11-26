@@ -37,7 +37,7 @@ import { CameraView } from 'expo-camera';
 import EmojiText from '../components/common/EmojiText';
 import { getLocalDateString } from '../utils/date';
 import { getKstDayOfWeek, getDevAdjustedDate, getDevChatRounds } from '../utils/devOverrides';
-import { scheduleTaskReminder, cancelEveningNotification, ensureNotificationPermission } from '../utils/notifications';
+import { scheduleTaskReminder, cancelTaskReminder, cancelEveningNotification, ensureNotificationPermission } from '../utils/notifications';
 import { getGuideItems, GUIDE_TITLE, GUIDE_BTN_LABEL, GUIDE_CAMERA_LABEL, GUIDE_EXAMPLE_OPEN } from '../constants/imageGuide';
 import { persistImageUri } from '../utils/persistImage';
 import { isOnline } from '../utils/network';
@@ -160,6 +160,11 @@ function ChatInner() {
   const plantTypeRef = useRef<PlantType>('tomato');
   // 오늘 기록은 있지만 미완료 task가 남은 경우 (AI 질문 건너뜀)
   const hasExistingRecordRef = useRef(false);
+  // 다시 들어왔을 때 이어서 보여줄 지난 대화와, 아직 못 끝낸(2시간 뒤에 알려줘로 미룬) task
+  const prevMessagesRef = useRef<Message[]>([]);
+  const pendingTasksRef = useRef<PlantTask[]>([]);
+  // '2시간 뒤에 알려줘'로 미뤘고 아직 끝내지 못한 task id (대화를 마쳐도 오늘 기록에 남겨 다음에 들어오면 입력창 위에 띄움)
+  const [remindedTaskIds, setRemindedTaskIds] = useState<string[]>([]);
   const [todayQuestion, setTodayQuestion] = useState('');
   const [longBreakCheckin, setLongBreakCheckin] = useState<string | null>(null);
   const memorySummariesRef = useRef<MemorySummary[]>([]);
@@ -233,8 +238,9 @@ function ChatInner() {
 
   // ── 마음 건강 질문 시작 (모든 task 확인이 끝난 뒤) ───────────────────
   const startQuestion = (fallbackQuestion: string) => {
-    // 기록은 있지만 미완료 task를 마저 완료한 경우 → AI 질문 없이 완료
+    // 기록은 있지만 미완료 task를 마저 처리한 경우 → AI 질문 없이 마무리 (기록은 task마다 바로 갱신했음)
     if (hasExistingRecordRef.current) {
+      storage.clearChatDraft(todayStr);
       setPhase('done');
       return;
     }
@@ -268,7 +274,9 @@ function ChatInner() {
   // 체크리스트(및 후속 선택)가 끝난 뒤: 사진 task가 있으면 사진 촬영, 없으면 바로 마음 건강 질문
   const afterChecklist = (taskList: PlantTask[], fallbackQuestion: string) => {
     if (taskList.some(t => t.id === 'photo')) {
-      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: getPlantMessages(plantTypeRef.current).photoAsk() }]);
+      // 미뤄 둔 사진을 하러 다시 들어온 경우에는 그에 맞는 멘트
+      const mm = getPlantMessages(plantTypeRef.current);
+      setMessages(prev => [...prev, { id: newId(), from: 'plant', text: hasExistingRecordRef.current ? mm.pendingPhotoAsk() : mm.photoAsk() }]);
       setPhase('photo_capture');
     } else {
       startQuestion(fallbackQuestion);
@@ -282,6 +290,18 @@ function ChatInner() {
       return;
     }
     setMessages(prev => [...prev, { id: newId(), from: 'plant', text: getPlantMessages(plantTypeRef.current).checklistAsk() }]);
+    setPhase('checklist');
+  };
+
+  // 미뤄 둔 task를 하러 다시 들어왔을 때: 인사·첫 체크리스트 요청 대신 "미뤄둔 거 했어?" 멘트로 시작 (물주기 등이 있으면 체크리스트, 사진만 남았으면 바로 사진 요청)
+  const startPendingTasks = (taskList: PlantTask[], fallbackQuestion: string) => {
+    const checkable = taskList.filter(t => t.id !== 'photo');
+    if (checkable.length === 0) {
+      afterChecklist(taskList, fallbackQuestion);   // 사진만 남음 → 미뤄둔 사진 멘트 + 사진 버튼
+      return;
+    }
+    const labels = checkable.map(t => getChecklistLabel(t.id, t.label));
+    setMessages(prev => [...prev, { id: newId(), from: 'plant', text: getPlantMessages(plantTypeRef.current).pendingTaskAsk(labels) }]);
     setPhase('checklist');
   };
 
@@ -315,23 +335,31 @@ function ChatInner() {
       const existingRecord = await storage.getDailyRecord(todayStr);
       if (existingRecord) {
         const alreadyDoneIds = await getTodayCompletedTaskIds();
-        const pendingTasks   = buildTodayTasks(
-          pType,
-          alreadyDoneIds,
-          growthState.completedTasks,
-          growthState.plantedAt,
-          await storage.getDeferredTasks(todayStr),
-        );
+        // 남은 task: '2시간 뒤에 알려줘'로 미룬 것 중 아직 안 끝낸 것. (이 정보가 없는 예전 기록은 예전 방식으로 오늘 task에서 계산)
+        const pendingTasks: PlantTask[] = existingRecord.pendingTaskIds
+          ? (PLANT_TASKS[pType] ?? []).filter(t => existingRecord.pendingTaskIds!.includes(t.id) && !alreadyDoneIds.includes(t.id))
+          : buildTodayTasks(
+              pType,
+              alreadyDoneIds,
+              growthState.completedTasks,
+              growthState.plantedAt,
+              await storage.getDeferredTasks(todayStr),
+            );
+        // 지난 대화: 마칠 때 보관해 둔 것이 있으면 그대로, 없으면 기록으로 복원
+        const previous: Message[] = (await storage.getChatLog(todayStr)) ?? reconstructDayChat(existingRecord, pNick, pType);
 
         if (pendingTasks.length === 0) {
           // 모든 task 완료 → 완료 화면
-          setMessages(reconstructDayChat(existingRecord, pNick, pType));
+          setMessages(previous);
           setPhase('already_done');
           return;
         }
 
-        // 미완료 task 남아있음 → task 검사만 진행 (AI 질문 없음)
+        // 미완료 task 남아있음 → 지난 대화는 그대로 두고 남은 task만 입력창 위에 띄움 (AI 질문 없음)
         hasExistingRecordRef.current = true;
+        prevMessagesRef.current = previous;
+        pendingTasksRef.current = pendingTasks;
+        setRemindedTaskIds(pendingTasks.map(t => t.id));
         // fall through to task flow below
       }
 
@@ -378,6 +406,7 @@ function ChatInner() {
         setCheckedIds(draft.checkedIds ?? []);
         setFollowupSel(draft.followupSel ?? {});
         setCanEndConversation(!!draft.canEndConversation);
+        setRemindedTaskIds(draft.remindedTaskIds ?? []);
         setTodayQuestion(draft.todayQuestion ?? '');
         // 이전 방식(task별 질문)으로 저장된 draft의 단계는 체크리스트로 되돌림
         const resumable: Phase[] = ['checklist', 'followup', 'photo_capture', 'photo_later', 'answering'];
@@ -392,22 +421,26 @@ function ChatInner() {
       if (!hasExistingRecordRef.current) setTemporaryExpression('surprise', 2000);
 
       const alreadyDone    = await getTodayCompletedTaskIds();
-      const todayTaskList  = buildTodayTasks(
-        pType,
-        alreadyDone,
-        growthState.completedTasks,
-        growthState.plantedAt,
-        await storage.getDeferredTasks(todayStr),
-      );
+      const todayTaskList  = hasExistingRecordRef.current
+        ? pendingTasksRef.current
+        : buildTodayTasks(
+            pType,
+            alreadyDone,
+            growthState.completedTasks,
+            growthState.plantedAt,
+            await storage.getDeferredTasks(todayStr),
+          );
       setTasks(todayTaskList);
 
       const plantMessages = getPlantMessages(plantTypeRef.current);
       const greetMsg = { id: newId(), from: 'plant' as const, text: plantMessages.greeting(pNick) };
 
-      setMessages([greetMsg]);
+      // 다시 들어온 경우에는 인사 대신 지난 대화를 그대로 이어서 보여줌
+      setMessages(hasExistingRecordRef.current ? prevMessagesRef.current : [greetMsg]);
 
       setTimeout(() => {
-        startChecklist(todayTaskList, fallbackQuestion);
+        if (hasExistingRecordRef.current) startPendingTasks(todayTaskList, fallbackQuestion);
+        else startChecklist(todayTaskList, fallbackQuestion);
       }, 500);
     })();
   }, []);
@@ -422,16 +455,68 @@ function ChatInner() {
     if (phase === 'loading' || phase === 'already_done' || phase === 'done' || messages.length === 0) return;
     storage.saveChatDraft(todayStr, {
       messages, phase, tasks, chatDoneTaskIds, chatAltTaskIds, checkedIds, followupSel, todayQuestion,
-      canEndConversation,
+      canEndConversation, remindedTaskIds,
     });
-  }, [messages, phase, canEndConversation, chatAltTaskIds, checkedIds, followupSel]);
+  }, [messages, phase, canEndConversation, chatAltTaskIds, checkedIds, followupSel, remindedTaskIds]);
+
+  // 대화를 마치면 그날 대화 전체를 보관 (남은 task가 있어 다시 들어오면 지난 대화 그대로 이어서 보여줌. 모두 끝났을 때도 같은 대화를 보여줌)
+  useEffect(() => {
+    if (phase === 'done' && messages.length > 0) storage.saveChatLog(todayStr, messages).catch(() => {});
+  }, [phase, messages]);
 
   // 식물이 "알려줄게"라고 말한 뒤: 알림 권한을 확인하고(없으면 허용 요청 창), 허용되면 2시간 뒤 알림을 예약.
   // 이미 거부돼 다시 물을 수 없으면 설정에서 켜도록 안내
-  const scheduleRemindersWithPermission = async (labels: string[]) => {
+  // 알림 권한 확인·예약이 오래 걸리거나 멈춰도(시스템 허용 창을 아직 안 누른 경우, 시뮬레이터·웹에서 응답이 없는 경우 등)
+  // 다음 대화로 넘어가는 것을 막지 않도록, 일정 시간까지만 기다린다. 그 뒤에도 권한 처리는 뒤에서 계속 진행됨
+  const waitAtMost = (p: Promise<unknown>, ms: number) =>
+    Promise.race([p.catch(() => undefined), new Promise<void>(resolve => setTimeout(resolve, ms))]);
+
+  const tomorrowStr = () => {
+    const t = new Date(todayStr + 'T00:00:00');
+    t.setDate(t.getDate() + 1);
+    return getLocalDateString(t);
+  };
+
+  // 오늘 기록이 이미 있는 상태(다시 들어와 남은 task를 처리하는 중)에서 task 하나를 처리했을 때 기록(DailyRecord)에 바로 반영
+  //  done: 완료 / alt: 안 해도 되는 이유를 고름 / later: 내일로 미룸 → 모두 '남은 task'에서 빠짐
+  const markRecordTask = async (taskId: string, kind: 'done' | 'alt' | 'later', extra?: Partial<DailyRecord>) => {
+    if (!hasExistingRecordRef.current) return;
+    const record = await storage.getDailyRecord(todayStr);
+    if (!record) return;
+    const uniq = (arr?: string[]) => Array.from(new Set(arr ?? []));
+    record.pendingTaskIds = (record.pendingTaskIds ?? []).filter(id => id !== taskId);
+    if (kind === 'done') { record.completedTaskIds = uniq([...(record.completedTaskIds ?? []), taskId]); if (taskId === 'water') record.waterDone = true; }
+    if (kind === 'alt')  record.altTaskIds = uniq([...(record.altTaskIds ?? []), taskId]);
+    await storage.saveDailyRecord({ ...record, ...extra });
+  };
+
+  // task를 끝냈을 때: 완료 기록 + 다음 날로 넘겨 둔 것 취소 + 2시간 뒤 알림 취소 + 남은 task 목록에서 제거
+  // recordAs: 성장 기록에 남기는 id (촉촉해는 water_moist)
+  const completeTask = (taskId: string, recordAs: string = taskId, kind: 'done' | 'alt' = 'done', extra?: Partial<DailyRecord>) => {
+    recordTaskCompletion(recordAs);
+    storage.undeferTask(tomorrowStr(), taskId);
+    cancelTaskReminder(taskId).catch(() => {});
+    setRemindedTaskIds(prev => prev.filter(id => id !== taskId));
+    markRecordTask(taskId, kind, extra).catch(() => {});
+  };
+
+  // '2시간 뒤에 알려줘': 오늘 안에 못 끝내면 다음 날 task로 넘어가도록 미리 내일 목록에 넣어 둔다 (오늘 끝내면 completeTask가 내일 목록에서 뺀다)
+  const remindLater = (taskId: string) => {
+    storage.deferTask(tomorrowStr(), taskId);
+    setRemindedTaskIds(prev => prev.includes(taskId) ? prev : [...prev, taskId]);
+  };
+
+  // '내일로 미룰게': 내일 task 목록에 넣고 오늘 남은 task에서는 뺀다
+  const postponeToTomorrow = (taskId: string) => {
+    storage.deferTask(tomorrowStr(), taskId);
+    setRemindedTaskIds(prev => prev.filter(id => id !== taskId));
+    markRecordTask(taskId, 'later').catch(() => {});
+  };
+
+  const scheduleRemindersWithPermission = async (items: { id: string; label: string }[]) => {
     try {
       if (await ensureNotificationPermission()) {
-        await Promise.all(labels.map(label => scheduleTaskReminder(label, plantTypeRef.current)));
+        await Promise.all(items.map(it => scheduleTaskReminder(it.label, plantTypeRef.current, it.id)));
       } else {
         Alert.alert(
           '알림이 꺼져 있어요',
@@ -461,7 +546,7 @@ function ChatInner() {
     const checked   = none ? [] : openTasks.filter(t => checkedIds.includes(t.id));
     const unchecked = none ? openTasks : openTasks.filter(t => !checkedIds.includes(t.id));
     setPhase('loading');
-    checked.forEach(t => recordTaskCompletion(t.id));
+    checked.forEach(t => completeTask(t.id));
     setChatDoneTaskIds(prev => [...prev, ...checked.map(t => t.id).filter(id => !prev.includes(id))]);
     setMessages(prev => [...prev, {
       id: newId(), from: 'user',
@@ -492,35 +577,34 @@ function ChatInner() {
     const lines: string[] = [];
     const replies: string[] = [];
     const cantLabels: string[] = [];
-    const remindLabels: string[] = [];
-    const tomorrow = new Date(todayStr + 'T00:00:00');
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const remindItems: { id: string; label: string }[] = [];
 
     openTasks.forEach(task => {
       const kind = followupSel[task.id];
       const c = choicesFor(task.id);
       if (kind === 'alt' && c.alt) {
-        recordTaskCompletion(task.id === 'water' ? 'water_moist' : task.id);
+        completeTask(task.id, task.id === 'water' ? 'water_moist' : task.id, 'alt');
         setChatAltTaskIds(prev => [...prev, task.id]);
         lines.push(`${task.label}: ${c.alt}`);
         replies.push(task.id === 'water' ? m.waterMoist() : m.sunlightCloudy());
       } else if (kind === 'remind') {
-        remindLabels.push(task.label);
+        remindItems.push({ id: task.id, label: task.label });
+        remindLater(task.id);
         lines.push(`${task.label}: ${c.remind}`);
       } else {
-        storage.deferTask(getLocalDateString(tomorrow), task.id);
+        postponeToTomorrow(task.id);
         cantLabels.push(task.label);
         lines.push(`${task.label}: ${c.cantToday}`);
       }
     });
-    if (remindLabels.length > 0) replies.push(m.reminderYes(reminderClock()));
+    if (remindItems.length > 0) replies.push(m.reminderYes(reminderClock()));
     if (cantLabels.length > 0) replies.push(m.taskCantToday(cantLabels.join(', ')));
 
     setMessages(prev => [...prev, { id: newId(), from: 'user', text: lines.join('\n') }]);
     setTimeout(() => {
       setMessages(prev => [...prev, ...replies.map(text => ({ id: newId(), from: 'plant' as const, text }))]);
       setTimeout(async () => {
-        if (remindLabels.length > 0) await scheduleRemindersWithPermission(remindLabels);
+        if (remindItems.length > 0) await waitAtMost(scheduleRemindersWithPermission(remindItems), 4000);
         afterChecklist(tasks, todayQuestion);
       }, 700);
     }, 500);
@@ -540,16 +624,12 @@ function ChatInner() {
     const m = getPlantMessages(plantTypeRef.current);
     const label = tasks.find(t => t.id === 'photo')?.label ?? '사진 찍기';
     setPhase('loading');
-    if (!remind) {
-      const tomorrow = new Date(todayStr + 'T00:00:00');
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      storage.deferTask(getLocalDateString(tomorrow), 'photo');
-    }
+    if (remind) remindLater('photo'); else postponeToTomorrow('photo');
     setMessages(prev => [...prev, { id: newId(), from: 'user', text: remind ? '2시간 뒤에 알려줘' : '내일로 미룰게' }]);
     setTimeout(() => {
       setMessages(prev => [...prev, { id: newId(), from: 'plant', text: remind ? m.reminderYes(reminderClock()) : m.taskCantToday(label) }]);
       setTimeout(async () => {
-        if (remind) await scheduleRemindersWithPermission([label]);
+        if (remind) await waitAtMost(scheduleRemindersWithPermission([{ id: 'photo', label }]), 4000);
         startQuestion(todayQuestion);
       }, 600);
     }, 500);
@@ -661,7 +741,7 @@ function ChatInner() {
     setMessages(prev => [...prev, { id: newId(), from: 'user', text: '', imageUri: pendingPhotoUri }]);
     const newDone = [...chatDoneTaskIds, 'photo'];
     setChatDoneTaskIds(newDone);
-    recordTaskCompletion('photo');
+    completeTask('photo', 'photo', 'done', { plantPhotoUri: pendingPhotoUri });
     setTimeout(() => {
       setMessages(prev => [...prev, { id: newId(), from: 'plant', text: getPlantMessages(plantTypeRef.current).photoUploaded() }]);
       setTimeout(() => startQuestion(todayQuestion), 500);
@@ -761,6 +841,7 @@ function ChatInner() {
       waterDone: chatDoneTaskIds.includes('water'),
       completedTaskIds: chatDoneTaskIds,
       altTaskIds: chatAltTaskIds,
+      pendingTaskIds: remindedTaskIds,
       recordDone: false,
       question: todayQuestion,
       answer,
@@ -924,8 +1005,11 @@ function ChatInner() {
 
             {phase === 'photo_later' && (
               <View style={styles.choiceContainer}>
-                <ChoiceBtn onPress={() => handlePhotoLaterChoice(true)}>2시간 뒤에 알려줘</ChoiceBtn>
-                <ChoiceBtn onPress={() => handlePhotoLaterChoice(false)}>내일로 미룰게</ChoiceBtn>
+                {/* 버튼 두 개는 양옆으로, 오른쪽이 긍정(라임)·왼쪽은 회색 (체크리스트의 오늘은 못했어 / 보내기와 같은 규칙) */}
+                <View style={styles.checklistBtnRow}>
+                  <View style={styles.checklistBtn}><ChoiceBtn onPress={() => handlePhotoLaterChoice(false)}>내일로 미룰게</ChoiceBtn></View>
+                  <View style={styles.checklistBtn}><ChoiceBtn active onPress={() => handlePhotoLaterChoice(true)}>2시간 뒤에 알려줘</ChoiceBtn></View>
+                </View>
               </View>
             )}
 
@@ -938,20 +1022,16 @@ function ChatInner() {
                     <Text style={styles.transformingSubText}>약 1분정도 소요될 수 있습니다.</Text>
                   </View>
                 ) : (
-                  <>
-                    <ChoiceBtn onPress={() => { setShowGuideExample(false); setShowGuideModal(true); }}>사진 올리기</ChoiceBtn>
-                    <ChoiceBtn onPress={handlePhotoLater}>나중에 찍을게</ChoiceBtn>
-                  </>
+                  // 대비되는 두 버튼: 오른쪽이 긍정(라임), 왼쪽은 회색
+                  <View style={styles.checklistBtnRow}>
+                    <View style={styles.checklistBtn}><ChoiceBtn onPress={handlePhotoLater}>나중에 찍을게</ChoiceBtn></View>
+                    <View style={styles.checklistBtn}><ChoiceBtn active onPress={() => { setShowGuideExample(false); setShowGuideModal(true); }}>사진 올리기</ChoiceBtn></View>
+                  </View>
                 )}
               </View>
             )}
 
-            {/* 대화 종료: 이미 오늘 기록을 마친 경우에는 입력창과 같은 모양의 완료 칸을 위에 두고, 그 아래에 홈으로 돌아가기 버튼. 둘 사이 간격은 같은 화자의 연속 말풍선 간격(8)과 같음 */}
-            {phase === 'already_done' && (
-              <View style={styles.endDoneBadge}>
-                <Text style={styles.doneBtnText}>오늘 기록 완료!</Text>
-              </View>
-            )}
+            {/* 대화 종료: 홈으로 돌아가기 버튼 */}
             {isEnded && (
               <TouchableOpacity
                 style={styles.endHomeBtn}
@@ -1052,10 +1132,12 @@ function ChatInner() {
 
             <View style={styles.guideFooter}>
               <Button
+                style={styles.guideFooterBtn}
                 label={GUIDE_CAMERA_LABEL}
                 onPress={() => { setShowGuideModal(false); setTimeout(() => openPlantCamera(), 600); }}
               />
               <Button
+                style={styles.guideFooterBtn}
                 label={GUIDE_BTN_LABEL}
                 variant="secondary"
                 onPress={() => { setShowGuideModal(false); setTimeout(() => openPlantGallery(), 600); }}
@@ -1294,7 +1376,8 @@ const styles = StyleSheet.create({
   bubbleUser: { alignSelf: 'flex-end', paddingHorizontal: 10.5 },
 
   bubbleSender: {
-    fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.label), lineHeight: fs(16),
+    fontFamily: FONTS.bold, fontSize: fs(FONT_SIZE.label), lineHeight: fs(22),
+    marginVertical: -3,   // 줄 높이를 넉넉히(한글 윗부분이 안 잘리게) 잡은 만큼 빼서 말풍선과의 간격은 그대로
     letterSpacing: -0.275, color: COLORS.forest,
   },
   bubbleImage: {
@@ -1316,24 +1399,9 @@ const styles = StyleSheet.create({
   // 완료 카드
   // 이미 기록을 마친 경우의 완료 표시: 입력창(높이 46, 흰 배경, 반경 10, 1.5 테두리)과 같은 모양·세로 위치.
   // 가로는 화면 전체(좌우 16 여백)
-  endDoneBadge: {
-    marginHorizontal: 16,
-    marginTop: 13,
-    height: BTN_H,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: COLORS.borderDark,
-    backgroundColor: COLORS.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.shadow,
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-  },
   endHomeBtn: {
     marginHorizontal: 16,
-    marginTop: 8,          // 같은 화자의 연속 말풍선 사이 간격(40 − 32 = 8)과 같음 — 완료 칸과 이 버튼 사이에도 그대로 적용
+    marginTop: 13,         // 입력 행과 같은 위치
     height: BTN_H,
     borderRadius: 10,
     borderWidth: 1.5,
@@ -1357,6 +1425,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     gap: 7,
   },
+  // 버튼 두 개가 한꺼번에 나올 때: 양옆 배치 (체크리스트, 사진 찍기 단계). 서로 대비되면 오른쪽이 긍정(라임 `active`), 왼쪽은 회색
   checklistBtnRow: { flexDirection: 'row', gap: 7 },
   checklistBtn: { flex: 1 },
   choiceBtn: {
@@ -1532,7 +1601,9 @@ const styles = StyleSheet.create({
     lineHeight: fs(20),
     color: COLORS.textInk,
   },
-  guideFooter: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 28, gap: 10 },
+  // 버튼 두 개는 양옆으로 (같은 폭 반반)
+  guideFooter: { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 4, paddingBottom: 28, gap: 10 },
+  guideFooterBtn: { flex: 1, paddingHorizontal: 8 },
   // 예시 버튼: 글자 너비에 맞춤 (테두리는 시트의 다른 박스와 같은 1.5px #303a1e)
   exampleBtn: {
     height: 34,
@@ -1564,7 +1635,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   exampleBody: { padding: 16 },
-  exampleImage: { width: '100%', height: 280 },
+  // 사진(1080×2000, 세로)이 상자 안에 꽉 차도록 비율을 맞추고 모서리를 둥글게 (contain으로 두면 여백까지 둥글어져서 사진 모서리는 그대로임)
+  exampleImage: { height: 280, aspectRatio: 1080 / 2000, alignSelf: 'center', borderRadius: 10, overflow: 'hidden' },
 
   // 캐릭터 프리뷰 (가운데 팝업)
   previewOverlay: {

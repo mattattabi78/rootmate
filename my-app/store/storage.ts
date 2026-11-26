@@ -6,6 +6,7 @@ export interface DailyRecord {
   date: string;            // 'YYYY-MM-DD'
   waterDone: boolean;
   completedTaskIds?: string[];  // 오늘 완료한 task id 목록
+  pendingTaskIds?: string[];    // '2시간 뒤에 알려줘'로 미뤄 오늘 아직 못 끝낸 task id (다시 들어오면 채팅 입력창 위에 뜸. 끝내면 제거)
   altTaskIds?: string[];        // '흙이 촉촉해' 등 오늘은 안 해도 된다고 답한 task id 목록 (완료에는 포함되지 않음)
   recordDone: boolean;     // 사진 기록 완료
   question: string;        // 오늘 노출된 질문 텍스트
@@ -39,6 +40,8 @@ export const KEYS = {
   MEMORY_ENABLED:      '@rootmate/memory_enabled',
   PLANT_PHOTOS:        (date: string) => `@plant/photos_${date}`,
   CHAT_DRAFT:          (date: string) => `@plant/chat_draft_${date}`,
+  CHAT_LOG:            (date: string) => `@plant/chat_log_${date}`,   // 대화를 마친 뒤에도 남은 task가 있을 때 그날 대화 전체(말풍선)를 보관
+  TASK_REMINDERS:      '@plant/task_reminders',                        // { taskId: 예약된 2시간 뒤 알림 id } — task를 끝내면 알림을 취소하려고 보관
   GROWTH_STATE:           '@rootmate/growth_state',
   GENERATED_PLANT_URI:    '@plant/generated_plant_uri',
   GENERATED_FACE_POS:     '@plant/generated_face_pos',
@@ -277,6 +280,46 @@ export const storage = {
     await AsyncStorage.removeItem(KEYS.CHAT_DRAFT(date));
   },
 
+  // 대화를 마친 뒤 task가 남았을 때 대화 전체를 보관 (다시 들어오면 이어서 보여줌)
+  async saveChatLog(date: string, messages: object[]): Promise<void> {
+    await AsyncStorage.setItem(KEYS.CHAT_LOG(date), JSON.stringify(messages));
+  },
+  async getChatLog(date: string): Promise<any[] | null> {
+    const raw = await AsyncStorage.getItem(KEYS.CHAT_LOG(date));
+    return raw ? JSON.parse(raw) : null;
+  },
+
+  // '2시간 뒤에 알려줘'로 예약한 알림 id (task를 끝내면 취소)
+  async setTaskReminderId(taskId: string, notifId: string): Promise<void> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.TASK_REMINDERS);
+      const all: Record<string, string> = raw ? JSON.parse(raw) : {};
+      all[taskId] = notifId;
+      await AsyncStorage.setItem(KEYS.TASK_REMINDERS, JSON.stringify(all));
+    } catch { /* 보관 실패해도 대화는 계속 */ }
+  },
+  async takeTaskReminderId(taskId: string): Promise<string | null> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.TASK_REMINDERS);
+      const all: Record<string, string> = raw ? JSON.parse(raw) : {};
+      const id = all[taskId] ?? null;
+      if (id) { delete all[taskId]; await AsyncStorage.setItem(KEYS.TASK_REMINDERS, JSON.stringify(all)); }
+      return id;
+    } catch { return null; }
+  },
+
+  // 다음 날로 넘겼다가(deferTask) 오늘 끝낸 task는 다음 날 목록에서 뺀다
+  async undeferTask(date: string, taskId: string): Promise<void> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.DEFERRED_TASKS);
+      const all: Record<string, string[]> = raw ? JSON.parse(raw) : {};
+      if (!all[date]) return;
+      all[date] = all[date].filter(id => id !== taskId);
+      if (all[date].length === 0) delete all[date];
+      await AsyncStorage.setItem(KEYS.DEFERRED_TASKS, JSON.stringify(all));
+    } catch { /* ignore */ }
+  },
+
   // '오늘은 못할 것 같아'로 다음 날로 넘긴 task — 넘긴 날(date)의 task 목록에 같이 뜸
   async deferTask(date: string, taskId: string): Promise<void> {
     try {
@@ -383,6 +426,7 @@ export const storage = {
   async clearTodayRecord(): Promise<void> {
     const today = getLocalDateString();
     await AsyncStorage.removeItem(KEYS.DAILY_RECORD(today));
+    await AsyncStorage.removeItem(KEYS.CHAT_LOG(today));
     // 개발자 메뉴 초기화 후 다시 완료하면 연속 관리 화면이 다시 뜨도록 함
     await AsyncStorage.removeItem(KEYS.LAST_STREAK_SHOWN_DATE);
   },

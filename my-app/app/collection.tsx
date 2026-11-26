@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
-  Image,
   Modal,
   PanResponder,
   Pressable,
@@ -21,12 +20,10 @@ import FitToScreen from '../components/common/FitToScreen';
 import BottomNavBar from '../components/common/BottomNavBar';
 import { LockPixelIcon } from '../components/common/PixelIcons';
 import PlantCharacter, { CHARACTER_RATIO } from '../components/common/PlantCharacter';
-import FaceOverlay, { getGeneratedFaceOverlayStyle } from '../components/common/BlinkingFace';
-import { usePlantExpression } from '../hooks/usePlantExpression';
 import PlantDetailView from '../components/plant/PlantDetailView';
 import Wallpaper, { WALLPAPER_COLOR } from '../components/common/Wallpaper';
 import { PLANT_INFO } from '../constants/plants';
-import { isPlantType, PlantType, GrowthStage, Expression, getMaxStage } from '../constants/character';
+import { isPlantType, PlantType, GrowthStage, getMaxStage } from '../constants/character';
 
 const ALL_PLANTS: PlantType[] = ['basil', 'tomato', 'marigold'];
 
@@ -95,11 +92,6 @@ const CONTENT_CENTER: Record<'grown' | 'seed', { x: number; y: number }> = {
   grown: { x: 430.5, y: 614 },     // 합친 영역: y 3 ~ 1225 (토마토가 가장 키가 큼)
   seed:  { x: 430.5, y: 942 },     // 합친 영역: y 659 ~ 1225 (씨앗·새싹은 화분 안쪽에 있음)
 };
-// 지금 키우는 식물의 현재 모습(홈 화면과 같은 캐릭터·표정)
-export interface LiveLook {
-  expression: Expression;
-  generated: { uri: string; facePos: { x: number; y: number } } | null;   // 사진으로 만든 캐릭터
-}
 const ARCH_W = cu(192);
 const ARCH_H = cu(248);   // 아래 이름표 윗면(360-22-44)과 12 떨어지게
 const BOX_W = CARD_W - cu(32);   // 뒷면 본문 상자
@@ -141,40 +133,26 @@ function formatSince(iso: string): string {
 }
 
 // 앞면: No. → 아치 창 속 캐릭터 → 아래 이름표
-//   키운 적 없음: 씨앗 단계(1단계) / 키운 적 있음: 다 자란 모습 / 지금 키우는 식물(live): 홈 화면과 같은 현재 모습
-function CardFront({ plantType, unlocked, live }: { plantType: PlantType; unlocked: boolean; live?: LiveLook }) {
+//   키운 적 없음·지금 키우는 식물: 씨앗 단계(1단계) / 키운 적 있는 다른 식물: 다 자란 모습. 표정은 항상 기본 (홈 화면의 상태와 동기화하지 않음)
+function CardFront({ plantType, unlocked, current }: { plantType: PlantType; unlocked: boolean; current: boolean }) {
   const info = PLANT_INFO[plantType];
   const th = PLANT_THEMES[plantType];
   const k = ui(CHAR_W) / CANVAS_W;   // 캐릭터 캔버스(846 폭) → 카드 속 크기 배율
-  const showGenerated = !!live?.generated;
-  const seed = !unlocked || !!live;   // 씨앗 단계 기본 캐릭터를 쓰는 경우
+  const seed = !unlocked || current;   // 씨앗 단계 기본 캐릭터를 쓰는 경우
   const center = CONTENT_CENTER[seed ? 'seed' : 'grown'];
-  const GEN = ui(CHAR_W) * 1.4;       // 사진 캐릭터(정사각형) 크기
   return (
     <View style={styles.faceFill}>
       <Text style={[styles.cardNo, { color: th.text }]}>No.{pad2(ALL_PLANTS.indexOf(plantType) + 1)}</Text>
       <View style={styles.arch} pointerEvents="none">
-        {showGenerated ? (
-          // 사진으로 만든 캐릭터 + 화분 위 얼굴 (홈 화면과 같은 구성)
-          <View style={{ position: 'absolute', width: GEN, height: GEN, left: (ARCH_W - GEN) / 2, top: (ARCH_H - GEN) / 2 + CHAR_DROP }}>
-            <Image source={{ uri: live!.generated!.uri }} style={{ width: GEN, height: GEN }} resizeMode="contain" />
-            <FaceOverlay
-              plantType={plantType}
-              expression={live!.expression}
-              style={getGeneratedFaceOverlayStyle(GEN, live!.generated!.facePos)}
-            />
-          </View>
-        ) : (
-          /* 캐릭터는 식물마다 키가 달라서 시작점을 정하지 않고, 이미지 내용(화분+식물)의 가운데가 아치 창 가운데에 오게 놓는다 */
-          <View style={{ position: 'absolute', width: ui(CHAR_W), height: ui(CHAR_W) * CHARACTER_RATIO, left: ARCH_W / 2 - center.x * k, top: ARCH_H / 2 - center.y * k + CHAR_DROP }}>
-            <PlantCharacter
-              plantType={plantType}
-              stage={(seed ? 1 : getMaxStage(plantType)) as GrowthStage}
-              expression={live?.expression ?? 'default'}
-              width={ui(CHAR_W)}
-            />
-          </View>
-        )}
+        {/* 캐릭터는 식물마다 키가 달라서 시작점을 정하지 않고, 이미지 내용(화분+식물)의 가운데가 아치 창 가운데에 오게 놓는다 */}
+        <View style={{ position: 'absolute', width: ui(CHAR_W), height: ui(CHAR_W) * CHARACTER_RATIO, left: ARCH_W / 2 - center.x * k, top: ARCH_H / 2 - center.y * k + CHAR_DROP }}>
+          <PlantCharacter
+            plantType={plantType}
+            stage={(seed ? 1 : getMaxStage(plantType)) as GrowthStage}
+            expression="default"
+            width={ui(CHAR_W)}
+          />
+        </View>
       </View>
       <View style={styles.banner}>
         <Text style={[styles.bannerText, { color: COLORS.textPrimary }]}>{info.name}</Text>
@@ -229,9 +207,7 @@ export default function CollectionScreen() {
   const [deckH, setDeckH] = useState(0);   // 카드 덱 영역 높이 (카드 묶음을 세로 가운데에 두는 데 사용, 측정 전에는 숨김)
   const [grown, setGrown] = useState<string[]>([]);   // 키운 적 있는 식물 id
   const [since, setSince] = useState<Record<string, string>>({});   // 식물별 키우기 시작한 날(ISO)
-  const [currentPlant, setCurrentPlant] = useState<PlantType>('basil');   // 지금 키우는 식물
-  const [generated, setGenerated] = useState<LiveLook['generated']>(null);   // 지금 키우는 식물의 사진 캐릭터
-  const { expression: liveExpr, refresh: refreshLiveExpr } = usePlantExpression(currentPlant);
+  const [currentPlant, setCurrentPlant] = useState<PlantType | null>(null);   // 지금 키우는 식물 (씨앗 단계로 보여 줌)
 
   // 스와이프 애니메이션 값: dx = 손가락 이동량(뒤 카드가 중앙으로 올라오는 정도도 이 값에서 계산), enter = 넘긴 직후 뒤 카드가 다시 나타나는 정도(0→1)
   const [dx] = useState(() => new Animated.Value(0));
@@ -259,15 +235,11 @@ export default function CollectionScreen() {
         setCurrentPlant(plantData.id);
       }
     });
-    storage.getGeneratedPlant().then(g => setGenerated(g ? { uri: g.uri, facePos: g.facePos } : null));
-    refreshLiveExpr();
     storage.getGrownPlants().then(setGrown);
     storage.getGrownSince().then(setSince);
   }, []));   // eslint-disable-line react-hooks/exhaustive-deps
 
   const plantType = ALL_PLANTS[index];
-  // 지금 키우는 식물 카드만 현재 모습(홈 화면과 같은 캐릭터·표정)으로 보여 줌
-  const liveFor = (t: PlantType): LiveLook | undefined => (t === currentPlant ? { expression: liveExpr, generated } : undefined);
   // 키운 적 있는 식물만 공개 (아니면 이름만 보임)
   const isUnlocked = grown.includes(plantType);
 
@@ -432,12 +404,12 @@ export default function CollectionScreen() {
           {/* 뒤쪽 카드 2장 */}
           <Animated.View style={[styles.sideCard, styles.sideCardLeft, { top: deckTop + CARD_H / 2 - SIDE_H / 2, zIndex: frontSide === 'left' ? 2 : 1 }, leftTransform]}>
             <View style={styles.sideClip}>
-              <View style={styles.sideScaled}><CardFront plantType={prevType} unlocked={grown.includes(prevType)} live={liveFor(prevType)} /></View>
+              <View style={styles.sideScaled}><CardFront plantType={prevType} unlocked={grown.includes(prevType)} current={prevType === currentPlant} /></View>
             </View>
           </Animated.View>
           <Animated.View style={[styles.sideCard, styles.sideCardRight, { top: deckTop + CARD_H / 2 - SIDE_H / 2, zIndex: frontSide === 'right' ? 2 : 1 }, rightTransform]}>
             <View style={styles.sideClip}>
-              <View style={styles.sideScaled}><CardFront plantType={nextType} unlocked={grown.includes(nextType)} live={liveFor(nextType)} /></View>
+              <View style={styles.sideScaled}><CardFront plantType={nextType} unlocked={grown.includes(nextType)} current={nextType === currentPlant} /></View>
             </View>
           </Animated.View>
 
@@ -446,7 +418,7 @@ export default function CollectionScreen() {
           <Animated.View style={[styles.mainCard, { top: deckTop, zIndex: 3 }, cardTransform]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={toggleFlip}>
               <Animated.View style={[styles.faceOuter, { transform: [{ perspective: 1200 }, { rotateY: flip.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }]}>
-                <View style={styles.faceInner}><CardFront plantType={plantType} unlocked={isUnlocked} live={liveFor(plantType)} /></View>
+                <View style={styles.faceInner}><CardFront plantType={plantType} unlocked={isUnlocked} current={plantType === currentPlant} /></View>
               </Animated.View>
               <Animated.View style={[styles.faceOuter, { transform: [{ perspective: 1200 }, { rotateY: flip.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] }) }] }]}>
                 <View style={styles.faceInner}><CardBack plantType={plantType} unlocked={isUnlocked} since={since[plantType]} /></View>

@@ -47,7 +47,7 @@ export default function Button({
       size="small"
     />
   ) : (
-    <Text style={labelStyle}>{label}</Text>
+    <Text style={labelStyle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{label}</Text>
   );
 
   return (

@@ -174,7 +174,9 @@ export default function HomeScreen() {
   // 캐릭터 터치 반응 (톡·연타·문지르기·길게 누르기, 빈 화면 두 번 탭 물방울). 반응 중에는 표정·눈·효과가 기본 모습을 덮어씀
   const interaction = usePlantInteraction({ plantType: displayPlant, baseline: displayExpr, waterDone: growthCompletedIds.includes('water') });
   const shownExpr = interaction.expression ?? displayExpr;
-  const fxK = (121 * f / 500) / CANVAS_PER_FACE_PX;   // 사진 캐릭터 위 효과 이미지 1캔버스 px의 크기
+  // 사진 캐릭터(정사각형)는 기본 캐릭터가 차지하는 캐릭터 영역 높이(340)에 맞춰 보여줌 (예전 220은 위아래가 비어 아래 대사와 간격이 벌어졌음)
+  const genSize = 340 * f;
+  const fxK = (genSize * 0.55 / 500) / CANVAS_PER_FACE_PX;   // 사진 캐릭터 위 효과 이미지 1캔버스 px의 크기 (얼굴 오버레이 = 캔버스의 55%)
 
   const handleAdvanceDay = async () => {
     advanceDevDay();
@@ -319,10 +321,10 @@ export default function HomeScreen() {
           <View {...interaction.panHandlers}>
           {showGenerated ? (
             // 합성 이미지(식물+화분) + 감지된 화분 위치에 표정 오버레이
-            <View style={{ width: 220 * f, height: 220 * f }}>
+            <View style={{ width: genSize, height: genSize }}>
               <Image
                 source={{ uri: generatedPlantUri }}
-                style={{ width: 220 * f, height: 220 * f }}
+                style={{ width: genSize, height: genSize }}
                 resizeMode="contain"
               />
               {generatedFacePos && (
@@ -331,7 +333,7 @@ export default function HomeScreen() {
                   expression={shownExpr}
                   eye={interaction.eye ?? undefined}
                   animated
-                  style={getGeneratedFaceOverlayStyle(220 * f, generatedFacePos)}
+                  style={getGeneratedFaceOverlayStyle(genSize, generatedFacePos)}
                 />
               )}
               {/* 효과(하트·음표·물방울): 레이어 캔버스 기준 이미지를 얼굴 오버레이와 같은 비율로 줄여 얼굴 위치에 맞춤 */}
@@ -342,8 +344,8 @@ export default function HomeScreen() {
                   style={{
                     position: 'absolute',
                     width: 846 * fxK, height: 1254 * fxK,
-                    left: (generatedFacePos.x / 100) * 220 * f - CANVAS_FACE_CENTER[displayPlant].x * fxK,
-                    top: (generatedFacePos.y / 100) * 220 * f - CANVAS_FACE_CENTER[displayPlant].y * fxK,
+                    left: (generatedFacePos.x / 100) * genSize - CANVAS_FACE_CENTER[displayPlant].x * fxK,
+                    top: (generatedFacePos.y / 100) * genSize - CANVAS_FACE_CENTER[displayPlant].y * fxK,
                   }}
                 />
               )}

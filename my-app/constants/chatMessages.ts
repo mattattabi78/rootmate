@@ -21,6 +21,10 @@ export interface PlantChatMessages {
   /** '나중에 찍을게'를 골랐을 때 — 알림 / 내일로 미루기 중 고르게 묻는다 */
   photoLaterAsk: () => string;
   photoUploaded: () => string;
+  /** 미뤄 둔 task(물주기·햇빛·관찰)를 하러 다시 들어왔을 때 — labels는 남은 task 이름 */
+  pendingTaskAsk: (labels: string[]) => string;
+  /** 미뤄 둔 사진 찍기를 하러 다시 들어왔을 때 */
+  pendingPhotoAsk: () => string;
   alreadyDone: () => string;
   transitionToQuestion: () => string;
 }
@@ -77,6 +81,16 @@ const MESSAGES: Record<PlantType, PlantChatMessages> = {
       '괜찮아. 나중에 찍자. 2시간 뒤 알림이 좋아, 내일이 좋아?',
     ]),
     photoUploaded: () => randomMessage(['받았어. 잘 찍혔다. 🌿', '사진 확인했어. 정말 잘 찍어줬구나', '고마워. 내 모습이 잘 보이네 🌿']),
+    pendingTaskAsk: (labels) => randomMessage([
+      `다시 왔네. 아까 미뤄둔 ${topic(labels)} 했어? 한 건 체크해줘.`,
+      `미뤄둔 ${topic(labels)} 이제 했는지 궁금해. 아래에서 체크해줘.`,
+      `기다렸어. ${topic(labels)} 해줬으면 체크해줘.`,
+    ]),
+    pendingPhotoAsk: () => randomMessage([
+      '다시 왔네. 아까 미뤄둔 사진, 이제 찍어줄래?',
+      '사진 찍어주러 왔구나. 오늘 내 모습 남겨줘.',
+      '미뤄둔 사진 기다렸어. 지금 찍어줘.',
+    ]),
     alreadyDone: () => randomMessage(['오늘 이미 다 했어. 수고했어.', '오늘 할 일은 모두 끝났어. 고마워!', '오늘도 빠짐없이 챙겨줬네. 정말 수고했어.']),
     transitionToQuestion: () => randomMessage(['나 챙겨줘서 고마워.', '오늘도 돌봐줘서 고마워.', '덕분에 오늘도 든든했어.']),
   },
@@ -111,6 +125,16 @@ const MESSAGES: Record<PlantType, PlantChatMessages> = {
       '괜찮아 괜찮아~ 2시간 뒤 알림이 좋아, 내일이 좋아? 📸',
     ]),
     photoUploaded: () => randomMessage(['와 사진 너무 예뻐! 고마워 📸', '사진 잘 받았어~ 정말 멋지다!', '내 사진 찍어줘서 고마워 🍅']),
+    pendingTaskAsk: (labels) => randomMessage([
+      `헤헤 또 왔네~ 아까 미뤄둔 ${topic(labels)} 했어? 한 건 눌러줘!`,
+      `기다렸어~ 미뤄둔 ${topic(labels)} 이제 해줬어?`,
+      `와 왔다! ${topic(labels)} 해줬으면 체크해줘~`,
+    ]),
+    pendingPhotoAsk: () => randomMessage([
+      '와 왔다~ 아까 미뤄둔 사진 이제 찍어줄 거지?',
+      '사진 찍으러 왔구나! 오늘 내 모습 예쁘게 남겨줘~',
+      '미뤄둔 사진 기다렸어~ 지금 찍어줘!',
+    ]),
     alreadyDone: () => randomMessage(['오늘 이미 다 했어! 정말 수고했어~ ', '오늘 할 일 모두 끝냈네! 최고야 🎉', '오늘도 나를 잘 챙겨줬어. 고마워 🍅']),
     transitionToQuestion: () => randomMessage(['오늘도 챙겨줘서 고마워! (◍\'ᗜ\'◍)', '오늘도 잘 돌봐줘서 고마워~', '덕분에 오늘도 기분이 좋아!']),
   },
@@ -143,6 +167,16 @@ const MESSAGES: Record<PlantType, PlantChatMessages> = {
       '지금은 어렵네요. 2시간 뒤에 알려줄까요, 내일로 미룰까요?',
       '괜찮아요, 천천히 해도 돼요. 이따 알림으로 할까요, 내일 찍을까요?',
       '그럴 수 있죠. 2시간 뒤 알림이랑 내일 중 편한 걸 골라줘요.',
+    ]),
+    pendingTaskAsk: (labels) => randomMessage([
+      `다시 와줘서 고마워요. 아까 미뤄둔 ${topic(labels)} 이제 했나요? 한 건 체크해 줘요.`,
+      `기다리고 있었어요. 미뤄둔 ${topic(labels)} 해줬다면 아래에서 골라 줘요.`,
+      `천천히 해도 괜찮아요. ${topic(labels)} 해줬는지 알려줄래요?`,
+    ]),
+    pendingPhotoAsk: () => randomMessage([
+      '다시 와줘서 고마워요. 아까 미뤄둔 사진, 이제 남겨줄래요?',
+      '사진 찍으러 와줬군요. 오늘 내 모습도 남겨줘요.',
+      '기다리고 있었어요. 미뤄둔 사진, 편할 때 찍어줘요',
     ]),
     photoUploaded: () => randomMessage(['사진 잘 받았어요. 정말 잘 찍었네요, 고마워요 🌼', '사진 확인했어요. 내 모습이 이렇게 예쁘네요 🌼', '고마워요. 찍어준 내 모습이 마음에 들어요 🌼']),
     alreadyDone: () => randomMessage(['오늘 이미 다 했어요. 수고 많았어요, 푹 쉬어요.', '오늘 할 일은 모두 끝났어요. 고마워요!', '오늘도 빠짐없이 챙겨줬네요. 정말 수고했어요.']),

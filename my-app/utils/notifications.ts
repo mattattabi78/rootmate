@@ -60,15 +60,26 @@ async function ensureAndroidChannel(): Promise<void> {
 }
 
 /** task 미완료 시 2시간 뒤 알림 예약 */
-export async function scheduleTaskReminder(taskLabel: string, plantType: PlantType): Promise<void> {
-  if (!(await hasPermission())) return;
+// 알림을 누르면 채팅으로 바로 이동하도록 data에 표시를 남긴다 (app/_layout.tsx에서 처리)
+export const TASK_REMINDER_TYPE = 'task_reminder';
+
+export async function scheduleTaskReminder(taskLabel: string, plantType: PlantType, taskId?: string): Promise<string | null> {
+  if (!(await hasPermission())) return null;
   await ensureAndroidChannel();
   const msgs = PLANT_NOTIF[plantType] ?? PLANT_NOTIF.tomato;
   const { title, body } = msgs.remind(taskLabel);
-  await Notifications.scheduleNotificationAsync({
-    content: { title, body, sound: true },
+  const notifId = await Notifications.scheduleNotificationAsync({
+    content: { title, body, sound: true, data: { type: TASK_REMINDER_TYPE, taskId: taskId ?? null } },
     trigger: { type: 'timeInterval', seconds: 7200, repeats: false } as any,
   });
+  if (taskId) await storage.setTaskReminderId(taskId, notifId);
+  return notifId;
+}
+
+/** task를 끝냈을 때: 그 task의 2시간 뒤 알림이 아직 안 울렸으면 취소 */
+export async function cancelTaskReminder(taskId: string): Promise<void> {
+  const notifId = await storage.takeTaskReminderId(taskId);
+  if (notifId) await Notifications.cancelScheduledNotificationAsync(notifId).catch(() => {});
 }
 
 /**
