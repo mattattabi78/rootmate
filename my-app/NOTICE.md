@@ -154,7 +154,7 @@ rootmate/
 
 ### 4.7 연속 관리 (`streak.tsx`)
 
-캐릭터, 이번 주(월~일) 완료 현황, `N일 연속 관리 중!`, `{닉네임}와 함께한지 N일째`(입양일이 1일째)를 위에서 아래로 쌓아 가운데에 두고, 하단에는 채팅의 `홈으로 돌아가기` 버튼과 같은 자리에 CTA 버튼을 둡니다. 버튼 문구는 7가지(`constants/streakMessages.ts`) 중 무작위입니다. 채팅 완료 직후 하루 1회 노출됩니다. 화면 배치가 끝나면 바로 화면 위쪽 가운데에서 노랑·분홍·하늘색 컨페티가 한 번 위로 터져 오른 뒤 중력으로 떨어지고, 같은 때 오늘 칸의 체크가 뿅 튀어올랐다가 자리잡습니다(`components/common/Confetti.tsx`, 기본 `Animated` 사용 · 기기의 '동작 줄이기' 설정이면 생략). 진동(`utils/haptics.ts`, `expo-haptics`)은 진입 · 컨페티 · 체크 착지에 줍니다. `N일 연속 관리 중!` 글자는 왼쪽부터 차례로 통통 뛰어오르는 모션을 약 2.6초 간격으로 반복합니다(`components/common/HoppingText.tsx`, 동작 줄이기면 정지).
+캐릭터, 이번 주(월~일) 완료 현황, `N일 연속 관리 중!`, `{닉네임}와 함께한지 N일째`(입양일이 1일째)를 위에서 아래로 쌓아 가운데에 두고, 하단에는 채팅의 `홈으로 돌아가기` 버튼과 같은 자리에 CTA 버튼을 둡니다. 버튼 문구는 7가지(`constants/streakMessages.ts`) 중 무작위입니다. 채팅 완료 직후 하루 1회 노출됩니다. 화면 배치가 끝나면 바로 화면 위쪽 가운데에서 노랑·연두 컨페티가 한 번 위로 터져 오른 뒤 중력으로 떨어지고, 같은 때 오늘 칸의 체크가 뿅 튀어올랐다가 자리잡습니다(`components/common/Confetti.tsx`, 기본 `Animated` 사용 · 기기의 '동작 줄이기' 설정이면 생략). 진동(`utils/haptics.ts`, `expo-haptics`)은 진입 · 컨페티 · 체크 착지에 줍니다. `N일 연속 관리 중!` 글자는 왼쪽부터 차례로 통통 뛰어오르는 모션을 약 2.6초 간격으로 반복합니다(`components/common/HoppingText.tsx`, 동작 줄이기면 정지).
 
 ### 4.8 캐릭터 표정 (`constants/character.ts`, `constants/expressions.ts`, `scripts/build_faces.py`)
 
@@ -371,11 +371,11 @@ AI는 이미 코드에 연결되어 있습니다. **이 저장소에는 API 키(
 | 자는 중 대사·알림 | 기획 | 밤 12시~새벽 6시에는 자는 얼굴만 바뀌고 홈 한 줄 대사와 채팅 문구는 그대로. 잠꼬대 같은 대사를 넣을지, 이 시간대 알림은 어떻게 할지 결정 |
 | 표정 이미지 보완 | 디자인 | 웃음·놀람은 바질만 있어 토마토·메리골드는 기본 얼굴로 대체됨. 바질 놀람은 웃음 기반으로 만든 이미지라 확인 필요. 바질 무표정은 눈물 표정의 입·눈썹과 기본 눈을 합성한 것 |
 | 메리골드 단계 이미지 | 디자인 | 식물 그림(`marigold_1~5`)이 위처럼 임시 상태. 실제 화면은 1단계만 쓰므로 `marigold_1` 우선 |
-| 연속 관리 연출 실기기 확인 | 프론트 | 컨페티(300개)·진동·체크 연출은 실제 기기에서 타이밍과 성능을 확인하고 조정 (터지는 위치·조각 수는 `streak.tsx`·`Confetti.tsx` 상수) |
+| 연속 관리 연출 실기기 확인 | 프론트 | 컨페티(조각 90개, 반짝이 아이콘)·진동·체크 연출은 실제 기기에서 타이밍과 성능을 확인하고 조정 (터지는 위치·조각 수는 `streak.tsx`·`Confetti.tsx` 상수) |
 | 선 색 농도 Figma 일치 | 프론트 + 디자인 | 선 두께는 Figma와 모두 일치. 하단 탭·채팅 패널 위 선은 Figma가 불투명색인데 코드는 30% 투명도, 앨범 사진 모서리 4px(Figma 5px) |
 | 보관용 이미지 정리 | 프론트 | `characters/_source`(얼굴 원본), `_reference`(기본 모습)는 앱에 들어가지 않는 보관용. 불필요하면 삭제 (이전 표정 PNG `_legacy`는 삭제함) |
 | 이전 단계 세부 UI 조정 | 프론트 | 개정 UI 초안 완료 후 화면별로 다시 다듬을 예정 |
-| 남은 미사용 코드 정리 | 프론트 + 백엔드 | 화면 쪽 미사용 코드는 정리 완료. 남은 것: `services/utils/koreaDate.ts`(파일 전체), `services/ai.ts`의 `updatePlantCharacter`, `services/types/chat.ts`의 `ChatCompletionResponse`, `services/api/styleTransfer.ts`의 `STYLE_OPTIONS`(AI 연동 쪽이라 담당자 확인 후 삭제), `questionPool.ts`의 `installedMonths`·`pickDeepQuestion`(설치 개월 수별 질문 선택을 구현하다 만 것인지 확인 필요) |
+| 남은 미사용 코드 정리 | 프론트 + 백엔드 | 화면 쪽 미사용 코드는 정리 완료(안 쓰던 픽셀 아이콘 7개, 템플릿 `assets/expo.icon` 삭제). 남은 것은 모두 AI·서비스 쪽이라 담당자 확인 후 삭제: `services/ai.ts`의 `updatePlantCharacter`·`updatePlantCharacterWithCustomPot`(캐릭터 생성이 `generatePlantCharacterFromPhoto`로 바뀌어 안 쓰임), `services/api/styleTransfer.ts`의 `STYLE_OPTIONS`·`styleTransferPlantOnly`(+`PLANT_ONLY_PROMPT`), `services/types/chat.ts`의 `ChatCompletionResponse`, `services/utils/koreaDate.ts`의 `getDaysTogether`, `services/api/questionPool.ts`의 `installedMonths`·`pickDeepQuestion`(설치 개월 수별 질문 선택을 구현하다 만 것인지 확인 필요), `services/api/chat.ts`의 안 쓰는 인자 `plantType`. `hooks/useNotification.ts`는 지금 어디서도 부르지 않지만 'task별 주기 알림 연결' 작업용으로 남겨 둠 |
 
 ### 최근 정리 내역
 
@@ -416,7 +416,7 @@ AI는 이미 코드에 연결되어 있습니다. **이 저장소에는 API 키(
 #### 7. 연속 관리 페이지
 - Figma 55:16 구조로 변경함. 하단 버튼은 채팅의 '홈으로 돌아가기'와 동일한 위치이며, 문구는 7종 중 무작위로 노출됨.
 - 메인 텍스트는 "{숫자}일 연속 관리 중!"으로 설정함.
-- 등장 연출: 진동과 함께 노랑, 분홍, 하늘색 컨페티(260개)가 캐릭터 뒤편에서 위로 터진 후 중력에 의해 하강함. 동시점에 오늘 자 체크 항목이 튀어올랐다가 정렬됨.
+- 등장 연출: 진동과 함께 노랑, 연두 컨페티(반짝이 아이콘 90개)가 캐릭터 뒤편에서 위로 터진 후 중력에 의해 하강함. 동시점에 오늘 자 체크 항목이 튀어올랐다가 정렬됨.
 
 #### 8. 정리 및 검증
 - 이미지 폴더 구조를 `ui/`, `characters/`, `_source/`, `_reference/`로 정돈함(구형 `_legacy/`는 이후 삭제). 미사용 구형 표정 이미지(약 3.3MB)는 앱 번들에서 제외한 뒤 삭제함.
@@ -481,7 +481,7 @@ npx expo start
 | `my-app/constants/typography.ts` | 글자 크기 7단계(`FONT_SIZE`), 줄 높이 표(`lh`), 폰트 이름 |
 | `my-app/constants/controls.ts` | 버튼·입력창 공통 크기 |
 | `my-app/utils/network.ts` | 대화창 진입 시 인터넷 연결 확인 |
-| `my-app/components/common/Confetti.tsx` | 연속 관리 컨페티 (물리식 궤적, Animated) |
+| `my-app/components/common/Confetti.tsx` | 연속 관리 컨페티 (물리식 궤적, Animated, 조각은 `assets/images/ui/confetti`의 반짝이 PNG) |
 | `my-app/components/common/HoppingText.tsx` | 글자가 차례로 뛰어오르는 반복 모션 텍스트 (연속 관리 문구) |
 | `my-app/utils/haptics.ts` | 진동 도우미 (웹·미지원 기기에서는 조용히 무시) |
 | `my-app/utils/layout.ts` | 작은 화면 압축 계산 (`compactFactor`) |

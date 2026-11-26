@@ -250,7 +250,7 @@ export default function StreakScreen() {
 
       {/* 축하 컨페티는 캐릭터·글자 앞에서 터진다. pointerEvents="none"이라 터치는 통과한다. */}
       {laidOut && (
-        <Confetti play={burst} count={260} secondBurstAt={0} origin={{ x: areaW / 2, y: Math.max(insets.top + 100, areaH * 0.33) }} />
+        <Confetti play={burst} count={90} secondBurstAt={0} origin={{ x: areaW / 2, y: Math.max(insets.top + 100, areaH * 0.33) }} />
       )}
 
       {/* 하단 버튼: 이전 화면(채팅)의 '홈으로 돌아가기' 버튼과 같은 자리 */}

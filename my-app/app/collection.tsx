@@ -37,7 +37,7 @@ const CANVAS_W = 846;               // 캐릭터 레이어 캔버스 폭 (높이
 const CS = 0.85;      // 카드 전체 크기 배율 (비율 유지). 카드 안의 길이는 모두 cu()로 줄임
 const cu = (n: number) => ui(n * CS);
 const CHAR_W = 120 * 0.95;   // 카드 속 캐릭터 폭 (카드 배율 0.85보다 한 단계 크게)
-const CHAR_DROP = cu(6);     // 캐릭터를 아치 창 가운데보다 살짝 아래로   // 카드 앞면 아치 속 캐릭터 영역 폭 (높이는 폭 × 5/3)
+const CHAR_DROP = cu(6);     // 캐릭터를 아치 창 가운데보다 살짝 아래로
 const CARD_W = cu(240);
 const CARD_H = cu(360);
 const SIDE_W = cu(167);
